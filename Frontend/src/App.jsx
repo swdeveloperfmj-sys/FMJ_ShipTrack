@@ -94,8 +94,17 @@ const money = (value) =>
   new Intl.NumberFormat("en-LK", {
     style: "currency",
     currency: "LKR",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(Number(value || 0));
+
+const decimalAmount = (value) =>
+  Number(value || 0).toLocaleString("en-LK", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+const currencyAmount = (value, currency) => `${currency || "LKR"}.${decimalAmount(value)}`;
 
 const dateLabel = (value) =>
   value
@@ -106,14 +115,37 @@ const dateLabel = (value) =>
       })
     : "—";
 
+const paymentTermsLabel = (shipment) => {
+  const labels = {
+    ADVANCE_TT: "100% Advance Payment by TT",
+    DA_BL: "DA - From date of BL",
+    DP_SIGHT: "DP of Sight",
+    OPEN_ACCOUNT: "Open account",
+  };
+  if (shipment.paymentTerms === "LETTER_OF_CREDIT") {
+    return shipment.paymentTermType
+      ? `${shipment.paymentTermType} LC${shipment.paymentTermDays ? ` (${shipment.paymentTermDays} days)` : ""}`
+      : "Letter of credit";
+  }
+  const label = labels[shipment.paymentTerms] || shipment.paymentMethod || "—";
+  return shipment.paymentTermDays && shipment.paymentTerms !== "ADVANCE_TT"
+    ? `${label} (${shipment.paymentTermDays} days)`
+    : label;
+};
+
+const transportLabel = (shipment) =>
+  [shipment.transportMode, shipment.fclLcl, shipment.containerSize].filter(Boolean).join(" / ") || "—";
+
 function StatusBadge({ children, tone }) {
   const value = String(children || "Pending").toLowerCase().replaceAll(" ", "-");
   return <span className={`badge ${tone || value}`}>{children}</span>;
 }
 
-function ConsigneeBadge({ code, consignees = [] }) {
+function ConsigneeBadge({ code, label, showName = false, consignees = [] }) {
+  const consignee = consignees.find((item) => item.code === code);
   const color = consigneeColorFor(code, consignees);
-  return <span className="company-tag consignee-color-tag" style={{ "--consignee-color": color }}>{code}</span>;
+  const displayLabel = showName ? consignee?.name || label || code : label || code;
+  return <span className="company-tag consignee-color-tag" style={{ "--consignee-color": color }}>{displayLabel}</span>;
 }
 
 function PageTitle({ eyebrow, title, subtitle, action }) {
@@ -149,12 +181,46 @@ function EmptyState({ message = "No shipments found", description, actionLabel, 
   return <div className="empty-state"><Box size={25} /><strong>{message}</strong><span>{description || (onAdd ? "Add a shipment to start tracking your real import data." : "Try changing your filters or add a shipment.")}</span>{onAdd && <button className="button primary empty-add-button" onClick={onAdd}><Plus size={15} /> {actionLabel || "Add shipment"}</button>}</div>;
 }
 
-function ShipmentTable({ rows, mode, onEdit, onAdd, consignees = [] }) {
+function ShipmentActions({ shipment, onEdit, onDelete }) {
+  const [open, setOpen] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function removeShipment() {
+    setDeleting(true);
+    try {
+      await onDelete(shipment);
+      setConfirming(false);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  return <div className="shipment-actions" onClick={(event) => event.stopPropagation()}>
+    <button className="icon-button row-more" aria-label={`Actions for ${shipment.importNo}`} aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((current) => !current)}><MoreHorizontal size={18} /></button>
+    {open && <div className="shipment-action-menu" role="menu">
+      <button role="menuitem" onClick={() => { setOpen(false); onEdit(shipment); }}>Edit shipment</button>
+      <button className="shipment-action-delete" role="menuitem" onClick={() => { setOpen(false); setConfirming(true); }}>Delete shipment</button>
+    </div>}
+    {confirming && <div className="delete-confirm-backdrop" role="presentation">
+      <section className="delete-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby={`delete-title-${shipment.id}`} aria-describedby={`delete-description-${shipment.id}`}>
+        <h2 id={`delete-title-${shipment.id}`}>Delete shipment?</h2>
+        <p id={`delete-description-${shipment.id}`}>Are you sure you want to delete <strong>{shipment.importNo}</strong>? This cannot be undone.</p>
+        <div className="delete-confirm-actions">
+          <button className="button secondary" onClick={() => setConfirming(false)} disabled={deleting}>Cancel</button>
+          <button className="button delete-confirm" onClick={removeShipment} disabled={deleting}>{deleting ? "Deleting…" : "Delete shipment"}</button>
+        </div>
+      </section>
+    </div>}
+  </div>;
+}
+
+function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, consignees = [] }) {
   if (!rows.length) return <EmptyState message={mode === "shipments" ? "No shipment records yet" : "No shipments found"} onAdd={onAdd} />;
   const headers = {
     shipments: ["Import No.", "Consignee", "Shipper", "Consignee name", "Description", "ETA", "Status", ""],
     tracking: ["Import No.", "Shipper", "ETD", "ETA", "Arrival", "Delivery", "Status", ""],
-    payments: ["Import No.", "Consignee", "Payment method", "Advance TT", "Sight LC", "Usance LC", "Payment status", ""],
+    payments: ["Import No.", "Consignee", "Shipper", "Item description", "FCL/LCL", "Payment terms", "Value", "ETD", "ETA CMB", "Duty (LKR)", "DO (LKR)", "Remarks", ""],
     customs: ["Import No.", "Consignee", "Duty", "DO charges", "Clearance progress", "Clearance status", "Shipment status", ""],
   }[mode];
 
@@ -164,7 +230,7 @@ function ShipmentTable({ rows, mode, onEdit, onAdd, consignees = [] }) {
         <thead><tr>{headers.map((header, index) => <th key={`${header}-${index}`}>{header}</th>)}</tr></thead>
         <tbody>
           {rows.map((shipment) => (
-            <tr key={shipment.id} onClick={() => onEdit(shipment)} className="clickable-row">
+            <tr key={shipment.id} onClick={mode === "payments" ? undefined : () => onEdit(shipment)} className={mode === "payments" ? "" : "clickable-row"}>
               {mode === "shipments" && <>
                 <td><span className="import-id">{shipment.importNo}</span><small>{shipment.description}</small></td>
                 <td><ConsigneeBadge code={shipment.company} consignees={consignees} /></td>
@@ -178,10 +244,13 @@ function ShipmentTable({ rows, mode, onEdit, onAdd, consignees = [] }) {
                 <td>{dateLabel(shipment.arrivalDate)}</td><td>{dateLabel(shipment.deliveryDate)}</td><td><StatusBadge>{shipment.status}</StatusBadge></td>
               </>}
               {mode === "payments" && <>
-                <td><span className="import-id">{shipment.importNo}</span><small>{shipment.supplier}</small></td>
-                <td><ConsigneeBadge code={shipment.company} consignees={consignees} /></td><td>{shipment.paymentMethod}</td>
-                <td>{money(shipment.advanceTT)}</td><td>{money(shipment.sightLC)}</td><td>{money(shipment.usanceLC)}</td>
-                <td><StatusBadge>{shipment.paymentStatus}</StatusBadge></td>
+                <td><span className="import-id">{shipment.importNo}</span></td>
+                <td><ConsigneeBadge code={shipment.company} label={shipment.consignee || shipment.company || "—"} showName consignees={consignees} /></td><td>{shipment.supplier || "—"}</td>
+                <td className="description-cell">{shipment.description || "—"}</td><td>{transportLabel(shipment)}</td>
+                <td>{paymentTermsLabel(shipment)}</td><td>{currencyAmount(shipment.totalCost, shipment.currency)}</td>
+                <td>{dateLabel(shipment.etd)}</td><td>{dateLabel(shipment.eta)}</td>
+                <td>{decimalAmount(shipment.duty)}</td><td>{decimalAmount(shipment.doCharges)}</td>
+                <td className="description-cell">{shipment.remarks || "—"}</td>
               </>}
               {mode === "customs" && <>
                 <td><span className="import-id">{shipment.importNo}</span><small>{shipment.supplier}</small></td>
@@ -190,7 +259,7 @@ function ShipmentTable({ rows, mode, onEdit, onAdd, consignees = [] }) {
                 <td><StatusBadge tone={shipment.clearanceStatus === "Cleared" ? "cleared" : "under-clearing"}>{shipment.clearanceStatus}</StatusBadge></td>
                 <td><StatusBadge>{shipment.status}</StatusBadge></td>
               </>}
-              <td><button className="icon-button row-more" aria-label={`Edit ${shipment.importNo}`} onClick={(event) => { event.stopPropagation(); onEdit(shipment); }}><MoreHorizontal size={18} /></button></td>
+              <td>{mode === "payments" ? <ShipmentActions shipment={shipment} onEdit={onEdit} onDelete={onDelete} /> : <button className="icon-button row-more" aria-label={`Edit ${shipment.importNo}`} onClick={(event) => { event.stopPropagation(); onEdit(shipment); }}><MoreHorizontal size={18} /></button>}</td>
             </tr>
           ))}
         </tbody>
@@ -240,8 +309,8 @@ function ShipmentModal({ initial, consignees, currencies, onClose, onSave }) {
   }
 
   return (
-    <div className={`modal-backdrop ${initial ? "" : "shipment-fullscreen-backdrop"}`} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section className={`shipment-modal ${initial ? "" : "shipment-modal-fullscreen"}`} role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div className="modal-backdrop">
+    <section className="shipment-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
         <div className="modal-head">
           <div><div className="eyebrow">{initial ? "UPDATE SHIPMENT" : "NEW ENTRY"}</div><h2 id="modal-title">{initial ? "Edit shipment" : "Add shipment"}</h2></div>
           <button className="icon-button" onClick={onClose} aria-label="Close"><X size={20} /></button>
@@ -279,11 +348,11 @@ function ShipmentModal({ initial, consignees, currencies, onClose, onSave }) {
                 {form.currency === "LKR" && <option value="LKR">LKR (existing)</option>}
                 {currencies.map((currency) => <option key={currency.id} value={currency.code}>{currency.code} — {currency.name}</option>)}
               </select></label>
-              <label className="shipment-field shipment-field--amount">Value<input name="totalCost" type="number" min="0" value={form.totalCost} onChange={change} /></label>
+              <label className="shipment-field shipment-field--amount">Value<input name="totalCost" type="number" min="0" step="0.01" value={form.totalCost} onChange={change} /></label>
               <label className="shipment-field shipment-field--date">ETD<input name="etd" type="date" value={form.etd} onChange={change} /></label>
               <label className="shipment-field shipment-field--date">ETA CMB<input name="eta" type="date" value={form.eta} onChange={change} /></label>
-              <label className="shipment-field shipment-field--amount">Duty (LKR)<input name="duty" type="number" min="0" value={form.duty} onChange={change} /></label>
-              <label className="shipment-field shipment-field--amount">DO (LKR)<input name="doCharges" type="number" min="0" value={form.doCharges} onChange={change} /></label>
+              <label className="shipment-field shipment-field--amount">Duty (LKR)<input name="duty" type="number" min="0" step="0.01" value={form.duty} onChange={change} /></label>
+              <label className="shipment-field shipment-field--amount">DO (LKR)<input name="doCharges" type="number" min="0" step="0.01" value={form.doCharges} onChange={change} /></label>
               <label className="form-wide">Remarks<textarea name="remarks" value={form.remarks} onChange={change} rows={3} maxLength={1000} /></label>
             </div>
           </div>
@@ -919,15 +988,21 @@ export default function App() {
       const pendingTTShipments = shipments.filter((shipment) =>
         shipment.paymentMethod === "Advance TT" && shipment.paymentStatus === "Pending",
       );
-      return <>
+      return <section className="to-be-tt-page">
         <PageTitle eyebrow="PAYMENTS" title="To be TT" subtitle="Shipments awaiting Advance TT payment." action={<button className="button primary" onClick={() => openModal(null)}><Plus size={17} /> Add shipment</button>} />
         {error && <div className="inline-error">{error}</div>}
-        <section className="panel table-panel">
+        <section className="panel table-panel tt-payments-panel">
           <div className="table-toolbar"><div className="table-title"><h2>Pending TT payments</h2><span className="count-pill">{pendingTTShipments.length}</span></div></div>
-          <ShipmentTable rows={pendingTTShipments} mode="payments" onEdit={openModal} onAdd={() => openModal(null)} consignees={consignees} />
+          <ShipmentTable rows={pendingTTShipments} mode="payments" onEdit={openModal} onDelete={async (shipment) => {
+            try {
+              await saveShipment(null, shipment.id);
+            } catch (deleteError) {
+              setNotice(deleteError.message || "Unable to delete shipment");
+            }
+          }} onAdd={() => openModal(null)} consignees={consignees} />
           <div className="table-footer"><span><strong>{pendingTTShipments.length}</strong> shipments awaiting Advance TT</span><span>Data saved automatically</span></div>
         </section>
-      </>;
+      </section>;
     }
     if (active === "companies") return <><PageTitle eyebrow="CONSIGNEES" title="Consignee reports" subtitle="A clear view of imports and clearance progress for each consignee." />{error && <div className="inline-error">{error}</div>}<ConsigneeReports analytics={analytics} shipments={shipments} consignees={consignees} onEdit={openModal} /></>;
     if (active === "consignees") return <><PageTitle eyebrow="DIRECTORY" title="Consignees" subtitle="Create and manage the consignee records assigned to your shipments." action={<button className="button primary" onClick={() => setModalConsignee(null)}><Plus size={17} /> Create consignee</button>} />{error && <div className="inline-error">{error}</div>}<ConsigneeDirectory consignees={consignees} shipments={shipments} onEdit={setModalConsignee} onAdd={() => setModalConsignee(null)} /></>;
@@ -973,7 +1048,7 @@ export default function App() {
             </div>
           </div>
         </header>
-        <main className="content">
+        <main className={`content ${active === "to-be-tt" ? "content-wide" : ""}`}>
           {renderContent()}
           <footer className="app-footer"><span>© 2026 FMJ ShipTrack</span><span>Shipment management, made simpler.</span></footer>
         </main>
