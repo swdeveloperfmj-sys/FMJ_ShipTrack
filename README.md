@@ -96,13 +96,22 @@ the color is saved with that consignee and appears in its directory, shipment la
 reports. Consignee codes already used by shipment records cannot be renamed or deleted
 until those shipments are reassigned.
 
-Manage country records separately from the **Countries** page. Country names can be
-created, edited and deleted there.
+Manage country records and currencies separately in their own sections on the
+**Countries** page. Both can be created, edited and deleted. Currency codes are
+three-letter codes (for example USD, AED or RMB); a currency assigned to a shipment
+cannot be deleted or have its code changed.
 
-The app includes shipment registration,
-tracking milestones, payment and customs tracking, document checklists, consignee
-summaries, and delay/cost analytics. The consignee selector includes FMJ,
-JD, RL, AOP and UB; the shipment's recipient name is recorded separately.
+The workspace navigation includes the dashboard, consignee reports and directory,
+country management, documents, delay/cost analytics, and **To be TT**. The To be TT page
+lists shipments with Advance TT payment method and Pending payment status; add shipments
+there or open a row to edit or delete its shipment record. The dashboard provides a
+recent-shipment overview; the former standalone shipment register, tracking, payment,
+and customs pages are not included in the navigation. The consignee selector includes
+FMJ, JD, RL, AOP and UB; the shipment's recipient name is recorded separately.
+
+Shipment payment terms support Letter of Credit (Sight or Usance, with days for Usance),
+100% Advance Payment by TT, DA from BL date (30/60/90/120 days), DP of Sight, and Open
+Account (30/45/60/90/120 days). Shipment value currency can be selected as USD, AED or RMB.
 
 The app does not provide password recovery or additional admin accounts. Secure the
 deployment and email account before exposing it to a public network.
