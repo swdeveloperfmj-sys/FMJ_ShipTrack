@@ -8,7 +8,6 @@ import {
   Bell,
   Box,
   Building2,
-  CalendarDays,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -24,25 +23,19 @@ import {
   MoreHorizontal,
   PackageCheck,
   Plus,
-  Search,
   Settings2,
   ShieldCheck,
   Ship,
-  SlidersHorizontal,
   Moon,
   Sun,
   TrendingUp,
-  Truck,
   X,
 } from "lucide-react";
 import { api } from "./api.js";
 
 const navigation = [
   { label: "Dashboard", icon: LayoutDashboard, key: "dashboard" },
-  { label: "Shipment Register", icon: Ship, key: "shipments" },
-  { label: "Shipment Tracking", icon: Truck, key: "tracking" },
-  { label: "Payment Tracking", icon: CircleDollarSign, key: "payments" },
-  { label: "Customs Clearance", icon: CheckCircle2, key: "customs" },
+  { label: "To be TT", icon: CircleDollarSign, key: "to-be-tt" },
   { label: "Consignee Reports", icon: Building2, key: "companies" },
   { label: "Consignees", icon: ContactRound, key: "consignees" },
   { label: "Countries", icon: Globe2, key: "countries" },
@@ -72,12 +65,20 @@ const emptyShipment = {
   supplier: "",
   consignee: "",
   description: "",
+  transportMode: "",
+  fclLcl: "",
+  containerSize: "",
+  remarks: "",
+  currency: "USD",
   etd: "",
   eta: "",
   arrivalDate: "",
   deliveryDate: "",
   status: "Pending",
   paymentMethod: "Advance TT",
+  paymentTerms: "",
+  paymentTermType: "",
+  paymentTermDays: "",
   paymentStatus: "Pending",
   advanceTT: 0,
   sightLC: 0,
@@ -151,8 +152,8 @@ function EmptyState({ message = "No shipments found", description, actionLabel, 
 function ShipmentTable({ rows, mode, onEdit, onAdd, consignees = [] }) {
   if (!rows.length) return <EmptyState message={mode === "shipments" ? "No shipment records yet" : "No shipments found"} onAdd={onAdd} />;
   const headers = {
-    shipments: ["Import No.", "Consignee", "Supplier", "Consignee name", "Description", "ETA", "Status", ""],
-    tracking: ["Import No.", "Supplier", "ETD", "ETA", "Arrival", "Delivery", "Status", ""],
+    shipments: ["Import No.", "Consignee", "Shipper", "Consignee name", "Description", "ETA", "Status", ""],
+    tracking: ["Import No.", "Shipper", "ETD", "ETA", "Arrival", "Delivery", "Status", ""],
     payments: ["Import No.", "Consignee", "Payment method", "Advance TT", "Sight LC", "Usance LC", "Payment status", ""],
     customs: ["Import No.", "Consignee", "Duty", "DO charges", "Clearance progress", "Clearance status", "Shipment status", ""],
   }[mode];
@@ -202,7 +203,13 @@ function ShipmentModal({ initial, consignees, onClose, onSave }) {
   const [form, setForm] = useState(() => ({
     ...emptyShipment,
     ...(initial || {}),
+    currency: initial?.currency || (initial ? "LKR" : "USD"),
     company: initial?.company || consignees[0]?.code || "",
+    transportMode: initial?.transportMode || (initial?.fclLcl ? "SEA" : ""),
+    paymentTerms: initial?.paymentTerms || "",
+    paymentTermType: initial?.paymentTermType || "",
+    paymentTermDays: initial?.paymentTermDays ?? "",
+    consignee: initial?.consignee || consignees.find((consignee) => consignee.code === (initial?.company || consignees[0]?.code))?.name || "",
     documents: { ...emptyShipment.documents, ...(initial?.documents || {}) },
   }));
   const [saving, setSaving] = useState(false);
@@ -233,8 +240,8 @@ function ShipmentModal({ initial, consignees, onClose, onSave }) {
   }
 
   return (
-    <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="shipment-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div className={`modal-backdrop ${initial ? "" : "shipment-fullscreen-backdrop"}`} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className={`shipment-modal ${initial ? "" : "shipment-modal-fullscreen"}`} role="dialog" aria-modal="true" aria-labelledby="modal-title">
         <div className="modal-head">
           <div><div className="eyebrow">{initial ? "UPDATE SHIPMENT" : "NEW ENTRY"}</div><h2 id="modal-title">{initial ? "Edit shipment" : "Add shipment"}</h2></div>
           <button className="icon-button" onClick={onClose} aria-label="Close"><X size={20} /></button>
@@ -242,37 +249,37 @@ function ShipmentModal({ initial, consignees, onClose, onSave }) {
         <form onSubmit={submit}>
           <div className="form-section">
             <h3>Shipment details</h3>
-            <div className="form-grid">
-              <label>Import number<input name="importNo" value={form.importNo} onChange={change} required placeholder="FMJ-2026-003" /></label>
-              <label>Consignee<select name="company" value={form.company} onChange={change} required><option value="" disabled>Select a consignee</option>{consignees.map((consignee) => <option key={consignee.id} value={consignee.code}>{consignee.code} — {consignee.name}</option>)}</select></label>
-              <label>Supplier<input name="supplier" value={form.supplier} onChange={change} required /></label>
-              <label>Consignee name<input name="consignee" value={form.consignee} onChange={change} required /></label>
-              <label className="form-wide">Description<input name="description" value={form.description} onChange={change} required /></label>
-              <label>Shipment status<select name="status" value={form.status} onChange={change}>{shipmentStatuses.map((status) => <option key={status}>{status}</option>)}</select></label>
-              <label>ETD<input name="etd" type="date" value={form.etd} onChange={change} /></label>
-              <label>ETA<input name="eta" type="date" value={form.eta} onChange={change} /></label>
-              <label>Arrival date<input name="arrivalDate" type="date" value={form.arrivalDate} onChange={change} /></label>
-              <label>Delivery date<input name="deliveryDate" type="date" value={form.deliveryDate} onChange={change} /></label>
-            </div>
-          </div>
-          <div className="form-section">
-            <h3>Payments & clearance</h3>
-            <div className="form-grid">
-              <label>Payment method<select name="paymentMethod" value={form.paymentMethod} onChange={change}>{["Advance TT", "Sight LC", "Usance LC"].map((item) => <option key={item}>{item}</option>)}</select></label>
-              <label>Payment status<select name="paymentStatus" value={form.paymentStatus} onChange={change}>{["Pending", "Partial", "Paid"].map((item) => <option key={item}>{item}</option>)}</select></label>
-              <label>Advance TT (LKR)<input name="advanceTT" type="number" min="0" value={form.advanceTT} onChange={change} /></label>
-              <label>Sight LC (LKR)<input name="sightLC" type="number" min="0" value={form.sightLC} onChange={change} /></label>
-              <label>Usance LC (LKR)<input name="usanceLC" type="number" min="0" value={form.usanceLC} onChange={change} /></label>
-              <label>Total cost (LKR)<input name="totalCost" type="number" min="0" value={form.totalCost} onChange={change} /></label>
-              <label>Duty (LKR)<input name="duty" type="number" min="0" value={form.duty} onChange={change} /></label>
-              <label>DO charges (LKR)<input name="doCharges" type="number" min="0" value={form.doCharges} onChange={change} /></label>
-              <label className="form-wide">Clearance status<input name="clearanceStatus" value={form.clearanceStatus} onChange={change} placeholder="Not started" /></label>
-            </div>
-          </div>
-          <div className="form-section">
-            <h3>Document checklist</h3>
-            <div className="checklist">
-              {documentTypes.map((document) => <label key={document} className="check-item"><input type="checkbox" name={`document.${document}`} checked={form.documents[document] === "Received"} onChange={change} /><span className="custom-check"><Check size={12} /></span>{document}</label>)}
+            <div className="form-grid shipment-details-grid">
+              <label className="shipment-field shipment-field--import">Imp No.<input name="importNo" value={form.importNo} onChange={change} required placeholder="FMJ-2026-003" /></label>
+              <label className="shipment-field shipment-field--consignee">Consignee<select name="company" value={form.company} onChange={(event) => { const code = event.target.value; setForm((current) => ({ ...current, company: code, consignee: consignees.find((item) => item.code === code)?.name || current.consignee })); }} required><option value="" disabled>Select a consignee</option>{consignees.map((consignee) => <option key={consignee.id} value={consignee.code}>{consignee.code} — {consignee.name}</option>)}</select></label>
+              <label className="shipment-field shipment-field--shipper">Shipper<input name="supplier" value={form.supplier} onChange={change} required /></label>
+              <label className="shipment-field shipment-field--description">Item Description<input name="description" value={form.description} onChange={change} required /></label>
+              <label className="shipment-field shipment-field--payment-terms">Payment Terms<select name="paymentTerms" value={form.paymentTerms} onChange={(event) => {
+                const paymentTerms = event.target.value;
+                const paymentMethod = paymentTerms === "LETTER_OF_CREDIT" ? "Letter of credit"
+                  : paymentTerms === "ADVANCE_TT" ? "Advance TT"
+                    : paymentTerms === "DA_BL" ? "DA - From date of BL"
+                      : paymentTerms === "DP_SIGHT" ? "DP of Sight"
+                        : paymentTerms === "OPEN_ACCOUNT" ? "Open account" : "";
+                setForm((current) => ({ ...current, paymentTerms, paymentMethod, paymentTermType: "", paymentTermDays: "" }));
+              }} required><option value="">Select payment terms</option><option value="LETTER_OF_CREDIT">Letter of credit</option><option value="ADVANCE_TT">100% Advance Payment by TT</option><option value="DA_BL">DA - From date of BL</option><option value="DP_SIGHT">DP of Sight</option><option value="OPEN_ACCOUNT">Open account</option></select></label>
+              {form.paymentTerms === "LETTER_OF_CREDIT" && <label className="shipment-field shipment-field--conditional">Letter of Credit Type<select name="paymentTermType" value={form.paymentTermType} onChange={(event) => {
+                const paymentTermType = event.target.value;
+                setForm((current) => ({ ...current, paymentTermType, paymentMethod: paymentTermType ? `${paymentTermType} LC` : "Letter of credit", paymentTermDays: "" }));
+              }} required><option value="">Select LC type</option><option value="Sight">Sight</option><option value="Usance">Usance</option></select></label>}
+              {form.paymentTerms === "LETTER_OF_CREDIT" && form.paymentTermType === "Usance" && <label className="shipment-field shipment-field--conditional">Usance days<input name="paymentTermDays" type="number" min="1" max="365" value={form.paymentTermDays} onChange={change} required /></label>}
+              {form.paymentTerms === "DA_BL" && <label className="shipment-field shipment-field--conditional">DA days<select name="paymentTermDays" value={form.paymentTermDays} onChange={change} required><option value="">Select days</option>{[30, 60, 90, 120].map((days) => <option key={days} value={days}>{days} days from BL</option>)}</select></label>}
+              {form.paymentTerms === "OPEN_ACCOUNT" && <label className="shipment-field shipment-field--conditional">Open account days<select name="paymentTermDays" value={form.paymentTermDays} onChange={change} required><option value="">Select days</option>{[30, 45, 60, 90, 120].map((days) => <option key={days} value={days}>{days} days</option>)}</select></label>}
+              <label className="shipment-field shipment-field--mode">Transport Mode<select name="transportMode" value={form.transportMode} onChange={(event) => setForm((current) => ({ ...current, transportMode: event.target.value, fclLcl: "", containerSize: "" }))} required={!initial}><option value="">Select AIR/SEA</option><option value="AIR">AIR</option><option value="SEA">SEA</option></select></label>
+              {form.transportMode === "SEA" && <label className="shipment-field shipment-field--conditional">FCL/LCL<select name="fclLcl" value={form.fclLcl} onChange={(event) => setForm((current) => ({ ...current, fclLcl: event.target.value, containerSize: "" }))} required><option value="">Select FCL/LCL</option><option value="FCL">FCL</option><option value="LCL">LCL</option></select></label>}
+              {form.transportMode === "SEA" && form.fclLcl === "FCL" && <label className="shipment-field shipment-field--conditional">Container Size<select name="containerSize" value={form.containerSize} onChange={change} required><option value="">Select size</option><option value="20FT">20FT</option><option value="40FT">40FT</option></select></label>}
+              <label className="shipment-field shipment-field--currency">Currency<select name="currency" value={form.currency} onChange={change} required>{form.currency === "LKR" && <option value="LKR">LKR (existing)</option>}<option value="USD">USD</option><option value="AED">AED</option><option value="RMB">RMB</option></select></label>
+              <label className="shipment-field shipment-field--amount">Value<input name="totalCost" type="number" min="0" value={form.totalCost} onChange={change} /></label>
+              <label className="shipment-field shipment-field--date">ETD<input name="etd" type="date" value={form.etd} onChange={change} /></label>
+              <label className="shipment-field shipment-field--date">ETA CMB<input name="eta" type="date" value={form.eta} onChange={change} /></label>
+              <label className="shipment-field shipment-field--amount">Duty (LKR)<input name="duty" type="number" min="0" value={form.duty} onChange={change} /></label>
+              <label className="shipment-field shipment-field--amount">DO (LKR)<input name="doCharges" type="number" min="0" value={form.doCharges} onChange={change} /></label>
+              <label className="form-wide">Remarks<textarea name="remarks" value={form.remarks} onChange={change} rows={3} maxLength={1000} /></label>
             </div>
           </div>
           {error && <div className="form-error">{error}</div>}
@@ -295,7 +302,7 @@ function Dashboard({ shipments, consignees, analytics, onNavigate, onEdit, onAdd
   const maxMonthly = Math.max(1, ...((analytics?.monthly || []).map((item) => item.shipments)));
   return (
     <>
-      <PageTitle eyebrow="OVERVIEW" title="Good morning, team" subtitle="Here's what's happening with your shipments today." action={<button className="button secondary date-button"><CalendarDays size={16} /> {new Date().toLocaleDateString("en", { month: "long", year: "numeric" })} <ChevronDown size={15} /></button>} />
+      <PageTitle eyebrow="OVERVIEW" title="Good morning, team" subtitle="Here's what's happening with your shipments today." />
       <section className="stat-grid">
         <StatCard label="Total shipments" value={analytics?.total ?? "—"} helper="Live records from MongoDB" icon={Ship} color="blue" />
         <StatCard label="Pending" value={analytics?.pending ?? "—"} helper="Awaiting next action" icon={Clock3} color="amber" />
@@ -325,7 +332,7 @@ function Dashboard({ shipments, consignees, analytics, onNavigate, onEdit, onAdd
           </div>
         </section>
         <section className="panel recent-panel">
-          <div className="panel-heading"><div><h2>Recent shipments</h2><p>Latest updates across your imports</p></div><button className="text-button" onClick={() => onNavigate("shipments")}>View all <ArrowRight size={15} /></button></div>
+          <div className="panel-heading"><div><h2>Recent shipments</h2><p>Latest updates across your imports</p></div></div>
           <ShipmentTable rows={shipments.slice(0, 5)} mode="shipments" onEdit={onEdit} onAdd={onAdd} consignees={consignees} />
         </section>
         <section className="panel company-panel">
@@ -349,7 +356,7 @@ function DocumentsView({ shipments, consignees, onEdit }) {
     shipment,
   })));
   return <section className="panel table-panel"><div className="panel-heading"><div><h2>Document register</h2><p>PI, CI, packing lists, BL/AWB and customs paperwork</p></div><span className="document-count">{rows.filter((row) => row.status === "Received").length} / {rows.length} received</span></div>
-    {!rows.length ? <EmptyState /> : <div className="table-scroll"><table><thead><tr><th>Document</th><th>Import No.</th><th>Consignee</th><th>Supplier</th><th>Document status</th><th>Shipment status</th><th /></tr></thead><tbody>{rows.map((row) => <tr key={row.id} className="clickable-row" onClick={() => onEdit(row.shipment)}><td><span className="doc-icon"><FileText size={15} /></span>{row.document}</td><td><span className="import-id">{row.importNo}</span></td><td><ConsigneeBadge code={row.company} consignees={consignees} /></td><td>{row.supplier}</td><td><StatusBadge>{row.status}</StatusBadge></td><td><StatusBadge>{row.shipment.status}</StatusBadge></td><td><button className="icon-button row-more" aria-label="Edit document status"><MoreHorizontal size={18} /></button></td></tr>)}</tbody></table></div>}
+    {!rows.length ? <EmptyState /> : <div className="table-scroll"><table><thead><tr><th>Document</th><th>Import No.</th><th>Consignee</th><th>Shipper</th><th>Document status</th><th>Shipment status</th><th /></tr></thead><tbody>{rows.map((row) => <tr key={row.id} className="clickable-row" onClick={() => onEdit(row.shipment)}><td><span className="doc-icon"><FileText size={15} /></span>{row.document}</td><td><span className="import-id">{row.importNo}</span></td><td><ConsigneeBadge code={row.company} consignees={consignees} /></td><td>{row.supplier}</td><td><StatusBadge>{row.status}</StatusBadge></td><td><StatusBadge>{row.shipment.status}</StatusBadge></td><td><button className="icon-button row-more" aria-label="Edit document status"><MoreHorizontal size={18} /></button></td></tr>)}</tbody></table></div>}
   </section>;
 }
 
@@ -656,9 +663,6 @@ export default function App() {
   const [consignees, setConsignees] = useState([]);
   const [countries, setCountries] = useState([]);
   const [analytics, setAnalytics] = useState(null);
-  const [search, setSearch] = useState("");
-  const [companyFilter, setCompanyFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
   const [modalShipment, setModalShipment] = useState(undefined);
   const [modalConsignee, setModalConsignee] = useState(undefined);
   const [modalCountry, setModalCountry] = useState(undefined);
@@ -750,11 +754,6 @@ export default function App() {
     };
   }, [accountMenuOpen, confirmSignOut]);
 
-  const filteredShipments = useMemo(() => shipments.filter((shipment) => {
-    const query = search.trim().toLowerCase();
-    const matchesSearch = !query || [shipment.importNo, shipment.supplier, shipment.consignee, shipment.description].join(" ").toLowerCase().includes(query);
-    return matchesSearch && (!companyFilter || shipment.company === companyFilter) && (!statusFilter || shipment.status === statusFilter);
-  }), [shipments, search, companyFilter, statusFilter]);
   const consigneeOptions = useMemo(() => {
     const knownCodes = new Set(consignees.map((consignee) => consignee.code));
     const existingShipmentConsignees = [...new Set(
@@ -830,29 +829,26 @@ export default function App() {
     if (loading) return <div className="loading-state"><span className="loader" />Loading shipment workspace…</div>;
     if (error && !shipments.length) return <div className="error-state"><strong>Unable to load shipments</strong><span>{error}</span><button className="button secondary" onClick={refresh}>Try again</button></div>;
     if (active === "dashboard") return <Dashboard shipments={shipments} consignees={consignees} analytics={analytics} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} />;
-    if (active === "companies") return <><PageTitle eyebrow="CONSIGNEES" title="Consignee reports" subtitle="A clear view of imports and clearance progress for each consignee." />{error && <div className="inline-error">{error}</div>}<ConsigneeReports analytics={analytics} shipments={filteredShipments} consignees={consignees} onEdit={openModal} /></>;
+    if (active === "to-be-tt") {
+      const pendingTTShipments = shipments.filter((shipment) =>
+        shipment.paymentMethod === "Advance TT" && shipment.paymentStatus === "Pending",
+      );
+      return <>
+        <PageTitle eyebrow="PAYMENTS" title="To be TT" subtitle="Shipments awaiting Advance TT payment." action={<button className="button primary" onClick={() => openModal(null)}><Plus size={17} /> Add shipment</button>} />
+        {error && <div className="inline-error">{error}</div>}
+        <section className="panel table-panel">
+          <div className="table-toolbar"><div className="table-title"><h2>Pending TT payments</h2><span className="count-pill">{pendingTTShipments.length}</span></div></div>
+          <ShipmentTable rows={pendingTTShipments} mode="payments" onEdit={openModal} onAdd={() => openModal(null)} consignees={consignees} />
+          <div className="table-footer"><span><strong>{pendingTTShipments.length}</strong> shipments awaiting Advance TT</span><span>Data saved automatically</span></div>
+        </section>
+      </>;
+    }
+    if (active === "companies") return <><PageTitle eyebrow="CONSIGNEES" title="Consignee reports" subtitle="A clear view of imports and clearance progress for each consignee." />{error && <div className="inline-error">{error}</div>}<ConsigneeReports analytics={analytics} shipments={shipments} consignees={consignees} onEdit={openModal} /></>;
     if (active === "consignees") return <><PageTitle eyebrow="DIRECTORY" title="Consignees" subtitle="Create and manage the consignee records assigned to your shipments." action={<button className="button primary" onClick={() => setModalConsignee(null)}><Plus size={17} /> Create consignee</button>} />{error && <div className="inline-error">{error}</div>}<ConsigneeDirectory consignees={consignees} shipments={shipments} onEdit={setModalConsignee} onAdd={() => setModalConsignee(null)} /></>;
     if (active === "countries") return <><PageTitle eyebrow="DIRECTORY" title="Countries" subtitle="Create and manage country records." action={<button className="button primary" title="Create country (F1)" onClick={() => setModalCountry(null)}><Plus size={17} /> Create country</button>} />{error && <div className="inline-error">{error}</div>}<CountryDirectory countries={countries} onEdit={setModalCountry} onAdd={() => setModalCountry(null)} /></>;
-    if (active === "documents") return <><PageTitle eyebrow="PAPERWORK" title="Documents" subtitle="Track required shipping and customs documents in one place." />{error && <div className="inline-error">{error}</div>}<DocumentsView shipments={filteredShipments} consignees={consignees} onEdit={openModal} /></>;
+    if (active === "documents") return <><PageTitle eyebrow="PAPERWORK" title="Documents" subtitle="Track required shipping and customs documents in one place." />{error && <div className="inline-error">{error}</div>}<DocumentsView shipments={shipments} consignees={consignees} onEdit={openModal} /></>;
     if (active === "analytics") return <><PageTitle eyebrow="PERFORMANCE" title="Reports & analytics" subtitle="Monitor shipment delays, landed costs and monthly activity." />{error && <div className="inline-error">{error}</div>}<AnalyticsView analytics={analytics} /></>;
-    const pageInfo = {
-      shipments: ["OPERATIONS", "Shipment register", "Manage import records from supplier to consignee.", "shipments"],
-      tracking: ["OPERATIONS", "Shipment tracking", "Track ETD, ETA, arrival and final delivery milestones.", "tracking"],
-      payments: ["FINANCE", "Payment tracking", "Review Advance TT, Sight LC, Usance LC and payment status.", "payments"],
-      customs: ["CLEARANCE", "Customs clearance", "Track import duty, delivery order charges and clearance progress.", "customs"],
-    }[active];
-    return <>
-      <PageTitle eyebrow={pageInfo[0]} title={pageInfo[1]} subtitle={pageInfo[2]} action={<button className="button primary" onClick={() => openModal(null)}><Plus size={17} /> Add shipment</button>} />
-      {error && <div className="inline-error">{error}</div>}
-      <section className="panel table-panel">
-        <div className="table-toolbar">
-          <div className="table-title"><h2>{active === "shipments" ? "All shipments" : activeTitle}</h2><span className="count-pill">{filteredShipments.length}</span></div>
-          <div className="table-actions"><label className="table-search"><Search size={16} /><input placeholder="Search shipments..." value={search} onChange={(event) => setSearch(event.target.value)} /></label><label className="filter-select"><SlidersHorizontal size={15} /><select aria-label="Filter by consignee" value={companyFilter} onChange={(event) => setCompanyFilter(event.target.value)}><option value="">All consignees</option>{consigneeOptions.map((consignee) => <option key={consignee.id} value={consignee.code}>{consignee.code}</option>)}</select></label>{active !== "tracking" && active !== "payments" && <label className="filter-select"><select aria-label="Filter by status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All statuses</option>{shipmentStatuses.map((status) => <option key={status}>{status}</option>)}</select></label>}</div>
-        </div>
-        <ShipmentTable rows={filteredShipments} mode={pageInfo[3]} onEdit={openModal} consignees={consignees} />
-        <div className="table-footer"><span>Showing <strong>{filteredShipments.length}</strong> of <strong>{shipments.length}</strong> shipments</span><span>Data saved automatically</span></div>
-      </section>
-    </>;
+    return <Dashboard shipments={shipments} consignees={consignees} analytics={analytics} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} />;
   }
 
   if (!authState?.authenticated) {

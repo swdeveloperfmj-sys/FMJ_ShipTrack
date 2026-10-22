@@ -26,12 +26,24 @@ const shipmentSchema = new mongoose.Schema(
     supplier: { type: String, required: true, trim: true },
     consignee: { type: String, required: true, trim: true },
     description: { type: String, required: true, trim: true },
+    transportMode: { type: String, enum: ["AIR", "SEA", ""], default: "" },
+    fclLcl: { type: String, enum: ["FCL", "LCL", ""], default: "" },
+    containerSize: { type: String, enum: ["20FT", "40FT", ""], default: "" },
+    remarks: { type: String, trim: true, default: "" },
+    currency: { type: String, enum: ["USD", "AED", "RMB", "LKR"], default: "LKR" },
     etd: { type: String, default: "" },
     eta: { type: String, default: "" },
     arrivalDate: { type: String, default: "" },
     deliveryDate: { type: String, default: "" },
     status: { type: String, default: "Pending" },
     paymentMethod: { type: String, default: "Advance TT" },
+    paymentTerms: {
+      type: String,
+      enum: ["LETTER_OF_CREDIT", "ADVANCE_TT", "DA_BL", "DP_SIGHT", "OPEN_ACCOUNT", ""],
+      default: "",
+    },
+    paymentTermType: { type: String, enum: ["Sight", "Usance", ""], default: "" },
+    paymentTermDays: { type: Number, min: 1, max: 365, default: null },
     paymentStatus: { type: String, default: "Pending" },
     advanceTT: { type: Number, default: 0 },
     sightLC: { type: Number, default: 0 },
@@ -101,12 +113,20 @@ const shipmentFields = [
   "supplier",
   "consignee",
   "description",
+  "transportMode",
+  "fclLcl",
+  "containerSize",
+  "remarks",
+  "currency",
   "etd",
   "eta",
   "arrivalDate",
   "deliveryDate",
   "status",
   "paymentMethod",
+  "paymentTerms",
+  "paymentTermType",
+  "paymentTermDays",
   "paymentStatus",
   "advanceTT",
   "sightLC",
@@ -399,6 +419,35 @@ function validateShipment(shipment) {
   );
   if (missing.length) {
     return `Required fields: ${missing.join(", ")}`;
+  }
+  if (shipment.currency !== undefined && !["USD", "AED", "RMB", "LKR"].includes(shipment.currency)) {
+    return "Currency must be USD, AED or RMB.";
+  }
+  const paymentTerms = ["LETTER_OF_CREDIT", "ADVANCE_TT", "DA_BL", "DP_SIGHT", "OPEN_ACCOUNT"];
+  if (shipment.paymentTerms && !paymentTerms.includes(shipment.paymentTerms)) {
+    return "Select a valid payment term.";
+  }
+  if (shipment.paymentTermType && !["Sight", "Usance"].includes(shipment.paymentTermType)) {
+    return "Select Sight or Usance for the letter of credit.";
+  }
+  if (shipment.paymentTermDays !== undefined && shipment.paymentTermDays !== null && shipment.paymentTermDays !== "") {
+    const days = Number(shipment.paymentTermDays);
+    if (!Number.isInteger(days) || days < 1 || days > 365) return "Payment term days must be between 1 and 365.";
+    if (shipment.paymentTerms === "DA_BL" && ![30, 60, 90, 120].includes(days)) {
+      return "DA payment terms must be 30, 60, 90 or 120 days from BL.";
+    }
+    if (shipment.paymentTerms === "OPEN_ACCOUNT" && ![30, 45, 60, 90, 120].includes(days)) {
+      return "Open account terms must be 30, 45, 60, 90 or 120 days.";
+    }
+  }
+  if (shipment.paymentTerms === "LETTER_OF_CREDIT" && !["Sight", "Usance"].includes(shipment.paymentTermType)) {
+    return "Choose Sight or Usance for the letter of credit.";
+  }
+  if (shipment.paymentTerms === "LETTER_OF_CREDIT" && shipment.paymentTermType === "Usance" && !shipment.paymentTermDays) {
+    return "Enter the Usance payment days.";
+  }
+  if ((shipment.paymentTerms === "DA_BL" || shipment.paymentTerms === "OPEN_ACCOUNT") && !shipment.paymentTermDays) {
+    return "Select the payment term days.";
   }
   return null;
 }
