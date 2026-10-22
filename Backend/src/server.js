@@ -10,10 +10,12 @@ import nodemailer from "nodemailer";
 import { createHmac, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
 
 const app = express();
+app.set("trust proxy", 1);
 const port = Number(process.env.PORT) || 4000;
 const adminEmail = "sw.developer.fmj@gmail.com";
 const cookieName = "fmj_shiptrack_session";
 const sessionDurationMs = 8 * 60 * 60 * 1000;
+const isDeployed = process.env.NODE_ENV === "production" || process.env.VERCEL === "1";
 const allowedOrigins = (process.env.FRONTEND_ORIGIN || "http://localhost:5173")
   .split(",")
   .map((origin) => origin.trim());
@@ -215,12 +217,19 @@ function createSessionToken(admin) {
 function setSessionCookie(response, admin) {
   response.cookie(cookieName, createSessionToken(admin), {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    secure: isDeployed,
+    sameSite: isDeployed ? "none" : "lax",
     maxAge: sessionDurationMs,
     path: "/",
   });
 }
+
+const clearSessionCookie = (response) => response.clearCookie(cookieName, {
+  httpOnly: true,
+  secure: isDeployed,
+  sameSite: isDeployed ? "none" : "lax",
+  path: "/",
+});
 
 function requireSuperAdmin(request, response, next) {
   const token = request.cookies[cookieName];
@@ -234,12 +243,7 @@ function requireSuperAdmin(request, response, next) {
     request.superAdmin = { id: session.sub, username: session.username };
     next();
   } catch {
-    response.clearCookie(cookieName, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-    });
+    clearSessionCookie(response);
     response.status(401).json({ error: "Your session expired. Sign in again." });
   }
 }
@@ -284,12 +288,7 @@ app.get("/api/auth/status", async (request, response, next) => {
           });
         }
       } catch {
-        response.clearCookie(cookieName, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          sameSite: "lax",
-          path: "/",
-        });
+        clearSessionCookie(response);
       }
     }
     response.json({ setupRequired: false, authenticated: false });
@@ -414,12 +413,7 @@ app.post("/api/auth/verify", verifyLimiter, async (request, response, next) => {
 });
 
 app.post("/api/auth/logout", requireSuperAdmin, (_request, response) => {
-  response.clearCookie(cookieName, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-  });
+  clearSessionCookie(response);
   response.status(204).end();
 });
 
