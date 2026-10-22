@@ -1,0 +1,5 @@
+**/node_modules/
+Frontend/dist/
+Backend/data/shipments.json
+**/.env
+!**/.env.example

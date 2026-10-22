@@ -1,0 +1,44 @@
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000/api";
+
+async function request(path, options = {}) {
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    credentials: "include",
+    headers: {
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...options.headers,
+    },
+  });
+  if (!response.ok) {
+    if (response.status === 401 && !path.startsWith("/auth/")) {
+      window.dispatchEvent(new Event("fmj-session-expired"));
+    }
+    const result = await response.json().catch(() => ({}));
+    throw new Error(result.error || `Request failed (${response.status})`);
+  }
+  return response.status === 204 ? null : response.json();
+}
+
+export const api = {
+  getAuthStatus: () => request("/auth/status"),
+  setupSuperAdmin: (credentials) =>
+    request("/auth/setup", { method: "POST", body: JSON.stringify(credentials) }),
+  login: (credentials) =>
+    request("/auth/login", { method: "POST", body: JSON.stringify(credentials) }),
+  verifyLoginCode: (challenge) =>
+    request("/auth/verify", { method: "POST", body: JSON.stringify(challenge) }),
+  logout: () => request("/auth/logout", { method: "POST" }),
+  getConsignees: () => request("/consignees"),
+  createConsignee: (consignee) =>
+    request("/consignees", { method: "POST", body: JSON.stringify(consignee) }),
+  updateConsignee: (id, consignee) =>
+    request(`/consignees/${id}`, { method: "PUT", body: JSON.stringify(consignee) }),
+  deleteConsignee: (id) => request(`/consignees/${id}`, { method: "DELETE" }),
+  getShipments: () => request("/shipments"),
+  getAnalytics: () => request("/analytics"),
+  createShipment: (shipment) =>
+    request("/shipments", { method: "POST", body: JSON.stringify(shipment) }),
+  updateShipment: (id, shipment) =>
+    request(`/shipments/${id}`, { method: "PUT", body: JSON.stringify(shipment) }),
+  deleteShipment: (id) => request(`/shipments/${id}`, { method: "DELETE" }),
+};

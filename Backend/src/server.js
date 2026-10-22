@@ -1,0 +1,682 @@
+import cors from "cors";
+import "dotenv/config";
+import bcrypt from "bcryptjs";
+import cookieParser from "cookie-parser";
+import express from "express";
+import { rateLimit } from "express-rate-limit";
+import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
+import nodemailer from "nodemailer";
+import { createHmac, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
+
+const app = express();
+const port = Number(process.env.PORT) || 4000;
+const adminEmail = "sw.developer.fmj@gmail.com";
+const cookieName = "fmj_shiptrack_session";
+const sessionDurationMs = 8 * 60 * 60 * 1000;
+const allowedOrigins = (process.env.FRONTEND_ORIGIN || "http://localhost:5173")
+  .split(",")
+  .map((origin) => origin.trim());
+
+const shipmentSchema = new mongoose.Schema(
+  {
+    _id: { type: String, required: true },
+    importNo: { type: String, required: true, trim: true, unique: true },
+    company: { type: String, required: true, trim: true },
+    supplier: { type: String, required: true, trim: true },
+    consignee: { type: String, required: true, trim: true },
+    description: { type: String, required: true, trim: true },
+    etd: { type: String, default: "" },
+    eta: { type: String, default: "" },
+    arrivalDate: { type: String, default: "" },
+    deliveryDate: { type: String, default: "" },
+    status: { type: String, default: "Pending" },
+    paymentMethod: { type: String, default: "Advance TT" },
+    paymentStatus: { type: String, default: "Pending" },
+    advanceTT: { type: Number, default: 0 },
+    sightLC: { type: Number, default: 0 },
+    usanceLC: { type: Number, default: 0 },
+    duty: { type: Number, default: 0 },
+    doCharges: { type: Number, default: 0 },
+    clearanceStatus: { type: String, default: "Not started" },
+    totalCost: { type: Number, default: 0 },
+    documents: { type: mongoose.Schema.Types.Mixed, default: {} },
+    createdAt: { type: String, default: () => new Date().toISOString() },
+    updatedAt: { type: String },
+  },
+  { versionKey: false },
+);
+
+const Shipment = mongoose.model("Shipment", shipmentSchema);
+const consigneeSchema = new mongoose.Schema(
+  {
+    _id: { type: String, required: true },
+    code: { type: String, required: true, trim: true, uppercase: true, unique: true },
+    name: { type: String, required: true, trim: true },
+    contactName: { type: String, trim: true, default: "" },
+    email: { type: String, trim: true, lowercase: true, default: "" },
+    phone: { type: String, trim: true, default: "" },
+    address: { type: String, trim: true, default: "" },
+    createdAt: { type: String, default: () => new Date().toISOString() },
+    updatedAt: { type: String },
+  },
+  { versionKey: false },
+);
+const Consignee = mongoose.model("Consignee", consigneeSchema);
+const superAdminSchema = new mongoose.Schema(
+  {
+    _id: { type: String, default: "super-admin" },
+    username: { type: String, required: true, unique: true, trim: true, lowercase: true },
+    passwordHash: { type: String, required: true },
+  },
+  { versionKey: false },
+);
+const loginChallengeSchema = new mongoose.Schema(
+  {
+    _id: { type: String, required: true },
+    adminId: { type: String, required: true },
+    otpHash: { type: String, required: true },
+    expiresAt: { type: Date, required: true, expires: 0 },
+    attempts: { type: Number, default: 0 },
+  },
+  { versionKey: false },
+);
+const SuperAdmin = mongoose.model("SuperAdmin", superAdminSchema);
+const LoginChallenge = mongoose.model("LoginChallenge", loginChallengeSchema);
+const shipmentFields = [
+  "importNo",
+  "company",
+  "supplier",
+  "consignee",
+  "description",
+  "etd",
+  "eta",
+  "arrivalDate",
+  "deliveryDate",
+  "status",
+  "paymentMethod",
+  "paymentStatus",
+  "advanceTT",
+  "sightLC",
+  "usanceLC",
+  "duty",
+  "doCharges",
+  "clearanceStatus",
+  "totalCost",
+  "documents",
+];
+
+app.use(cors({ origin: allowedOrigins, credentials: true }));
+app.use(express.json({ limit: "1mb" }));
+app.use(cookieParser());
+
+const setupLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 3,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: { error: "Too many setup attempts. Try again later." },
+});
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: { error: "Too many login attempts. Try again in 15 minutes." },
+});
+const verifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: { error: "Too many code attempts. Try again in 15 minutes." },
+});
+
+function constantTimeMatch(actual, expected) {
+  if (typeof actual !== "string" || typeof expected !== "string") return false;
+  const actualBuffer = Buffer.from(actual);
+  const expectedBuffer = Buffer.from(expected);
+  return (
+    actualBuffer.length === expectedBuffer.length &&
+    timingSafeEqual(actualBuffer, expectedBuffer)
+  );
+}
+
+function createOtpHash(challengeId, otp) {
+  return createHmac("sha256", process.env.AUTH_TOKEN_SECRET)
+    .update(`${challengeId}:${otp}`)
+    .digest("hex");
+}
+
+function createSessionToken(admin) {
+  return jwt.sign(
+    { sub: admin._id, username: admin.username, purpose: "super-admin-session" },
+    process.env.AUTH_TOKEN_SECRET,
+    { expiresIn: "8h" },
+  );
+}
+
+function setSessionCookie(response, admin) {
+  response.cookie(cookieName, createSessionToken(admin), {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: sessionDurationMs,
+    path: "/",
+  });
+}
+
+function requireSuperAdmin(request, response, next) {
+  const token = request.cookies[cookieName];
+  if (!token) return response.status(401).json({ error: "Sign in to continue" });
+
+  try {
+    const session = jwt.verify(token, process.env.AUTH_TOKEN_SECRET);
+    if (session.purpose !== "super-admin-session" || session.sub !== "super-admin") {
+      return response.status(401).json({ error: "Sign in to continue" });
+    }
+    request.superAdmin = { id: session.sub, username: session.username };
+    next();
+  } catch {
+    response.clearCookie(cookieName, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+    });
+    response.status(401).json({ error: "Your session expired. Sign in again." });
+  }
+}
+
+async function sendLoginOtp(otp) {
+  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
+  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
+    throw new Error("Email delivery is not configured. Set SMTP_HOST, SMTP_USER and SMTP_PASS.");
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: Number(SMTP_PORT) || 587,
+    secure: String(process.env.SMTP_SECURE).toLowerCase() === "true",
+    requireTLS: String(process.env.SMTP_SECURE).toLowerCase() !== "true",
+    auth: { user: SMTP_USER, pass: SMTP_PASS },
+  });
+
+  await transporter.sendMail({
+    from: SMTP_FROM || SMTP_USER,
+    to: adminEmail,
+    subject: "FMJ ShipTrack super-admin sign-in code",
+    text: `Your FMJ ShipTrack verification code is ${otp}. It expires in 5 minutes. If you did not request this code, ignore this email.`,
+    html: `<p>Your FMJ ShipTrack verification code is:</p><p style="font-size:28px;font-weight:bold;letter-spacing:8px">${otp}</p><p>This code expires in 5 minutes. If you did not request it, ignore this email.</p>`,
+  });
+}
+
+app.get("/api/auth/status", async (request, response, next) => {
+  try {
+    const admin = await SuperAdmin.findById("super-admin").lean();
+    if (!admin) return response.json({ setupRequired: true, authenticated: false });
+
+    const token = request.cookies[cookieName];
+    if (token) {
+      try {
+        const session = jwt.verify(token, process.env.AUTH_TOKEN_SECRET);
+        if (session.purpose === "super-admin-session" && session.sub === admin._id) {
+          return response.json({
+            setupRequired: false,
+            authenticated: true,
+            username: admin.username,
+          });
+        }
+      } catch {
+        response.clearCookie(cookieName, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+        });
+      }
+    }
+    response.json({ setupRequired: false, authenticated: false });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/auth/setup", setupLimiter, async (request, response, next) => {
+  try {
+    const { setupKey, username, password } = request.body || {};
+    if (!process.env.SUPER_ADMIN_SETUP_KEY || process.env.SUPER_ADMIN_SETUP_KEY.length < 32) {
+      return response.status(503).json({ error: "Super-admin setup is not configured on the server." });
+    }
+    if (!constantTimeMatch(setupKey, process.env.SUPER_ADMIN_SETUP_KEY)) {
+      return response.status(403).json({ error: "Invalid initial setup key." });
+    }
+    if (typeof username !== "string" || !/^[a-zA-Z0-9._-]{3,40}$/.test(username.trim())) {
+      return response.status(400).json({
+        error: "Username must be 3–40 characters and use only letters, numbers, dots, underscores or hyphens.",
+      });
+    }
+    if (typeof password !== "string" || password.length < 12 || password.length > 128) {
+      return response.status(400).json({ error: "Password must be between 12 and 128 characters." });
+    }
+    if (await SuperAdmin.exists({ _id: "super-admin" })) {
+      return response.status(409).json({ error: "Super-admin setup has already been completed." });
+    }
+
+    await SuperAdmin.create({
+      _id: "super-admin",
+      username: username.trim().toLowerCase(),
+      passwordHash: await bcrypt.hash(password, 12),
+    });
+    response.status(201).json({ created: true });
+  } catch (error) {
+    if (error.code === 11000) {
+      return response.status(409).json({ error: "Super-admin setup has already been completed." });
+    }
+    next(error);
+  }
+});
+
+app.post("/api/auth/login", loginLimiter, async (request, response, next) => {
+  try {
+    const body = request.body || {};
+    const username =
+      typeof body.username === "string" ? body.username.trim().toLowerCase() : "";
+    const password = typeof body.password === "string" ? body.password : "";
+    const admin = await SuperAdmin.findOne({ username });
+    if (!admin || !(await bcrypt.compare(password, admin.passwordHash))) {
+      return response.status(401).json({ error: "Username or password is incorrect." });
+    }
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      return response.status(503).json({
+        error: "Email OTP is not configured. Set SMTP_HOST, SMTP_USER and SMTP_PASS in Backend/.env.",
+      });
+    }
+
+    const challengeId = randomUUID();
+    const otp = String(randomInt(0, 1_000_000)).padStart(6, "0");
+    await LoginChallenge.create({
+      _id: challengeId,
+      adminId: admin._id,
+      otpHash: createOtpHash(challengeId, otp),
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+    });
+
+    try {
+      await sendLoginOtp(otp);
+    } catch (error) {
+      await LoginChallenge.deleteOne({ _id: challengeId });
+      console.error("Failed to deliver super-admin login code.", error.code || "SMTP_ERROR");
+      return response.status(503).json({
+        error: "Could not send the verification email. Check the SMTP settings and try again.",
+      });
+    }
+
+    response.json({
+      challengeId,
+      destination: adminEmail,
+      expiresInSeconds: 300,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/auth/verify", verifyLimiter, async (request, response, next) => {
+  try {
+    const { challengeId, code } = request.body || {};
+    if (
+      typeof challengeId !== "string" ||
+      typeof code !== "string" ||
+      !/^\d{6}$/.test(code)
+    ) {
+      return response.status(400).json({ error: "Enter the 6-digit verification code." });
+    }
+
+    const challenge = await LoginChallenge.findOneAndUpdate(
+      { _id: challengeId, expiresAt: { $gt: new Date() }, attempts: { $lt: 5 } },
+      { $inc: { attempts: 1 } },
+      { new: true },
+    );
+    if (!challenge) {
+      await LoginChallenge.deleteOne({ _id: challengeId, attempts: { $gte: 5 } });
+      return response.status(400).json({ error: "Code expired or invalid. Sign in again for a new code." });
+    }
+
+    const admin = await SuperAdmin.findById(challenge.adminId);
+    if (!admin || !constantTimeMatch(createOtpHash(challengeId, code), challenge.otpHash)) {
+      if (challenge.attempts >= 5) await LoginChallenge.deleteOne({ _id: challengeId });
+      return response.status(400).json({ error: "Verification code is incorrect." });
+    }
+
+    await LoginChallenge.deleteOne({ _id: challengeId });
+    setSessionCookie(response, admin);
+    response.json({ authenticated: true, username: admin.username });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/auth/logout", requireSuperAdmin, (_request, response) => {
+  response.clearCookie(cookieName, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+  });
+  response.status(204).end();
+});
+
+function serializeShipment(shipment) {
+  const plain = shipment.toObject ? shipment.toObject() : shipment;
+  const { _id, ...fields } = plain;
+  return { ...fields, id: _id };
+}
+
+function shipmentInput(body) {
+  const source = body && typeof body === "object" ? body : {};
+  return Object.fromEntries(
+    shipmentFields.filter((field) => source[field] !== undefined).map((field) => [field, source[field]]),
+  );
+}
+
+function validateShipment(shipment) {
+  const requiredFields = ["importNo", "supplier", "consignee", "description", "company"];
+  const missing = requiredFields.filter(
+    (field) => typeof shipment[field] !== "string" || !shipment[field].trim(),
+  );
+  if (missing.length) {
+    return `Required fields: ${missing.join(", ")}`;
+  }
+  return null;
+}
+
+function validateConsignee(consignee) {
+  if (typeof consignee.code !== "string" || !/^[A-Za-z0-9_-]{2,20}$/.test(consignee.code.trim())) {
+    return "Consignee code must be 2–20 letters, numbers, hyphens or underscores.";
+  }
+  if (typeof consignee.name !== "string" || !consignee.name.trim()) {
+    return "Consignee name is required.";
+  }
+  for (const field of ["contactName", "email", "phone", "address"]) {
+    if (consignee[field] !== undefined && typeof consignee[field] !== "string") {
+      return `${field} must be text.`;
+    }
+  }
+  if (consignee.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(consignee.email)) {
+    return "Enter a valid email address.";
+  }
+  return null;
+}
+
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function dashboardSummary(shipments, consigneeCodes) {
+  const statuses = ["Pending", "Under Clearing", "Cleared"];
+  const byStatus = Object.fromEntries(
+    statuses.map((status) => [status, shipments.filter((item) => item.status === status).length]),
+  );
+  const companies = [...new Set([...consigneeCodes, ...shipments.map((item) => item.company)])].sort();
+  const byCompany = companies.map((company) => {
+    const companyShipments = shipments.filter((item) => item.company === company);
+    return {
+      company,
+      total: companyShipments.length,
+      cleared: companyShipments.filter((item) => item.status === "Cleared").length,
+      pending: companyShipments.filter((item) => item.status !== "Cleared").length,
+      totalCost: companyShipments.reduce((sum, item) => sum + Number(item.totalCost || 0), 0),
+    };
+  });
+
+  const monthlyMap = new Map();
+  for (const shipment of shipments) {
+    const date = shipment.eta || shipment.etd;
+    if (!date) continue;
+    const month = date.slice(0, 7);
+    const entry = monthlyMap.get(month) || { month, shipments: 0, cost: 0 };
+    entry.shipments += 1;
+    entry.cost += Number(shipment.totalCost || 0);
+    monthlyMap.set(month, entry);
+  }
+
+  const delayed = shipments.filter((shipment) => {
+    if (!shipment.eta || shipment.status === "Cleared") return false;
+    return new Date(`${shipment.eta}T23:59:59`) < new Date();
+  });
+
+  return {
+    total: shipments.length,
+    pending: byStatus.Pending,
+    underClearing: byStatus["Under Clearing"],
+    cleared: byStatus.Cleared,
+    delayed: delayed.length,
+    totalCost: shipments.reduce((sum, item) => sum + Number(item.totalCost || 0), 0),
+    byStatus,
+    byCompany,
+    monthly: [...monthlyMap.values()].sort((a, b) => a.month.localeCompare(b.month)).slice(-6),
+    delayedShipments: delayed,
+  };
+}
+
+app.get("/api/health", (_request, response) => {
+  response.json({
+    status: "ok",
+    service: "FMJ ShipTrack API",
+    database: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+  });
+});
+
+app.use("/api", requireSuperAdmin);
+
+app.get("/api/shipments", async (request, response, next) => {
+  try {
+    const { search = "", company = "", status = "" } = request.query;
+    const filter = {};
+    if (company) filter.company = String(company);
+    if (status) filter.status = String(status);
+    const normalizedSearch = String(search).trim();
+    if (normalizedSearch) {
+      const searchRegex = new RegExp(escapeRegex(normalizedSearch), "i");
+      filter.$or = ["importNo", "supplier", "consignee", "description"].map((field) => ({
+        [field]: searchRegex,
+      }));
+    }
+    const shipments = await Shipment.find(filter).sort({ createdAt: -1 }).lean();
+    response.json(shipments.map(serializeShipment));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/consignees", async (_request, response, next) => {
+  try {
+    const consignees = await Consignee.find().sort({ code: 1 }).lean();
+    response.json(consignees.map(({ _id, ...fields }) => ({ ...fields, id: _id })));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/consignees", async (request, response, next) => {
+  try {
+    const input = request.body || {};
+    const validationError = validateConsignee(input);
+    if (validationError) return response.status(400).json({ error: validationError });
+    const consignee = await Consignee.create({
+      _id: randomUUID(),
+      code: input.code.trim().toUpperCase(),
+      name: input.name.trim(),
+      contactName: input.contactName?.trim() || "",
+      email: input.email?.trim().toLowerCase() || "",
+      phone: input.phone?.trim() || "",
+      address: input.address?.trim() || "",
+    });
+    const { _id, ...fields } = consignee.toObject();
+    response.status(201).json({ ...fields, id: _id });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/consignees/:id", async (request, response, next) => {
+  try {
+    const input = request.body || {};
+    const validationError = validateConsignee(input);
+    if (validationError) return response.status(400).json({ error: validationError });
+    const currentConsignee = await Consignee.findById(request.params.id);
+    if (!currentConsignee) return response.status(404).json({ error: "Consignee not found." });
+    const nextCode = input.code.trim().toUpperCase();
+    if (currentConsignee.code !== nextCode && await Shipment.exists({ company: currentConsignee.code })) {
+      return response.status(409).json({
+        error: "This consignee code is assigned to shipments. Keep the code unchanged or reassign those shipments first.",
+      });
+    }
+    const consignee = await Consignee.findByIdAndUpdate(
+      request.params.id,
+      {
+        code: nextCode,
+        name: input.name.trim(),
+        contactName: input.contactName?.trim() || "",
+        email: input.email?.trim().toLowerCase() || "",
+        phone: input.phone?.trim() || "",
+        address: input.address?.trim() || "",
+        updatedAt: new Date().toISOString(),
+      },
+      { new: true, runValidators: true },
+    );
+    if (!consignee) return response.status(404).json({ error: "Consignee not found." });
+    const { _id, ...fields } = consignee.toObject();
+    response.json({ ...fields, id: _id });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/consignees/:id", async (request, response, next) => {
+  try {
+    const consignee = await Consignee.findById(request.params.id);
+    if (!consignee) return response.status(404).json({ error: "Consignee not found." });
+    if (await Shipment.exists({ company: consignee.code })) {
+      return response.status(409).json({
+        error: "This consignee is assigned to shipments. Update those shipments before deleting it.",
+      });
+    }
+    await consignee.deleteOne();
+    response.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/shipments/:id", async (request, response, next) => {
+  try {
+    const shipment = await Shipment.findById(request.params.id).lean();
+    if (!shipment) return response.status(404).json({ error: "Shipment not found" });
+    response.json(serializeShipment(shipment));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/shipments", async (request, response, next) => {
+  try {
+    const input = shipmentInput(request.body);
+    const validationError = validateShipment(input);
+    if (validationError) return response.status(400).json({ error: validationError });
+    const shipment = await Shipment.create({
+      ...input,
+      importNo: input.importNo.trim(),
+      _id: randomUUID(),
+      createdAt: new Date().toISOString(),
+    });
+    response.status(201).json(serializeShipment(shipment));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/shipments/:id", async (request, response, next) => {
+  try {
+    const input = shipmentInput(request.body);
+    const validationError = validateShipment(input);
+    if (validationError) return response.status(400).json({ error: validationError });
+    const shipment = await Shipment.findByIdAndUpdate(
+      request.params.id,
+      {
+        ...input,
+        importNo: input.importNo.trim(),
+        updatedAt: new Date().toISOString(),
+      },
+      { new: true, runValidators: true },
+    );
+    if (!shipment) return response.status(404).json({ error: "Shipment not found" });
+    response.json(serializeShipment(shipment));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/shipments/:id", async (request, response, next) => {
+  try {
+    const shipment = await Shipment.findByIdAndDelete(request.params.id);
+    if (!shipment) return response.status(404).json({ error: "Shipment not found" });
+    response.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/analytics", async (_request, response, next) => {
+  try {
+    const [shipmentDocuments, consigneeDocuments] = await Promise.all([
+      Shipment.find().lean(),
+      Consignee.find().select("code").lean(),
+    ]);
+    const shipments = shipmentDocuments.map(serializeShipment);
+    response.json(dashboardSummary(shipments, consigneeDocuments.map((item) => item.code)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.use((error, _request, response, _next) => {
+  if (error.code === 11000) {
+    const duplicateField = Object.keys(error.keyPattern || {})[0];
+    const message = duplicateField === "code"
+      ? "A consignee with this code already exists."
+      : duplicateField === "importNo"
+        ? "Import number already exists."
+        : "A record with this value already exists.";
+    return response.status(409).json({ error: message });
+  }
+  console.error(error);
+  response.status(500).json({ error: "An unexpected server error occurred" });
+});
+
+async function start() {
+  if (!process.env.MONGODB_URI) {
+    throw new Error("MONGODB_URI is missing. Set it in Backend/.env before starting the API.");
+  }
+  if (!process.env.AUTH_TOKEN_SECRET || process.env.AUTH_TOKEN_SECRET.length < 32) {
+    throw new Error("AUTH_TOKEN_SECRET is missing or too short. Set a random secret of at least 32 characters.");
+  }
+
+  await mongoose.connect(process.env.MONGODB_URI);
+  await Shipment.init();
+  await Consignee.init();
+  await SuperAdmin.init();
+  await LoginChallenge.init();
+  const shipmentCount = await Shipment.countDocuments();
+  app.listen(port, () => {
+    console.log(`FMJ ShipTrack API running at http://localhost:${port}`);
+    console.log(`MongoDB connected to database "${mongoose.connection.name}".`);
+    console.log(`${shipmentCount} existing shipment record(s) found; no sample data was added.`);
+  });
+}
+
+start().catch((error) => {
+  console.error("Failed to start FMJ ShipTrack API:", error.message);
+  process.exitCode = 1;
+});
