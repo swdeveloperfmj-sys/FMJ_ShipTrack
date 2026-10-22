@@ -154,6 +154,18 @@ app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 
+app.get("/", (_request, response) => {
+  response.json({
+    service: "FMJ ShipTrack API",
+    status: "ok",
+    health: "/api/health",
+  });
+});
+
+app.get("/api/health", (_request, response) => {
+  response.json({ service: "FMJ ShipTrack API", status: "ok" });
+});
+
 const setupLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   limit: 3,
