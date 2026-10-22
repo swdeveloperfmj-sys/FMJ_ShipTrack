@@ -90,9 +90,14 @@ dashboard shows an empty state and lets you add your actual shipment records. Ex
 records already stored in MongoDB are left unchanged.
 
 Create consignee records from **Consignees → Create consignee** before assigning them
-to new shipments. Each consignee has a unique code, name and optional contact details.
-Consignee codes already used by shipment records cannot be renamed or deleted until
-those shipments are reassigned.
+to new shipments. Each consignee has a unique code, name, assigned color and optional
+contact details. Choose a preset or custom color when creating or editing a consignee;
+the color is saved with that consignee and appears in its directory, shipment labels and
+reports. Consignee codes already used by shipment records cannot be renamed or deleted
+until those shipments are reassigned.
+
+Manage country records separately from the **Countries** page. Country names can be
+created, edited and deleted there.
 
 The app includes shipment registration,
 tracking milestones, payment and customs tracking, document checklists, consignee

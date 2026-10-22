@@ -131,6 +131,7 @@ button { cursor: pointer; }
 .company-list { display: grid; gap: 17px; margin-top: 20px; }
 .company-row { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .company-avatar { display: grid; flex: none; place-items: center; width: 29px; height: 29px; border-radius: 8px; background: #eef3fb; color: #5576a9; font-size: 11px; font-weight: 700; }
+.consignee-color-avatar { background: color-mix(in srgb, var(--consignee-color), white 88%); color: var(--consignee-color); }
 .company-name { width: 48px; }
 .company-name strong,.company-name small { display: block; }
 .company-name strong { font-size: 10px; }.company-name small { margin-top: 3px; color: #a0a8b3; white-space: nowrap; font-size: 8.5px; }
@@ -159,6 +160,10 @@ tbody tr:hover { background: #fbfcfe; }
 .import-id { color: #30405a; font-size: 10px; font-weight: 700; }
 td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font-weight: 400; }
 .company-tag { display: inline-grid; place-items: center; min-width: 29px; min-height: 21px; padding: 0 6px; border: 1px solid #e6ebf3; border-radius: 5px; background: #f9fafc; color: #60718b; font-size: 9px; font-weight: 700; }
+.consignee-color-tag { border-color: color-mix(in srgb, var(--consignee-color), white 72%); background: color-mix(in srgb, var(--consignee-color), white 92%); color: var(--consignee-color); }
+.consignee-color-preview { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 50%; vertical-align: -1px; }
+.consignee-edit-button { padding: 6px 10px; border: 1px solid #e3e8f0; border-radius: 5px; background: #fff; color: #52647d; font-size: 9px; font-weight: 600; }
+.consignee-edit-button:hover { border-color: #2865db; color: #2865db; background: #f4f7fd; }
 .description-cell { max-width: 175px; overflow: hidden; text-overflow: ellipsis; }
 .badge { display: inline-flex; align-items: center; min-height: 21px; padding: 0 8px; border-radius: 12px; background: #fff4df; color: #bd812a; font-size: 9px; font-weight: 600; white-space: nowrap; }
 .badge.cleared,.badge.paid,.badge.received { background: #e9f7f0; color: #2b9a6e; }
@@ -227,6 +232,12 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .form-grid input,.form-grid select { width: 100%; height: 34px; padding: 0 9px; border: 1px solid #e5e9ee; border-radius: 5px; outline: 0; background: #fff; color: #435065; font-size: 10px; }
 .form-grid input:focus,.form-grid select:focus { border-color: #78a0e8; box-shadow: 0 0 0 2px #edf3ff; }
 .form-wide { grid-column: 1 / -1; }
+.consignee-color-field { grid-column: 1 / -1; }
+.consignee-color-control { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.consignee-color-swatches { display: flex; flex-wrap: wrap; gap: 9px; }
+.consignee-color-swatch { width: 23px; height: 23px; border: 2px solid #fff; border-radius: 50%; background: var(--swatch); box-shadow: 0 0 0 1px #dfe5ed; cursor: pointer; }
+.consignee-color-swatch:hover,.consignee-color-swatch.selected { box-shadow: 0 0 0 2px var(--swatch); }
+.consignee-color-control input[type="color"] { width: 38px; height: 30px; padding: 2px; border: 1px solid #e1e6ed; border-radius: 5px; background: #fff; cursor: pointer; }
 .checklist { display: flex; flex-wrap: wrap; gap: 10px; }
 .check-item { display: inline-flex; align-items: center; gap: 6px; color: #697587; font-size: 9px; cursor: pointer; }
 .check-item input { position: absolute; opacity: 0; }
@@ -398,6 +409,7 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .app-shell[data-theme="dark"] .progress-copy { color: #d5deea; }
 .app-shell[data-theme="dark"] .company-tag { color: #c0cde0; }
 .app-shell[data-theme="dark"] .company-avatar { background: #2a3a51; color: #acc6ef; }
+.app-shell[data-theme="dark"] .consignee-color-avatar { background: color-mix(in srgb, var(--consignee-color), #1b2636 78%); color: color-mix(in srgb, var(--consignee-color), white 35%); }
 .app-shell[data-theme="dark"] .company-progress { background: #344155; }
 .app-shell[data-theme="dark"] .help-icon,
 .app-shell[data-theme="dark"] .doc-icon { background: #293b57; color: #9bbcff; }
@@ -441,6 +453,10 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .app-shell[data-theme="dark"] .top-icon i { border-color: #1b2636; }
 .app-shell[data-theme="dark"] .account-menu-user { border-color: #2a3546; }
 .app-shell[data-theme="dark"] .account-menu-user span { color: #98a6b8; }
+.app-shell[data-theme="dark"] .consignee-edit-button { border-color: #39465a; background: #202c3d; color: #d1d9e4; }
+.app-shell[data-theme="dark"] .consignee-edit-button:hover { border-color: #6f9ce8; color: #fff; background: #2865db; }
+.app-shell[data-theme="dark"] .consignee-color-tag { border-color: color-mix(in srgb, var(--consignee-color), #1b2636 55%); background: color-mix(in srgb, var(--consignee-color), #1b2636 82%); color: color-mix(in srgb, var(--consignee-color), white 35%); }
+.app-shell[data-theme="dark"] .consignee-color-control input[type="color"] { border-color: #39465a; background: #202c3d; }
 .app-shell[data-theme="dark"] .account-menu-signout:hover { background: #3c2b30; }
 .app-shell[data-theme="dark"] .signout-dialog h2 { color: #e4eaf2; }
 .app-shell[data-theme="dark"] .signout-dialog p { color: #a2afc0; }

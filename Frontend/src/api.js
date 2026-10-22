@@ -29,6 +29,12 @@ export const api = {
     request("/auth/verify", { method: "POST", body: JSON.stringify(challenge) }),
   logout: () => request("/auth/logout", { method: "POST" }),
   getConsignees: () => request("/consignees"),
+  getCountries: () => request("/countries"),
+  createCountry: (country) =>
+    request("/countries", { method: "POST", body: JSON.stringify(country) }),
+  updateCountry: (id, country) =>
+    request(`/countries/${id}`, { method: "PUT", body: JSON.stringify(country) }),
+  deleteCountry: (id) => request(`/countries/${id}`, { method: "DELETE" }),
   createConsignee: (consignee) =>
     request("/consignees", { method: "POST", body: JSON.stringify(consignee) }),
   updateConsignee: (id, consignee) =>

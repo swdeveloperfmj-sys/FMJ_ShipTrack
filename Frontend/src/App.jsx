@@ -16,6 +16,7 @@ import {
   Clock3,
   ContactRound,
   FileText,
+  Globe2,
   LayoutDashboard,
   LogOut,
   MailCheck,
@@ -44,10 +45,25 @@ const navigation = [
   { label: "Customs Clearance", icon: CheckCircle2, key: "customs" },
   { label: "Consignee Reports", icon: Building2, key: "companies" },
   { label: "Consignees", icon: ContactRound, key: "consignees" },
+  { label: "Countries", icon: Globe2, key: "countries" },
   { label: "Documents", icon: FileText, key: "documents" },
   { label: "Reports & Analytics", icon: Activity, key: "analytics" },
 ];
 
+const consigneeColorPresets = [
+  { name: "Blue", value: "#2865db" },
+  { name: "Violet", value: "#7655d8" },
+  { name: "Green", value: "#16845b" },
+  { name: "Rose", value: "#cf4568" },
+  { name: "Amber", value: "#b76a12" },
+  { name: "Slate", value: "#475569" },
+];
+const defaultConsigneeColor = consigneeColorPresets[0].value;
+function consigneeColorFor(code, consignees) {
+  const consignee = consignees.find((item) => item.code === code);
+  if (!consignee) return "#64748b";
+  return /^#[0-9a-f]{6}$/i.test(consignee.color || "") ? consignee.color : defaultConsigneeColor;
+}
 const shipmentStatuses = ["Pending", "Under Clearing", "Cleared"];
 const documentTypes = ["PI", "CI", "Packing List", "BL/AWB", "Customs"];
 const emptyShipment = {
@@ -94,6 +110,11 @@ function StatusBadge({ children, tone }) {
   return <span className={`badge ${tone || value}`}>{children}</span>;
 }
 
+function ConsigneeBadge({ code, consignees = [] }) {
+  const color = consigneeColorFor(code, consignees);
+  return <span className="company-tag consignee-color-tag" style={{ "--consignee-color": color }}>{code}</span>;
+}
+
 function PageTitle({ eyebrow, title, subtitle, action }) {
   return (
     <div className="page-title">
@@ -127,7 +148,7 @@ function EmptyState({ message = "No shipments found", description, actionLabel, 
   return <div className="empty-state"><Box size={25} /><strong>{message}</strong><span>{description || (onAdd ? "Add a shipment to start tracking your real import data." : "Try changing your filters or add a shipment.")}</span>{onAdd && <button className="button primary empty-add-button" onClick={onAdd}><Plus size={15} /> {actionLabel || "Add shipment"}</button>}</div>;
 }
 
-function ShipmentTable({ rows, mode, onEdit, onAdd }) {
+function ShipmentTable({ rows, mode, onEdit, onAdd, consignees = [] }) {
   if (!rows.length) return <EmptyState message={mode === "shipments" ? "No shipment records yet" : "No shipments found"} onAdd={onAdd} />;
   const headers = {
     shipments: ["Import No.", "Consignee", "Supplier", "Consignee name", "Description", "ETA", "Status", ""],
@@ -145,25 +166,25 @@ function ShipmentTable({ rows, mode, onEdit, onAdd }) {
             <tr key={shipment.id} onClick={() => onEdit(shipment)} className="clickable-row">
               {mode === "shipments" && <>
                 <td><span className="import-id">{shipment.importNo}</span><small>{shipment.description}</small></td>
-                <td><span className="company-tag">{shipment.company}</span></td>
+                <td><ConsigneeBadge code={shipment.company} consignees={consignees} /></td>
                 <td>{shipment.supplier}</td><td>{shipment.consignee}</td>
                 <td className="description-cell">{shipment.description}</td><td>{dateLabel(shipment.eta)}</td>
                 <td><StatusBadge>{shipment.status}</StatusBadge></td>
               </>}
               {mode === "tracking" && <>
-                <td><span className="import-id">{shipment.importNo}</span><small>{shipment.company}</small></td>
+                <td><span className="import-id">{shipment.importNo}</span><small><ConsigneeBadge code={shipment.company} consignees={consignees} /></small></td>
                 <td>{shipment.supplier}</td><td>{dateLabel(shipment.etd)}</td><td>{dateLabel(shipment.eta)}</td>
                 <td>{dateLabel(shipment.arrivalDate)}</td><td>{dateLabel(shipment.deliveryDate)}</td><td><StatusBadge>{shipment.status}</StatusBadge></td>
               </>}
               {mode === "payments" && <>
                 <td><span className="import-id">{shipment.importNo}</span><small>{shipment.supplier}</small></td>
-                <td><span className="company-tag">{shipment.company}</span></td><td>{shipment.paymentMethod}</td>
+                <td><ConsigneeBadge code={shipment.company} consignees={consignees} /></td><td>{shipment.paymentMethod}</td>
                 <td>{money(shipment.advanceTT)}</td><td>{money(shipment.sightLC)}</td><td>{money(shipment.usanceLC)}</td>
                 <td><StatusBadge>{shipment.paymentStatus}</StatusBadge></td>
               </>}
               {mode === "customs" && <>
                 <td><span className="import-id">{shipment.importNo}</span><small>{shipment.supplier}</small></td>
-                <td><span className="company-tag">{shipment.company}</span></td><td>{money(shipment.duty)}</td>
+                <td><ConsigneeBadge code={shipment.company} consignees={consignees} /></td><td>{money(shipment.duty)}</td>
                 <td>{money(shipment.doCharges)}</td><td><span className="progress-copy">{shipment.clearanceStatus}</span></td>
                 <td><StatusBadge tone={shipment.clearanceStatus === "Cleared" ? "cleared" : "under-clearing"}>{shipment.clearanceStatus}</StatusBadge></td>
                 <td><StatusBadge>{shipment.status}</StatusBadge></td>
@@ -270,7 +291,7 @@ function ShipmentModal({ initial, consignees, onClose, onSave }) {
   );
 }
 
-function Dashboard({ shipments, analytics, onNavigate, onEdit, onAdd }) {
+function Dashboard({ shipments, consignees, analytics, onNavigate, onEdit, onAdd }) {
   const maxMonthly = Math.max(1, ...((analytics?.monthly || []).map((item) => item.shipments)));
   return (
     <>
@@ -305,11 +326,11 @@ function Dashboard({ shipments, analytics, onNavigate, onEdit, onAdd }) {
         </section>
         <section className="panel recent-panel">
           <div className="panel-heading"><div><h2>Recent shipments</h2><p>Latest updates across your imports</p></div><button className="text-button" onClick={() => onNavigate("shipments")}>View all <ArrowRight size={15} /></button></div>
-          <ShipmentTable rows={shipments.slice(0, 5)} mode="shipments" onEdit={onEdit} onAdd={onAdd} />
+          <ShipmentTable rows={shipments.slice(0, 5)} mode="shipments" onEdit={onEdit} onAdd={onAdd} consignees={consignees} />
         </section>
         <section className="panel company-panel">
           <div className="panel-heading"><div><h2>Consignee overview</h2><p>Shipments by consignee</p></div><button className="icon-button"><MoreHorizontal size={20} /></button></div>
-          <div className="company-list">{(analytics?.byCompany || []).map((company) => <div className="company-row" key={company.company}><span className="company-avatar">{company.company.slice(0, 1)}</span><div className="company-name"><strong>{company.company}</strong><small>{company.total} shipments</small></div><div className="company-progress"><i style={{ width: `${company.total ? Math.max(12, (company.cleared / company.total) * 100) : 0}%` }} /></div><b>{company.cleared}/{company.total}</b></div>)}</div>
+          <div className="company-list">{(analytics?.byCompany || []).map((company) => { const color = consigneeColorFor(company.company, consignees); return <div className="company-row" key={company.company}><span className="company-avatar consignee-color-avatar" style={{ "--consignee-color": color }}>{company.company.slice(0, 1)}</span><div className="company-name"><strong>{company.company}</strong><small>{company.total} shipments</small></div><div className="company-progress"><i style={{ width: `${company.total ? Math.max(12, (company.cleared / company.total) * 100) : 0}%`, backgroundColor: color }} /></div><b>{company.cleared}/{company.total}</b></div>; })}</div>
           <button className="company-footer" onClick={() => onNavigate("companies")}>View consignee reports <ArrowRight size={15} /></button>
         </section>
       </div>
@@ -317,7 +338,7 @@ function Dashboard({ shipments, analytics, onNavigate, onEdit, onAdd }) {
   );
 }
 
-function DocumentsView({ shipments, onEdit }) {
+function DocumentsView({ shipments, consignees, onEdit }) {
   const rows = shipments.flatMap((shipment) => documentTypes.map((document) => ({
     id: `${shipment.id}-${document}`,
     importNo: shipment.importNo,
@@ -328,17 +349,18 @@ function DocumentsView({ shipments, onEdit }) {
     shipment,
   })));
   return <section className="panel table-panel"><div className="panel-heading"><div><h2>Document register</h2><p>PI, CI, packing lists, BL/AWB and customs paperwork</p></div><span className="document-count">{rows.filter((row) => row.status === "Received").length} / {rows.length} received</span></div>
-    {!rows.length ? <EmptyState /> : <div className="table-scroll"><table><thead><tr><th>Document</th><th>Import No.</th><th>Consignee</th><th>Supplier</th><th>Document status</th><th>Shipment status</th><th /></tr></thead><tbody>{rows.map((row) => <tr key={row.id} className="clickable-row" onClick={() => onEdit(row.shipment)}><td><span className="doc-icon"><FileText size={15} /></span>{row.document}</td><td><span className="import-id">{row.importNo}</span></td><td><span className="company-tag">{row.company}</span></td><td>{row.supplier}</td><td><StatusBadge>{row.status}</StatusBadge></td><td><StatusBadge>{row.shipment.status}</StatusBadge></td><td><button className="icon-button row-more" aria-label="Edit document status"><MoreHorizontal size={18} /></button></td></tr>)}</tbody></table></div>}
+    {!rows.length ? <EmptyState /> : <div className="table-scroll"><table><thead><tr><th>Document</th><th>Import No.</th><th>Consignee</th><th>Supplier</th><th>Document status</th><th>Shipment status</th><th /></tr></thead><tbody>{rows.map((row) => <tr key={row.id} className="clickable-row" onClick={() => onEdit(row.shipment)}><td><span className="doc-icon"><FileText size={15} /></span>{row.document}</td><td><span className="import-id">{row.importNo}</span></td><td><ConsigneeBadge code={row.company} consignees={consignees} /></td><td>{row.supplier}</td><td><StatusBadge>{row.status}</StatusBadge></td><td><StatusBadge>{row.shipment.status}</StatusBadge></td><td><button className="icon-button row-more" aria-label="Edit document status"><MoreHorizontal size={18} /></button></td></tr>)}</tbody></table></div>}
   </section>;
 }
 
-function ConsigneeReports({ analytics, shipments, onEdit, onAdd }) {
+function ConsigneeReports({ analytics, shipments, consignees, onEdit, onAdd }) {
   return <>
     <section className="company-report-grid">{(analytics?.byCompany || []).map((company) => {
       const ratio = company.total ? Math.round((company.cleared / company.total) * 100) : 0;
-      return <article className="company-report-card" key={company.company}><div className="company-card-top"><span className="company-avatar large">{company.company.slice(0, 1)}</span><span className="company-tag">{company.company}</span></div><h2>{company.company}</h2><p>Consignee shipment portfolio</p><div className="company-metrics"><div><strong>{company.total}</strong><span>Total shipments</span></div><div><strong>{ratio}%</strong><span>Clearance rate</span></div></div><div className="company-progress wide"><i style={{ width: `${ratio}%` }} /></div><div className="company-card-bottom"><span>Total value</span><strong>{money(company.totalCost)}</strong></div></article>;
+      const color = consigneeColorFor(company.company, consignees);
+      return <article className="company-report-card" key={company.company}><div className="company-card-top"><span className="company-avatar large consignee-color-avatar" style={{ "--consignee-color": color }}>{company.company.slice(0, 1)}</span><ConsigneeBadge code={company.company} consignees={consignees} /></div><h2>{consignees.find((item) => item.code === company.company)?.name || company.company}</h2><p>Consignee shipment portfolio</p><div className="company-metrics"><div><strong>{company.total}</strong><span>Total shipments</span></div><div><strong>{ratio}%</strong><span>Clearance rate</span></div></div><div className="company-progress wide"><i style={{ width: `${ratio}%`, backgroundColor: color }} /></div><div className="company-card-bottom"><span>Total value</span><strong>{money(company.totalCost)}</strong></div></article>;
     })}</section>
-    <section className="panel table-panel"><div className="panel-heading"><div><h2>All consignee shipments</h2><p>Shipment activity across registered consignees</p></div></div><ShipmentTable rows={shipments} mode="shipments" onEdit={onEdit} onAdd={onAdd} /></section>
+    <section className="panel table-panel"><div className="panel-heading"><div><h2>All consignee shipments</h2><p>Shipment activity across registered consignees</p></div></div><ShipmentTable rows={shipments} mode="shipments" onEdit={onEdit} onAdd={onAdd} consignees={consignees} /></section>
   </>;
 }
 
@@ -346,6 +368,7 @@ function ConsigneeModal({ initial, onClose, onSave }) {
   const [form, setForm] = useState(() => ({
     code: initial?.code || "",
     name: initial?.name || "",
+    color: initial?.color || defaultConsigneeColor,
     contactName: initial?.contactName || "",
     email: initial?.email || "",
     phone: initial?.phone || "",
@@ -392,6 +415,7 @@ function ConsigneeModal({ initial, onClose, onSave }) {
         <div className="form-section"><h3>Consignee details</h3><div className="form-grid">
           <label>Consignee code<input name="code" value={form.code} onChange={change} required minLength={2} maxLength={20} pattern="[A-Za-z0-9_-]+" placeholder="FMJ" /></label>
           <label>Consignee name<input name="name" value={form.name} onChange={change} required maxLength={120} placeholder="FMJ Trading (Pvt) Ltd" /></label>
+          <label className="consignee-color-field">Consignee color<div className="consignee-color-control"><div className="consignee-color-swatches">{consigneeColorPresets.map((preset) => <button key={preset.value} type="button" className={`consignee-color-swatch ${form.color.toLowerCase() === preset.value ? "selected" : ""}`} style={{ "--swatch": preset.value }} aria-label={preset.name} title={preset.name} onClick={() => setForm((current) => ({ ...current, color: preset.value }))} />)}</div><input type="color" aria-label="Choose custom consignee color" value={form.color} onChange={(event) => setForm((current) => ({ ...current, color: event.target.value }))} /></div></label>
           <label>Contact person<input name="contactName" value={form.contactName} onChange={change} maxLength={120} /></label>
           <label>Email<input name="email" type="email" value={form.email} onChange={change} maxLength={254} /></label>
           <label>Phone<input name="phone" type="tel" value={form.phone} onChange={change} maxLength={40} /></label>
@@ -410,10 +434,71 @@ function ConsigneeDirectory({ consignees, shipments, onEdit, onAdd }) {
   }
   return <section className="panel table-panel">
     <div className="table-toolbar"><div className="table-title"><h2>Registered consignees</h2><span className="count-pill">{consignees.length}</span></div><span className="consignee-directory-note">Select a consignee when creating or editing a shipment.</span></div>
-    <div className="table-scroll"><table><thead><tr><th>Code</th><th>Consignee name</th><th>Contact person</th><th>Email</th><th>Phone</th><th>Shipments</th><th /></tr></thead><tbody>
+    <div className="table-scroll"><table><thead><tr><th>Code</th><th>Consignee name</th><th>Color</th><th>Contact person</th><th>Email</th><th>Phone</th><th>Shipments</th><th /></tr></thead><tbody>
       {consignees.map((consignee) => <tr key={consignee.id} className="clickable-row" onClick={() => onEdit(consignee)}>
-        <td><span className="company-tag">{consignee.code}</span></td><td><span className="import-id">{consignee.name}</span></td><td>{consignee.contactName || "—"}</td><td>{consignee.email || "—"}</td><td>{consignee.phone || "—"}</td><td>{shipments.filter((shipment) => shipment.company === consignee.code).length}</td>
-        <td><button className="icon-button row-more" aria-label={`Edit ${consignee.name}`} onClick={(event) => { event.stopPropagation(); onEdit(consignee); }}><MoreHorizontal size={18} /></button></td>
+        <td><ConsigneeBadge code={consignee.code} consignees={consignees} /></td><td><span className="import-id">{consignee.name}</span></td><td><span className="consignee-color-preview" style={{ backgroundColor: consigneeColorFor(consignee.code, consignees) }} />{consigneeColorFor(consignee.code, consignees)}</td><td>{consignee.contactName || "—"}</td><td>{consignee.email || "—"}</td><td>{consignee.phone || "—"}</td><td>{shipments.filter((shipment) => shipment.company === consignee.code).length}</td>
+        <td><button className="consignee-edit-button" aria-label={`Edit ${consignee.name}`} onClick={(event) => { event.stopPropagation(); onEdit(consignee); }}>Edit</button></td>
+      </tr>)}
+    </tbody></table></div>
+  </section>;
+}
+
+function CountryModal({ initial, onClose, onSave }) {
+  const [name, setName] = useState(initial?.name || "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(event) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      await onSave({ name: name.trim() }, initial?.id);
+      onClose();
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!window.confirm(`Delete country ${initial.name}?`)) return;
+    setBusy(true);
+    setError("");
+    try {
+      await onSave(null, initial.id, true);
+      onClose();
+    } catch (deleteError) {
+      setError(deleteError.message);
+      setBusy(false);
+    }
+  }
+
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="shipment-modal consignee-modal" role="dialog" aria-modal="true" aria-labelledby="country-modal-title">
+      <div className="modal-head"><div><div className="eyebrow">{initial ? "UPDATE COUNTRY" : "NEW COUNTRY"}</div><h2 id="country-modal-title">{initial ? "Edit country" : "Create country"}</h2></div><button className="icon-button" onClick={onClose} aria-label="Close"><X size={20} /></button></div>
+      <form onSubmit={submit}>
+        <div className="form-section"><h3>Country details</h3><div className="form-grid">
+          <label className="form-wide">Country name<input autoFocus name="name" value={name} onChange={(event) => setName(event.target.value)} required maxLength={100} placeholder="e.g. Sri Lanka" /></label>
+        </div></div>
+        {error && <div className="form-error">{error}</div>}
+        <div className="modal-footer">{initial && <button type="button" className="delete-button" onClick={remove} disabled={busy}>Delete country</button>}<button type="button" className="button secondary" onClick={onClose}>Cancel</button><button className="button primary" disabled={busy}>{busy ? "Saving…" : initial ? "Save changes" : "Create country"}</button></div>
+      </form>
+    </section>
+  </div>;
+}
+
+function CountryDirectory({ countries, onEdit, onAdd }) {
+  if (!countries.length) {
+    return <section className="panel consignee-empty-panel"><EmptyState message="No countries added" description="Create a country record to maintain your country list." actionLabel="Create country" onAdd={onAdd} /></section>;
+  }
+  return <section className="panel table-panel">
+    <div className="table-toolbar"><div className="table-title"><h2>Countries</h2><span className="count-pill">{countries.length}</span></div></div>
+    <div className="table-scroll"><table><thead><tr><th>Country name</th><th /></tr></thead><tbody>
+      {countries.map((country) => <tr key={country.id} className="clickable-row" onClick={() => onEdit(country)}>
+        <td><span className="import-id">{country.name}</span></td>
+        <td><button className="consignee-edit-button" aria-label={`Edit ${country.name}`} onClick={(event) => { event.stopPropagation(); onEdit(country); }}>Edit</button></td>
       </tr>)}
     </tbody></table></div>
   </section>;
@@ -569,12 +654,14 @@ export default function App() {
   const [active, setActive] = useState("dashboard");
   const [shipments, setShipments] = useState([]);
   const [consignees, setConsignees] = useState([]);
+  const [countries, setCountries] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [search, setSearch] = useState("");
   const [companyFilter, setCompanyFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [modalShipment, setModalShipment] = useState(undefined);
   const [modalConsignee, setModalConsignee] = useState(undefined);
+  const [modalCountry, setModalCountry] = useState(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -586,14 +673,16 @@ export default function App() {
   const refresh = useCallback(async () => {
     setError("");
     try {
-      const [shipmentData, analyticsData, consigneeData] = await Promise.all([
+      const [shipmentData, analyticsData, consigneeData, countryData] = await Promise.all([
         api.getShipments(),
         api.getAnalytics(),
         api.getConsignees(),
+        api.getCountries(),
       ]);
       setShipments(shipmentData);
       setAnalytics(analyticsData);
       setConsignees(consigneeData);
+      setCountries(countryData);
     } catch (loadError) {
       setError(loadError.message);
     } finally {
@@ -619,6 +708,8 @@ export default function App() {
       setAuthState({ setupRequired: false, authenticated: false });
       setShipments([]);
       setAnalytics(null);
+      setConsignees([]);
+      setCountries([]);
     };
     window.addEventListener("fmj-session-expired", expireSession);
     return () => window.removeEventListener("fmj-session-expired", expireSession);
@@ -632,13 +723,23 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [notice]);
   useEffect(() => {
+    if (active !== "countries" || !authState?.authenticated || modalCountry !== undefined || confirmSignOut) return undefined;
+    const openCountryForm = (event) => {
+      if (event.key !== "F1") return;
+      event.preventDefault();
+      setModalCountry(null);
+    };
+    window.addEventListener("keydown", openCountryForm);
+    return () => window.removeEventListener("keydown", openCountryForm);
+  }, [active, authState?.authenticated, modalCountry, confirmSignOut]);
+  useEffect(() => {
     if (!accountMenuOpen && !confirmSignOut) return undefined;
     const closeTransientUi = (event) => {
       if (event.key === "Escape") {
         setAccountMenuOpen(false);
         setConfirmSignOut(false);
-      } else if (event.type === "pointerdown" && !accountMenuRef.current?.contains(event.target)) {
-        setAccountMenuOpen(false);
+      } else if (event.type === "pointerdown") {
+        if (!accountMenuRef.current?.contains(event.target)) setAccountMenuOpen(false);
       }
     };
     document.addEventListener("keydown", closeTransientUi);
@@ -690,6 +791,20 @@ export default function App() {
     await refresh();
   }
 
+  async function saveCountry(country, id, remove = false) {
+    if (remove) {
+      await api.deleteCountry(id);
+      setNotice("Country deleted");
+    } else if (id) {
+      await api.updateCountry(id, country);
+      setNotice("Country updated successfully");
+    } else {
+      await api.createCountry(country);
+      setNotice("Country created successfully");
+    }
+    await refresh();
+  }
+
   async function signOut() {
     try {
       await api.logout();
@@ -714,10 +829,11 @@ export default function App() {
   function renderContent() {
     if (loading) return <div className="loading-state"><span className="loader" />Loading shipment workspace…</div>;
     if (error && !shipments.length) return <div className="error-state"><strong>Unable to load shipments</strong><span>{error}</span><button className="button secondary" onClick={refresh}>Try again</button></div>;
-    if (active === "dashboard") return <Dashboard shipments={shipments} analytics={analytics} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} />;
-    if (active === "companies") return <><PageTitle eyebrow="CONSIGNEES" title="Consignee reports" subtitle="A clear view of imports and clearance progress for each consignee." />{error && <div className="inline-error">{error}</div>}<ConsigneeReports analytics={analytics} shipments={filteredShipments} onEdit={openModal} /></>;
+    if (active === "dashboard") return <Dashboard shipments={shipments} consignees={consignees} analytics={analytics} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} />;
+    if (active === "companies") return <><PageTitle eyebrow="CONSIGNEES" title="Consignee reports" subtitle="A clear view of imports and clearance progress for each consignee." />{error && <div className="inline-error">{error}</div>}<ConsigneeReports analytics={analytics} shipments={filteredShipments} consignees={consignees} onEdit={openModal} /></>;
     if (active === "consignees") return <><PageTitle eyebrow="DIRECTORY" title="Consignees" subtitle="Create and manage the consignee records assigned to your shipments." action={<button className="button primary" onClick={() => setModalConsignee(null)}><Plus size={17} /> Create consignee</button>} />{error && <div className="inline-error">{error}</div>}<ConsigneeDirectory consignees={consignees} shipments={shipments} onEdit={setModalConsignee} onAdd={() => setModalConsignee(null)} /></>;
-    if (active === "documents") return <><PageTitle eyebrow="PAPERWORK" title="Documents" subtitle="Track required shipping and customs documents in one place." />{error && <div className="inline-error">{error}</div>}<DocumentsView shipments={filteredShipments} onEdit={openModal} /></>;
+    if (active === "countries") return <><PageTitle eyebrow="DIRECTORY" title="Countries" subtitle="Create and manage country records." action={<button className="button primary" title="Create country (F1)" onClick={() => setModalCountry(null)}><Plus size={17} /> Create country</button>} />{error && <div className="inline-error">{error}</div>}<CountryDirectory countries={countries} onEdit={setModalCountry} onAdd={() => setModalCountry(null)} /></>;
+    if (active === "documents") return <><PageTitle eyebrow="PAPERWORK" title="Documents" subtitle="Track required shipping and customs documents in one place." />{error && <div className="inline-error">{error}</div>}<DocumentsView shipments={filteredShipments} consignees={consignees} onEdit={openModal} /></>;
     if (active === "analytics") return <><PageTitle eyebrow="PERFORMANCE" title="Reports & analytics" subtitle="Monitor shipment delays, landed costs and monthly activity." />{error && <div className="inline-error">{error}</div>}<AnalyticsView analytics={analytics} /></>;
     const pageInfo = {
       shipments: ["OPERATIONS", "Shipment register", "Manage import records from supplier to consignee.", "shipments"],
@@ -733,7 +849,7 @@ export default function App() {
           <div className="table-title"><h2>{active === "shipments" ? "All shipments" : activeTitle}</h2><span className="count-pill">{filteredShipments.length}</span></div>
           <div className="table-actions"><label className="table-search"><Search size={16} /><input placeholder="Search shipments..." value={search} onChange={(event) => setSearch(event.target.value)} /></label><label className="filter-select"><SlidersHorizontal size={15} /><select aria-label="Filter by consignee" value={companyFilter} onChange={(event) => setCompanyFilter(event.target.value)}><option value="">All consignees</option>{consigneeOptions.map((consignee) => <option key={consignee.id} value={consignee.code}>{consignee.code}</option>)}</select></label>{active !== "tracking" && active !== "payments" && <label className="filter-select"><select aria-label="Filter by status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All statuses</option>{shipmentStatuses.map((status) => <option key={status}>{status}</option>)}</select></label>}</div>
         </div>
-        <ShipmentTable rows={filteredShipments} mode={pageInfo[3]} onEdit={openModal} />
+        <ShipmentTable rows={filteredShipments} mode={pageInfo[3]} onEdit={openModal} consignees={consignees} />
         <div className="table-footer"><span>Showing <strong>{filteredShipments.length}</strong> of <strong>{shipments.length}</strong> shipments</span><span>Data saved automatically</span></div>
       </section>
     </>;
@@ -762,7 +878,19 @@ export default function App() {
         <div className="sidebar-bottom"><div className="help-card"><div className="help-icon"><Settings2 size={17} /></div><strong>Need a hand?</strong><span>Manage your workspace and preferences.</span><button onClick={() => setNotice("Workspace settings are coming soon.")}>Workspace settings <ArrowRight size={14} /></button></div><div className="profile"><div className="profile-avatar">FM</div><div className="profile-name"><strong>{authState.username}</strong><span>Super administrator</span></div></div></div>
       </aside>
       <div className="main-area">
-        <header className="topbar"><div className="breadcrumb"><button className="mobile-menu icon-button" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button><span>Workspace</span><span className="crumb-slash">/</span><strong>{activeTitle}</strong></div><div className="topbar-right"><div className={`system-status ${error ? "offline" : ""}`}><i /> {error ? "Connection issue" : "All systems operational"}</div><button className="icon-button theme-toggle" aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`} title={`Switch to ${theme === "light" ? "dark" : "light"} mode`} onClick={() => setTheme((current) => current === "light" ? "dark" : "light")}>{theme === "light" ? <Moon size={18} /> : <Sun size={18} />}</button><button className="top-icon icon-button" aria-label="Notifications" onClick={() => setNotice("You're all caught up.")}><Bell size={18} /><i /></button><div className="top-divider" /><div className="account-menu-wrap" ref={accountMenuRef}><button className="top-user account-trigger" aria-expanded={accountMenuOpen} aria-haspopup="menu" aria-label="Open account menu" onClick={() => setAccountMenuOpen((open) => !open)}><span className="profile-avatar small">FM</span><ChevronDown size={15} /></button>{accountMenuOpen && <div className="account-menu" role="menu"><div className="account-menu-user"><strong>{authState.username}</strong><span>Super administrator</span></div><button className="account-menu-signout" role="menuitem" onClick={() => { setAccountMenuOpen(false); setConfirmSignOut(true); }}><LogOut size={16} />Sign out</button></div>}</div></div></header>
+        <header className="topbar">
+          <div className="breadcrumb"><button className="mobile-menu icon-button" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button><span>Workspace</span><span className="crumb-slash">/</span><strong>{activeTitle}</strong></div>
+          <div className="topbar-right">
+            <div className={`system-status ${error ? "offline" : ""}`}><i /> {error ? "Connection issue" : "All systems operational"}</div>
+            <button className="icon-button theme-toggle" aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`} title={`Switch to ${theme === "light" ? "dark" : "light"} mode`} onClick={() => setTheme((current) => current === "light" ? "dark" : "light")}>{theme === "light" ? <Moon size={18} /> : <Sun size={18} />}</button>
+            <button className="top-icon icon-button" aria-label="Notifications" onClick={() => setNotice("You're all caught up.")}><Bell size={18} /><i /></button>
+            <div className="top-divider" />
+            <div className="account-menu-wrap" ref={accountMenuRef}>
+              <button className="top-user account-trigger" aria-expanded={accountMenuOpen} aria-haspopup="menu" aria-label="Open account menu" onClick={() => setAccountMenuOpen((open) => !open)}><span className="profile-avatar small">FM</span><ChevronDown size={15} /></button>
+              {accountMenuOpen && <div className="account-menu" role="menu"><div className="account-menu-user"><strong>{authState.username}</strong><span>Super administrator</span></div><button className="account-menu-signout" role="menuitem" onClick={() => { setAccountMenuOpen(false); setConfirmSignOut(true); }}><LogOut size={16} />Sign out</button></div>}
+            </div>
+          </div>
+        </header>
         <main className="content">
           {renderContent()}
           <footer className="app-footer"><span>© 2026 FMJ ShipTrack</span><span>Shipment management, made simpler.</span></footer>
@@ -771,6 +899,7 @@ export default function App() {
       {sidebarOpen && <button className="sidebar-overlay" aria-label="Close navigation" onClick={() => setSidebarOpen(false)} />}
       {modalShipment !== undefined && <ShipmentModal initial={modalShipment} consignees={consigneeOptions} onClose={() => setModalShipment(undefined)} onSave={saveShipment} />}
       {modalConsignee !== undefined && <ConsigneeModal initial={modalConsignee} onClose={() => setModalConsignee(undefined)} onSave={saveConsignee} />}
+      {modalCountry !== undefined && <CountryModal initial={modalCountry} onClose={() => setModalCountry(undefined)} onSave={saveCountry} />}
       {confirmSignOut && <div className="modal-backdrop signout-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setConfirmSignOut(false); }}><section className="signout-dialog" role="alertdialog" aria-modal="true" aria-labelledby="signout-title" aria-describedby="signout-description"><div className="signout-icon"><LogOut size={19} /></div><h2 id="signout-title">Sign out of ShipTrack?</h2><p id="signout-description">Are you sure you want to sign out? You’ll need to verify your email again to access your shipment workspace.</p><div className="signout-actions"><button className="button secondary" onClick={() => setConfirmSignOut(false)}>No, stay signed in</button><button className="button signout-confirm" onClick={signOut}>Yes, sign out</button></div></section></div>}
       {notice && <div className="toast"><CheckCircle2 size={17} />{notice}<button onClick={() => setNotice("")} aria-label="Dismiss"><X size={15} /></button></div>}
     </div>

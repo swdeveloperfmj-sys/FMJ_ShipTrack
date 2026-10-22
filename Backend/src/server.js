@@ -53,6 +53,7 @@ const consigneeSchema = new mongoose.Schema(
     _id: { type: String, required: true },
     code: { type: String, required: true, trim: true, uppercase: true, unique: true },
     name: { type: String, required: true, trim: true },
+    color: { type: String, default: "#2865db", match: /^#[0-9a-fA-F]{6}$/ },
     contactName: { type: String, trim: true, default: "" },
     email: { type: String, trim: true, lowercase: true, default: "" },
     phone: { type: String, trim: true, default: "" },
@@ -63,6 +64,17 @@ const consigneeSchema = new mongoose.Schema(
   { versionKey: false },
 );
 const Consignee = mongoose.model("Consignee", consigneeSchema);
+const countrySchema = new mongoose.Schema(
+  {
+    _id: { type: String, required: true },
+    name: { type: String, required: true, trim: true },
+    nameKey: { type: String, required: true, unique: true },
+    createdAt: { type: String, default: () => new Date().toISOString() },
+    updatedAt: { type: String },
+  },
+  { versionKey: false },
+);
+const Country = mongoose.model("Country", countrySchema);
 const superAdminSchema = new mongoose.Schema(
   {
     _id: { type: String, default: "super-admin" },
@@ -398,6 +410,9 @@ function validateConsignee(consignee) {
   if (typeof consignee.name !== "string" || !consignee.name.trim()) {
     return "Consignee name is required.";
   }
+  if (consignee.color !== undefined && (typeof consignee.color !== "string" || !/^#[0-9a-fA-F]{6}$/.test(consignee.color))) {
+    return "Choose a valid consignee color.";
+  }
   for (const field of ["contactName", "email", "phone", "address"]) {
     if (consignee[field] !== undefined && typeof consignee[field] !== "string") {
       return `${field} must be text.`;
@@ -508,6 +523,7 @@ app.post("/api/consignees", async (request, response, next) => {
       _id: randomUUID(),
       code: input.code.trim().toUpperCase(),
       name: input.name.trim(),
+      color: input.color || "#2865db",
       contactName: input.contactName?.trim() || "",
       email: input.email?.trim().toLowerCase() || "",
       phone: input.phone?.trim() || "",
@@ -538,6 +554,7 @@ app.put("/api/consignees/:id", async (request, response, next) => {
       {
         code: nextCode,
         name: input.name.trim(),
+        color: input.color || "#2865db",
         contactName: input.contactName?.trim() || "",
         email: input.email?.trim().toLowerCase() || "",
         phone: input.phone?.trim() || "",
@@ -564,6 +581,67 @@ app.delete("/api/consignees/:id", async (request, response, next) => {
       });
     }
     await consignee.deleteOne();
+    response.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/countries", async (_request, response, next) => {
+  try {
+    const countries = await Country.find().sort({ name: 1 }).lean();
+    response.json(countries.map(({ _id, name, createdAt, updatedAt }) => ({
+      id: _id,
+      name,
+      createdAt,
+      updatedAt,
+    })));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/countries", async (request, response, next) => {
+  try {
+    const name = typeof request.body?.name === "string" ? request.body.name.trim() : "";
+    if (!name || name.length > 100) {
+      return response.status(400).json({ error: "Country name is required and must be 100 characters or fewer." });
+    }
+    const country = await Country.create({
+      _id: randomUUID(),
+      name,
+      nameKey: name.toLocaleLowerCase(),
+    });
+    response.status(201).json({ id: country._id, name: country.name, createdAt: country.createdAt });
+  } catch (error) {
+    if (error.code === 11000) return response.status(409).json({ error: "That country already exists." });
+    next(error);
+  }
+});
+
+app.put("/api/countries/:id", async (request, response, next) => {
+  try {
+    const name = typeof request.body?.name === "string" ? request.body.name.trim() : "";
+    if (!name || name.length > 100) {
+      return response.status(400).json({ error: "Country name is required and must be 100 characters or fewer." });
+    }
+    const country = await Country.findByIdAndUpdate(
+      request.params.id,
+      { name, nameKey: name.toLocaleLowerCase(), updatedAt: new Date().toISOString() },
+      { new: true, runValidators: true },
+    );
+    if (!country) return response.status(404).json({ error: "Country not found." });
+    response.json({ id: country._id, name: country.name, createdAt: country.createdAt, updatedAt: country.updatedAt });
+  } catch (error) {
+    if (error.code === 11000) return response.status(409).json({ error: "That country already exists." });
+    next(error);
+  }
+});
+
+app.delete("/api/countries/:id", async (request, response, next) => {
+  try {
+    const country = await Country.findByIdAndDelete(request.params.id);
+    if (!country) return response.status(404).json({ error: "Country not found." });
     response.status(204).end();
   } catch (error) {
     next(error);
