@@ -494,7 +494,7 @@ function ConsigneeModal({ initial, onClose, onSave }) {
       <div className="modal-head"><div><div className="eyebrow">{initial ? "UPDATE CONSIGNEE" : "NEW CONSIGNEE"}</div><h2 id="consignee-modal-title">{initial ? "Edit consignee" : "Create consignee"}</h2></div><button className="icon-button" onClick={onClose} aria-label="Close"><X size={20} /></button></div>
       <form onSubmit={submit}>
         <div className="form-section"><h3>Consignee details</h3><div className="form-grid">
-          <label>Consignee code<input name="code" value={form.code} onChange={change} required minLength={2} maxLength={20} pattern="[A-Za-z0-9_-]+" placeholder="FMJ" /></label>
+          <label>Consignee code<input name="code" value={form.code} onChange={change} required minLength={2} maxLength={20} pattern="[A-Za-z0-9_\-]+" placeholder="FMJ" /></label>
           <label>Consignee name<input name="name" value={form.name} onChange={change} required maxLength={120} placeholder="FMJ Trading (Pvt) Ltd" /></label>
           <label className="consignee-color-field">Consignee color<div className="consignee-color-control"><div className="consignee-color-swatches">{consigneeColorPresets.map((preset) => <button key={preset.value} type="button" className={`consignee-color-swatch ${form.color.toLowerCase() === preset.value ? "selected" : ""}`} style={{ "--swatch": preset.value }} aria-label={preset.name} title={preset.name} onClick={() => setForm((current) => ({ ...current, color: preset.value }))} />)}</div><input type="color" aria-label="Choose custom consignee color" value={form.color} onChange={(event) => setForm((current) => ({ ...current, color: event.target.value }))} /></div></label>
           <label>Contact person<input name="contactName" value={form.contactName} onChange={change} maxLength={120} /></label>
@@ -765,7 +765,7 @@ function AuthScreen({ setupRequired, theme, onToggleTheme, onAuthenticated, load
             {!loading && !connectionError && <form className="auth-form" onSubmit={submit}>
               {mode !== "otp" && <>
                 {mode === "setup" && <label>One-time setup key<input type="password" autoComplete="off" value={setupKey} onChange={(event) => setSetupKey(event.target.value)} required minLength={32} placeholder="Paste the private setup key" /></label>}
-                <label>Username<input type="text" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required minLength={3} maxLength={40} pattern="[A-Za-z0-9._-]+" placeholder="Your username" /></label>
+                <label>Username<input type="text" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required minLength={3} maxLength={40} pattern="[A-Za-z0-9._\-]+" placeholder="Your username" /></label>
                 <label>Password<input type="password" autoComplete={mode === "setup" ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} required minLength={12} maxLength={128} placeholder={mode === "setup" ? "At least 12 characters" : "Your password"} /></label>
               </>}
               {mode === "otp" && <>
