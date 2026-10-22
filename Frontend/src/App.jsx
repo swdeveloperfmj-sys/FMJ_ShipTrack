@@ -31,6 +31,7 @@ import {
   TrendingUp,
   X,
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { api } from "./api.js";
 
 const navigation = [
@@ -42,7 +43,6 @@ const navigation = [
   { label: "Consignee Reports", icon: Building2, key: "companies" },
   { label: "Consignees", icon: ContactRound, key: "consignees" },
   { label: "Countries", icon: Globe2, key: "countries" },
-  { label: "Documents", icon: FileText, key: "documents" },
   { label: "Reports & Analytics", icon: Activity, key: "analytics" },
 ];
 
@@ -139,6 +139,39 @@ const paymentTermsLabel = (shipment) => {
 
 const transportLabel = (shipment) =>
   [shipment.transportMode, shipment.fclLcl, shipment.containerSize].filter(Boolean).join(" / ") || "—";
+
+function exportPendingTTToExcel(shipments) {
+  const rows = shipments.map((shipment) => ({
+    "Import No.": shipment.importNo,
+    Consignee: shipment.consignee || shipment.company,
+    Shipper: shipment.supplier,
+    "Item Description": shipment.description,
+    "FCL/LCL": transportLabel(shipment),
+    "Payment Terms": paymentTermsLabel(shipment),
+    Currency: shipment.currency || "LKR",
+    Value: Number(shipment.totalCost || 0),
+    ETD: shipment.etd ? new Date(`${shipment.etd}T00:00:00`) : "",
+    "ETA CMB": shipment.eta ? new Date(`${shipment.eta}T00:00:00`) : "",
+    "Duty (LKR)": Number(shipment.duty || 0),
+    "DO (LKR)": Number(shipment.doCharges || 0),
+    Remarks: shipment.remarks || "",
+  }));
+  const worksheet = XLSX.utils.json_to_sheet(rows);
+  const lastRow = rows.length + 1;
+  worksheet["!autofilter"] = { ref: `A1:M${lastRow}` };
+  worksheet["!cols"] = [
+    { wch: 16 }, { wch: 24 }, { wch: 28 }, { wch: 28 }, { wch: 16 }, { wch: 30 },
+    { wch: 12 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 15 }, { wch: 15 }, { wch: 34 },
+  ];
+  for (let index = 2; index <= lastRow; index += 1) {
+    for (const column of ["H", "K", "L"]) if (worksheet[`${column}${index}`]) worksheet[`${column}${index}`].z = "0.00";
+    for (const column of ["I", "J"]) if (worksheet[`${column}${index}`]) worksheet[`${column}${index}`].z = "yyyy-mm-dd";
+  }
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Pending TT");
+  const stamp = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(workbook, `pending-tt-payments-${stamp}.xlsx`, { compression: true });
+}
 
 function StatusBadge({ children, tone }) {
   const value = String(children || "Pending").toLowerCase().replaceAll(" ", "-");
@@ -827,6 +860,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const [ttFilters, setTtFilters] = useState({ search: "", consignee: "", fclLcl: "" });
   const accountMenuRef = useRef(null);
 
   const refresh = useCallback(async () => {
@@ -1013,13 +1047,26 @@ export default function App() {
       const pendingTTShipments = shipments.filter((shipment) =>
         shipment.paymentMethod === "Advance TT" && shipment.paymentStatus === "Pending",
       );
+      const search = ttFilters.search.trim().toLowerCase();
+      const filteredPendingTTShipments = pendingTTShipments.filter((shipment) => {
+        const searchable = [shipment.importNo, shipment.consignee, shipment.company, shipment.supplier, shipment.description]
+          .filter(Boolean).join(" ").toLowerCase();
+        return (!search || searchable.includes(search))
+          && (!ttFilters.consignee || shipment.company === ttFilters.consignee)
+          && (!ttFilters.fclLcl || shipment.fclLcl === ttFilters.fclLcl);
+      });
       return <section className="to-be-tt-page">
         <PageTitle eyebrow="PAYMENTS" title="To be TT" subtitle="Shipments awaiting Advance TT payment." action={<button className="button primary" onClick={() => openModal(null)}><Plus size={17} /> Add shipment</button>} />
         {error && <div className="inline-error">{error}</div>}
         <section className="panel table-panel tt-payments-panel">
-          <div className="table-toolbar"><div className="table-title"><h2>Pending TT payments</h2><span className="count-pill">{pendingTTShipments.length}</span></div></div>
-          <ShipmentTable rows={pendingTTShipments} mode="payments" onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} consignees={consignees} />
-          <div className="table-footer"><span><strong>{pendingTTShipments.length}</strong> shipments awaiting Advance TT</span><span>Data saved automatically</span></div>
+          <div className="table-toolbar"><div className="table-title"><h2>Pending TT payments</h2><span className="count-pill">{filteredPendingTTShipments.length}</span></div><div className="table-actions tt-table-actions">
+            <label className="table-search"><input value={ttFilters.search} onChange={(event) => setTtFilters((current) => ({ ...current, search: event.target.value }))} placeholder="Search shipments" aria-label="Search pending TT payments" /></label>
+            <label className="filter-select"><select value={ttFilters.consignee} onChange={(event) => setTtFilters((current) => ({ ...current, consignee: event.target.value }))} aria-label="Filter by consignee"><option value="">All consignees</option>{consigneeOptions.map((consignee) => <option key={consignee.id} value={consignee.code}>{consignee.name}</option>)}</select></label>
+            <label className="filter-select"><select value={ttFilters.fclLcl} onChange={(event) => setTtFilters((current) => ({ ...current, fclLcl: event.target.value }))} aria-label="Filter by FCL or LCL"><option value="">FCL / LCL</option><option value="FCL">FCL</option><option value="LCL">LCL</option></select></label>
+            <button className="button secondary export-button" onClick={() => exportPendingTTToExcel(filteredPendingTTShipments)} disabled={!filteredPendingTTShipments.length}><ArrowDownToLine size={15} /> Export Excel</button>
+          </div></div>
+          <ShipmentTable rows={filteredPendingTTShipments} mode="payments" onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} consignees={consignees} />
+          <div className="table-footer"><span><strong>{filteredPendingTTShipments.length}</strong> of {pendingTTShipments.length} shipments awaiting Advance TT</span><span>Data saved automatically</span></div>
         </section>
       </section>;
     }
