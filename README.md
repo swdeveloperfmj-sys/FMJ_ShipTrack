@@ -96,8 +96,10 @@ the color is saved with that consignee and appears in its directory, shipment la
 reports. Consignee codes already used by shipment records cannot be renamed or deleted
 until those shipments are reassigned.
 
-Manage country records separately from the **Countries** page. Country names can be
-created, edited and deleted there.
+Manage country records and currencies separately in their own sections on the
+**Countries** page. Both can be created, edited and deleted. Currency codes are
+three-letter codes (for example USD, AED or RMB); a currency assigned to a shipment
+cannot be deleted or have its code changed.
 
 The workspace navigation includes the dashboard, consignee reports and directory,
 country management, documents, delay/cost analytics, and **To be TT**. The To be TT page

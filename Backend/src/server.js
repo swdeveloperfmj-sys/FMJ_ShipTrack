@@ -30,7 +30,7 @@ const shipmentSchema = new mongoose.Schema(
     fclLcl: { type: String, enum: ["FCL", "LCL", ""], default: "" },
     containerSize: { type: String, enum: ["20FT", "40FT", ""], default: "" },
     remarks: { type: String, trim: true, default: "" },
-    currency: { type: String, enum: ["USD", "AED", "RMB", "LKR"], default: "LKR" },
+    currency: { type: String, default: "LKR", match: /^[A-Z]{3}$/ },
     etd: { type: String, default: "" },
     eta: { type: String, default: "" },
     arrivalDate: { type: String, default: "" },
@@ -87,6 +87,18 @@ const countrySchema = new mongoose.Schema(
   { versionKey: false },
 );
 const Country = mongoose.model("Country", countrySchema);
+const currencySchema = new mongoose.Schema(
+  {
+    _id: { type: String, required: true },
+    code: { type: String, required: true, trim: true, uppercase: true },
+    name: { type: String, required: true, trim: true },
+    createdAt: { type: String, default: () => new Date().toISOString() },
+    updatedAt: { type: String },
+  },
+  { versionKey: false },
+);
+currencySchema.index({ code: 1 }, { unique: true });
+const Currency = mongoose.model("Currency", currencySchema);
 const superAdminSchema = new mongoose.Schema(
   {
     _id: { type: String, default: "super-admin" },
@@ -420,8 +432,8 @@ function validateShipment(shipment) {
   if (missing.length) {
     return `Required fields: ${missing.join(", ")}`;
   }
-  if (shipment.currency !== undefined && !["USD", "AED", "RMB", "LKR"].includes(shipment.currency)) {
-    return "Currency must be USD, AED or RMB.";
+  if (shipment.currency !== undefined && !/^[A-Z]{3}$/.test(shipment.currency)) {
+    return "Currency must be a three-letter code.";
   }
   const paymentTerms = ["LETTER_OF_CREDIT", "ADVANCE_TT", "DA_BL", "DP_SIGHT", "OPEN_ACCOUNT"];
   if (shipment.paymentTerms && !paymentTerms.includes(shipment.paymentTerms)) {
@@ -691,6 +703,72 @@ app.delete("/api/countries/:id", async (request, response, next) => {
   try {
     const country = await Country.findByIdAndDelete(request.params.id);
     if (!country) return response.status(404).json({ error: "Country not found." });
+    response.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/currencies", async (_request, response, next) => {
+  try {
+    const currencies = await Currency.find().sort({ code: 1 }).lean();
+    response.json(currencies.map(({ _id, code, name, createdAt, updatedAt }) => ({
+      id: _id,
+      code,
+      name,
+      createdAt,
+      updatedAt,
+    })));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/currencies", async (request, response, next) => {
+  try {
+    const code = typeof request.body?.code === "string" ? request.body.code.trim().toUpperCase() : "";
+    const name = typeof request.body?.name === "string" ? request.body.name.trim() : "";
+    if (!/^[A-Z]{3}$/.test(code)) return response.status(400).json({ error: "Currency code must be three letters, such as USD." });
+    if (!name || name.length > 100) return response.status(400).json({ error: "Currency name is required and must be 100 characters or fewer." });
+    const currency = await Currency.create({ _id: randomUUID(), code, name });
+    response.status(201).json({ id: currency._id, code: currency.code, name: currency.name, createdAt: currency.createdAt });
+  } catch (error) {
+    if (error.code === 11000) return response.status(409).json({ error: "That currency code already exists." });
+    next(error);
+  }
+});
+
+app.put("/api/currencies/:id", async (request, response, next) => {
+  try {
+    const code = typeof request.body?.code === "string" ? request.body.code.trim().toUpperCase() : "";
+    const name = typeof request.body?.name === "string" ? request.body.name.trim() : "";
+    if (!/^[A-Z]{3}$/.test(code)) return response.status(400).json({ error: "Currency code must be three letters, such as USD." });
+    if (!name || name.length > 100) return response.status(400).json({ error: "Currency name is required and must be 100 characters or fewer." });
+    const currentCurrency = await Currency.findById(request.params.id);
+    if (!currentCurrency) return response.status(404).json({ error: "Currency not found." });
+    if (currentCurrency.code !== code && await Shipment.exists({ currency: currentCurrency.code })) {
+      return response.status(409).json({ error: "This currency code is assigned to shipments and cannot be changed." });
+    }
+    const currency = await Currency.findByIdAndUpdate(
+      request.params.id,
+      { code, name, updatedAt: new Date().toISOString() },
+      { new: true, runValidators: true },
+    );
+    response.json({ id: currency._id, code: currency.code, name: currency.name, createdAt: currency.createdAt, updatedAt: currency.updatedAt });
+  } catch (error) {
+    if (error.code === 11000) return response.status(409).json({ error: "That currency code already exists." });
+    next(error);
+  }
+});
+
+app.delete("/api/currencies/:id", async (request, response, next) => {
+  try {
+    const currency = await Currency.findById(request.params.id);
+    if (!currency) return response.status(404).json({ error: "Currency not found." });
+    if (await Shipment.exists({ currency: currency.code })) {
+      return response.status(409).json({ error: "This currency is assigned to shipments and cannot be deleted." });
+    }
+    await currency.deleteOne();
     response.status(204).end();
   } catch (error) {
     next(error);

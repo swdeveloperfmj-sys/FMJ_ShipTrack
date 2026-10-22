@@ -199,11 +199,11 @@ function ShipmentTable({ rows, mode, onEdit, onAdd, consignees = [] }) {
   );
 }
 
-function ShipmentModal({ initial, consignees, onClose, onSave }) {
+function ShipmentModal({ initial, consignees, currencies, onClose, onSave }) {
   const [form, setForm] = useState(() => ({
     ...emptyShipment,
     ...(initial || {}),
-    currency: initial?.currency || (initial ? "LKR" : "USD"),
+    currency: initial?.currency || (currencies.find((item) => item.code === "USD")?.code || currencies[0]?.code || (initial ? "LKR" : "USD")),
     company: initial?.company || consignees[0]?.code || "",
     transportMode: initial?.transportMode || (initial?.fclLcl ? "SEA" : ""),
     paymentTerms: initial?.paymentTerms || "",
@@ -273,7 +273,12 @@ function ShipmentModal({ initial, consignees, onClose, onSave }) {
               <label className="shipment-field shipment-field--mode">Transport Mode<select name="transportMode" value={form.transportMode} onChange={(event) => setForm((current) => ({ ...current, transportMode: event.target.value, fclLcl: "", containerSize: "" }))} required={!initial}><option value="">Select AIR/SEA</option><option value="AIR">AIR</option><option value="SEA">SEA</option></select></label>
               {form.transportMode === "SEA" && <label className="shipment-field shipment-field--conditional">FCL/LCL<select name="fclLcl" value={form.fclLcl} onChange={(event) => setForm((current) => ({ ...current, fclLcl: event.target.value, containerSize: "" }))} required><option value="">Select FCL/LCL</option><option value="FCL">FCL</option><option value="LCL">LCL</option></select></label>}
               {form.transportMode === "SEA" && form.fclLcl === "FCL" && <label className="shipment-field shipment-field--conditional">Container Size<select name="containerSize" value={form.containerSize} onChange={change} required><option value="">Select size</option><option value="20FT">20FT</option><option value="40FT">40FT</option></select></label>}
-              <label className="shipment-field shipment-field--currency">Currency<select name="currency" value={form.currency} onChange={change} required>{form.currency === "LKR" && <option value="LKR">LKR (existing)</option>}<option value="USD">USD</option><option value="AED">AED</option><option value="RMB">RMB</option></select></label>
+              <label className="shipment-field shipment-field--currency">Currency<select name="currency" value={form.currency} onChange={change} required>
+                {!currencies.length && ["USD", "AED", "RMB"].map((code) => <option key={code} value={code}>{code}</option>)}
+                {form.currency && form.currency !== "LKR" && !currencies.some((item) => item.code === form.currency) && <option value={form.currency}>{form.currency} (existing)</option>}
+                {form.currency === "LKR" && <option value="LKR">LKR (existing)</option>}
+                {currencies.map((currency) => <option key={currency.id} value={currency.code}>{currency.code} — {currency.name}</option>)}
+              </select></label>
               <label className="shipment-field shipment-field--amount">Value<input name="totalCost" type="number" min="0" value={form.totalCost} onChange={change} /></label>
               <label className="shipment-field shipment-field--date">ETD<input name="etd" type="date" value={form.etd} onChange={change} /></label>
               <label className="shipment-field shipment-field--date">ETA CMB<input name="eta" type="date" value={form.eta} onChange={change} /></label>
@@ -511,6 +516,68 @@ function CountryDirectory({ countries, onEdit, onAdd }) {
   </section>;
 }
 
+function CurrencyModal({ initial, onClose, onSave }) {
+  const [form, setForm] = useState({ code: initial?.code || "", name: initial?.name || "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(event) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      await onSave({ code: form.code.trim().toUpperCase(), name: form.name.trim() }, initial?.id);
+      onClose();
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!window.confirm(`Delete currency ${initial.code}?`)) return;
+    setBusy(true);
+    setError("");
+    try {
+      await onSave(null, initial.id, true);
+      onClose();
+    } catch (deleteError) {
+      setError(deleteError.message);
+      setBusy(false);
+    }
+  }
+
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="shipment-modal consignee-modal" role="dialog" aria-modal="true" aria-labelledby="currency-modal-title">
+      <div className="modal-head"><div><div className="eyebrow">{initial ? "UPDATE CURRENCY" : "NEW CURRENCY"}</div><h2 id="currency-modal-title">{initial ? "Edit currency" : "Add currency"}</h2></div><button className="icon-button" onClick={onClose} aria-label="Close"><X size={20} /></button></div>
+      <form onSubmit={submit}>
+        <div className="form-section"><h3>Currency details</h3><div className="form-grid">
+          <label>Currency code<input autoFocus name="code" value={form.code} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))} required minLength={3} maxLength={3} pattern="[A-Za-z]{3}" placeholder="USD" /></label>
+          <label>Currency name<input name="name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required maxLength={100} placeholder="US Dollar" /></label>
+        </div></div>
+        {error && <div className="form-error">{error}</div>}
+        <div className="modal-footer">{initial && <button type="button" className="delete-button" onClick={remove} disabled={busy}>Delete currency</button>}<button type="button" className="button secondary" onClick={onClose}>Cancel</button><button className="button primary" disabled={busy}>{busy ? "Saving…" : initial ? "Save changes" : "Add currency"}</button></div>
+      </form>
+    </section>
+  </div>;
+}
+
+function CurrencyDirectory({ currencies, onEdit, onAdd }) {
+  return <section className="panel table-panel">
+    <div className="table-toolbar">
+      <div className="table-title"><h2>Currencies</h2><span className="count-pill">{currencies.length}</span></div>
+      <button className="button primary" onClick={onAdd}><Plus size={15} /> Add currency</button>
+    </div>
+    {!currencies.length ? <EmptyState message="No managed currencies yet" description="Add USD, AED, RMB or another three-letter currency code." actionLabel="Add currency" onAdd={onAdd} /> : <div className="table-scroll"><table><thead><tr><th>Code</th><th>Currency name</th><th /></tr></thead><tbody>
+      {currencies.map((currency) => <tr key={currency.id} className="clickable-row" onClick={() => onEdit(currency)}>
+        <td><span className="company-tag">{currency.code}</span></td><td><span className="import-id">{currency.name}</span></td>
+        <td><button className="consignee-edit-button" aria-label={`Edit ${currency.code}`} onClick={(event) => { event.stopPropagation(); onEdit(currency); }}>Edit</button></td>
+      </tr>)}
+    </tbody></table></div>}
+  </section>;
+}
+
 function AnalyticsView({ analytics }) {
   const monthMax = Math.max(1, ...(analytics?.monthly || []).map((item) => item.cost));
   return <>
@@ -662,10 +729,12 @@ export default function App() {
   const [shipments, setShipments] = useState([]);
   const [consignees, setConsignees] = useState([]);
   const [countries, setCountries] = useState([]);
+  const [currencies, setCurrencies] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [modalShipment, setModalShipment] = useState(undefined);
   const [modalConsignee, setModalConsignee] = useState(undefined);
   const [modalCountry, setModalCountry] = useState(undefined);
+  const [modalCurrency, setModalCurrency] = useState(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -677,16 +746,18 @@ export default function App() {
   const refresh = useCallback(async () => {
     setError("");
     try {
-      const [shipmentData, analyticsData, consigneeData, countryData] = await Promise.all([
+      const [shipmentData, analyticsData, consigneeData, countryData, currencyData] = await Promise.all([
         api.getShipments(),
         api.getAnalytics(),
         api.getConsignees(),
         api.getCountries(),
+        api.getCurrencies(),
       ]);
       setShipments(shipmentData);
       setAnalytics(analyticsData);
       setConsignees(consigneeData);
       setCountries(countryData);
+      setCurrencies(currencyData);
     } catch (loadError) {
       setError(loadError.message);
     } finally {
@@ -714,6 +785,7 @@ export default function App() {
       setAnalytics(null);
       setConsignees([]);
       setCountries([]);
+      setCurrencies([]);
     };
     window.addEventListener("fmj-session-expired", expireSession);
     return () => window.removeEventListener("fmj-session-expired", expireSession);
@@ -727,7 +799,7 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [notice]);
   useEffect(() => {
-    if (active !== "countries" || !authState?.authenticated || modalCountry !== undefined || confirmSignOut) return undefined;
+    if (active !== "countries" || !authState?.authenticated || modalCountry !== undefined || modalCurrency !== undefined || confirmSignOut) return undefined;
     const openCountryForm = (event) => {
       if (event.key !== "F1") return;
       event.preventDefault();
@@ -735,7 +807,7 @@ export default function App() {
     };
     window.addEventListener("keydown", openCountryForm);
     return () => window.removeEventListener("keydown", openCountryForm);
-  }, [active, authState?.authenticated, modalCountry, confirmSignOut]);
+  }, [active, authState?.authenticated, modalCountry, modalCurrency, confirmSignOut]);
   useEffect(() => {
     if (!accountMenuOpen && !confirmSignOut) return undefined;
     const closeTransientUi = (event) => {
@@ -804,6 +876,20 @@ export default function App() {
     await refresh();
   }
 
+  async function saveCurrency(currency, id, remove = false) {
+    if (remove) {
+      await api.deleteCurrency(id);
+      setNotice("Currency deleted");
+    } else if (id) {
+      await api.updateCurrency(id, currency);
+      setNotice("Currency updated successfully");
+    } else {
+      await api.createCurrency(currency);
+      setNotice("Currency added successfully");
+    }
+    await refresh();
+  }
+
   async function signOut() {
     try {
       await api.logout();
@@ -845,7 +931,7 @@ export default function App() {
     }
     if (active === "companies") return <><PageTitle eyebrow="CONSIGNEES" title="Consignee reports" subtitle="A clear view of imports and clearance progress for each consignee." />{error && <div className="inline-error">{error}</div>}<ConsigneeReports analytics={analytics} shipments={shipments} consignees={consignees} onEdit={openModal} /></>;
     if (active === "consignees") return <><PageTitle eyebrow="DIRECTORY" title="Consignees" subtitle="Create and manage the consignee records assigned to your shipments." action={<button className="button primary" onClick={() => setModalConsignee(null)}><Plus size={17} /> Create consignee</button>} />{error && <div className="inline-error">{error}</div>}<ConsigneeDirectory consignees={consignees} shipments={shipments} onEdit={setModalConsignee} onAdd={() => setModalConsignee(null)} /></>;
-    if (active === "countries") return <><PageTitle eyebrow="DIRECTORY" title="Countries" subtitle="Create and manage country records." action={<button className="button primary" title="Create country (F1)" onClick={() => setModalCountry(null)}><Plus size={17} /> Create country</button>} />{error && <div className="inline-error">{error}</div>}<CountryDirectory countries={countries} onEdit={setModalCountry} onAdd={() => setModalCountry(null)} /></>;
+    if (active === "countries") return <><PageTitle eyebrow="DIRECTORY" title="Countries & currencies" subtitle="Manage country and currency lists separately." action={<button className="button primary" title="Create country (F1)" onClick={() => setModalCountry(null)}><Plus size={17} /> Create country</button>} />{error && <div className="inline-error">{error}</div>}<CountryDirectory countries={countries} onEdit={setModalCountry} onAdd={() => setModalCountry(null)} /><CurrencyDirectory currencies={currencies} onEdit={setModalCurrency} onAdd={() => setModalCurrency(null)} /></>;
     if (active === "documents") return <><PageTitle eyebrow="PAPERWORK" title="Documents" subtitle="Track required shipping and customs documents in one place." />{error && <div className="inline-error">{error}</div>}<DocumentsView shipments={shipments} consignees={consignees} onEdit={openModal} /></>;
     if (active === "analytics") return <><PageTitle eyebrow="PERFORMANCE" title="Reports & analytics" subtitle="Monitor shipment delays, landed costs and monthly activity." />{error && <div className="inline-error">{error}</div>}<AnalyticsView analytics={analytics} /></>;
     return <Dashboard shipments={shipments} consignees={consignees} analytics={analytics} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} />;
@@ -893,9 +979,10 @@ export default function App() {
         </main>
       </div>
       {sidebarOpen && <button className="sidebar-overlay" aria-label="Close navigation" onClick={() => setSidebarOpen(false)} />}
-      {modalShipment !== undefined && <ShipmentModal initial={modalShipment} consignees={consigneeOptions} onClose={() => setModalShipment(undefined)} onSave={saveShipment} />}
+      {modalShipment !== undefined && <ShipmentModal initial={modalShipment} consignees={consigneeOptions} currencies={currencies} onClose={() => setModalShipment(undefined)} onSave={saveShipment} />}
       {modalConsignee !== undefined && <ConsigneeModal initial={modalConsignee} onClose={() => setModalConsignee(undefined)} onSave={saveConsignee} />}
       {modalCountry !== undefined && <CountryModal initial={modalCountry} onClose={() => setModalCountry(undefined)} onSave={saveCountry} />}
+      {modalCurrency !== undefined && <CurrencyModal initial={modalCurrency} onClose={() => setModalCurrency(undefined)} onSave={saveCurrency} />}
       {confirmSignOut && <div className="modal-backdrop signout-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setConfirmSignOut(false); }}><section className="signout-dialog" role="alertdialog" aria-modal="true" aria-labelledby="signout-title" aria-describedby="signout-description"><div className="signout-icon"><LogOut size={19} /></div><h2 id="signout-title">Sign out of ShipTrack?</h2><p id="signout-description">Are you sure you want to sign out? You’ll need to verify your email again to access your shipment workspace.</p><div className="signout-actions"><button className="button secondary" onClick={() => setConfirmSignOut(false)}>No, stay signed in</button><button className="button signout-confirm" onClick={signOut}>Yes, sign out</button></div></section></div>}
       {notice && <div className="toast"><CheckCircle2 size={17} />{notice}<button onClick={() => setNotice("")} aria-label="Dismiss"><X size={15} /></button></div>}
     </div>

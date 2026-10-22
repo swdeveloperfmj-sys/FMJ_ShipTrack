@@ -35,6 +35,12 @@ export const api = {
   updateCountry: (id, country) =>
     request(`/countries/${id}`, { method: "PUT", body: JSON.stringify(country) }),
   deleteCountry: (id) => request(`/countries/${id}`, { method: "DELETE" }),
+  getCurrencies: () => request("/currencies"),
+  createCurrency: (currency) =>
+    request("/currencies", { method: "POST", body: JSON.stringify(currency) }),
+  updateCurrency: (id, currency) =>
+    request(`/currencies/${id}`, { method: "PUT", body: JSON.stringify(currency) }),
+  deleteCurrency: (id) => request(`/currencies/${id}`, { method: "DELETE" }),
   createConsignee: (consignee) =>
     request("/consignees", { method: "POST", body: JSON.stringify(consignee) }),
   updateConsignee: (id, consignee) =>
