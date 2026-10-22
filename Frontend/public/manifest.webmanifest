@@ -1,0 +1,17 @@
+{
+  "name": "FMJ ShipTrack",
+  "short_name": "ShipTrack",
+  "description": "Shipment and import management dashboard",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f6f8",
+  "theme_color": "#2865db",
+  "icons": [
+    {
+      "src": "/shiptrack-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
