@@ -319,19 +319,19 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
           {rows.map((shipment) => (
             <tr key={shipment.id}>
               {mode === "shipments" && <>
-                <td><span className="import-id">{shipment.importNo}</span><small>{shipment.description}</small></td>
+                <td className="consignee-row-first" style={{ "--consignee-color": consigneeColorFor(shipment.company, consignees) }}><span className="import-id">{shipment.importNo}</span><small>{shipment.description}</small></td>
                 <td><ConsigneeBadge code={shipment.company} consignees={consignees} /></td>
                 <td>{shipment.supplier}</td><td>{shipment.consignee}</td>
                 <td className="description-cell">{shipment.description}</td><td>{dateLabel(shipment.eta)}</td>
                 <td><StatusBadge>{shipment.status}</StatusBadge></td>
               </>}
               {mode === "tracking" && <>
-                <td><span className="import-id">{shipment.importNo}</span><small><ConsigneeBadge code={shipment.company} consignees={consignees} /></small></td>
+                <td className="consignee-row-first" style={{ "--consignee-color": consigneeColorFor(shipment.company, consignees) }}><span className="import-id">{shipment.importNo}</span><small><ConsigneeBadge code={shipment.company} consignees={consignees} /></small></td>
                 <td>{shipment.supplier}</td><td>{dateLabel(shipment.etd)}</td><td>{dateLabel(shipment.eta)}</td>
                 <td>{dateLabel(shipment.arrivalDate)}</td><td>{dateLabel(shipment.deliveryDate)}</td><td><StatusBadge>{shipment.status}</StatusBadge></td>
               </>}
               {mode === "payments" && <>
-                <td><span className="import-id">{shipment.importNo}</span></td>
+                <td className="consignee-row-first" style={{ "--consignee-color": consigneeColorFor(shipment.company, consignees) }}><span className="import-id">{shipment.importNo}</span></td>
                 <td><ConsigneeBadge code={shipment.company} label={shipment.consignee || shipment.company || "—"} showName consignees={consignees} /></td><td>{shipment.supplier || "—"}</td>
                 <td className="description-cell">{shipment.description || "—"}</td><td>{transportLabel(shipment)}</td>
                 <td>{[shipment.incoterm, shipment.incotermLocation].filter(Boolean).join(" · ") || "—"}</td>
@@ -343,7 +343,7 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
                 {workflowAction && <td><button type="button" className="tt-sent-update-button" onClick={() => workflowAction.onClick(shipment)}>{workflowAction.label}</button></td>}
               </>}
               {mode === "customs" && <>
-                <td><span className="import-id">{shipment.importNo}</span><small>{shipment.supplier}</small></td>
+                <td className="consignee-row-first" style={{ "--consignee-color": consigneeColorFor(shipment.company, consignees) }}><span className="import-id">{shipment.importNo}</span><small>{shipment.supplier}</small></td>
                 <td><ConsigneeBadge code={shipment.company} consignees={consignees} /></td><td>{money(shipment.duty)}</td>
                 <td>{money(shipment.doCharges)}</td><td><span className="progress-copy">{shipment.clearanceStatus}</span></td>
                 <td><StatusBadge tone={shipment.clearanceStatus === "Cleared" ? "cleared" : "under-clearing"}>{shipment.clearanceStatus}</StatusBadge></td>
