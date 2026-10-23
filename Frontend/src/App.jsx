@@ -43,7 +43,15 @@ const navigation = [
   { label: "Consignee Reports", icon: Building2, key: "companies" },
   { label: "Consignees", icon: ContactRound, key: "consignees" },
   { label: "Countries", icon: Globe2, key: "countries" },
-  { label: "Reports & Analytics", icon: Activity, key: "analytics" },
+];
+const reportNavigation = [
+  { label: "SHIPMENT", key: "report-shipment" },
+  { label: "Cleared", key: "report-cleared" },
+  { label: "FMJ", key: "report-fmj", consigneeName: "FMJ" },
+  { label: "JD", key: "report-jd", consigneeName: "JD" },
+  { label: "RLA", key: "report-rla", consigneeName: "RLA" },
+  { label: "AOP", key: "report-aop", consigneeName: "AOP" },
+  { label: "UB", key: "report-ub", consigneeName: "UB" },
 ];
 
 const consigneeColorPresets = [
@@ -120,6 +128,14 @@ const dateLabel = (value) =>
         year: "numeric",
       })
     : "—";
+
+const openDatePicker = (event) => {
+  try {
+    event.currentTarget.showPicker?.();
+  } catch {
+    // Browsers without showPicker keep their native date-input behavior.
+  }
+};
 
 const paymentTermsLabel = (shipment) => {
   const labels = {
@@ -254,7 +270,7 @@ function ShipmentActions({ shipment, onEdit, onDelete }) {
   </div>;
 }
 
-function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderClearing, consignees = [] }) {
+function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderClearing, onCleared, consignees = [] }) {
   if (!rows.length) return <EmptyState message={mode === "shipments" ? "No shipment records yet" : "No shipments found"} onAdd={onAdd} />;
   if (mode === "payment-cards") return (
     <div className="payment-details-list">
@@ -292,7 +308,7 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
     payments: ["Import No.", "Consignee", "Shipper", "Item description", "Transport", "Incoterm", "Payment terms", "Value", "ETD", "ETA CMB", "Duty (LKR)", "DO (LKR)", "Clearance", "Remarks", ""],
     customs: ["Import No.", "Consignee", "Duty", "DO charges", "Clearance progress", "Clearance status", "Shipment status", ""],
   }[mode];
-  const workflowAction = onTTSent ? { label: "TT Sent", onClick: onTTSent } : onUnderClearing ? { label: "Under Clearing", onClick: onUnderClearing } : null;
+  const workflowAction = onTTSent ? { label: "TT Sent", onClick: onTTSent } : onUnderClearing ? { label: "Under Clearing", onClick: onUnderClearing } : onCleared ? { label: "Cleared", onClick: onCleared } : null;
   const visibleHeaders = workflowAction ? [...headers.slice(0, -1), workflowAction.label, ""] : headers;
 
   return (
@@ -342,12 +358,12 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
   );
 }
 
-function ShipmentListPage({ eyebrow, title, subtitle, rows, mode = "shipments", consignees, onEdit, onDelete, onAdd, onTTSent, onUnderClearing, showAdd = true, footer }) {
+function ShipmentListPage({ eyebrow, title, subtitle, rows, mode = "shipments", consignees, onEdit, onDelete, onAdd, onTTSent, onUnderClearing, onCleared, showAdd = true, footer }) {
   return <>
     <PageTitle eyebrow={eyebrow} title={title} subtitle={subtitle} action={showAdd ? <button className="button primary" onClick={onAdd}><Plus size={17} /> Add shipment</button> : undefined} />
     <section className="panel table-panel">
       <div className="table-toolbar"><div className="table-title"><h2>{title}</h2><span className="count-pill">{rows.length}</span></div></div>
-      <ShipmentTable rows={rows} mode={mode} onEdit={onEdit} onDelete={onDelete} onAdd={showAdd ? onAdd : undefined} onTTSent={onTTSent} onUnderClearing={onUnderClearing} consignees={consignees} />
+      <ShipmentTable rows={rows} mode={mode} onEdit={onEdit} onDelete={onDelete} onAdd={showAdd ? onAdd : undefined} onTTSent={onTTSent} onUnderClearing={onUnderClearing} onCleared={onCleared} consignees={consignees} />
       <div className="table-footer"><span><strong>{rows.length}</strong> {footer || "shipments"}</span><span>Data saved automatically</span></div>
     </section>
   </>;
@@ -441,8 +457,8 @@ function ShipmentModal({ initial, consignees, countries, currencies, onClose, on
                 {currencies.map((currency) => <option key={currency.id} value={currency.code}>{currency.code} — {currency.name}</option>)}
               </select></label>
               <label className="shipment-field shipment-field--amount">Value<input name="totalCost" type="number" min="0" step="0.01" value={form.totalCost} onChange={change} /></label>
-              <label className="shipment-field shipment-field--date">ETD<input name="etd" type="date" value={form.etd} onChange={change} /></label>
-              <label className="shipment-field shipment-field--date">ETA CMB<input name="eta" type="date" value={form.eta} onChange={change} /></label>
+              <label className="shipment-field shipment-field--date">ETD<input name="etd" type="date" value={form.etd} onClick={openDatePicker} onChange={change} /></label>
+              <label className="shipment-field shipment-field--date">ETA CMB<input name="eta" type="date" value={form.eta} onClick={openDatePicker} onChange={change} /></label>
               <label className="shipment-field shipment-field--amount">Duty (LKR)<input name="duty" type="number" min="0" step="0.01" value={form.duty} onChange={change} /></label>
               <label className="shipment-field shipment-field--amount">DO (LKR)<input name="doCharges" type="number" min="0" step="0.01" value={form.doCharges} onChange={change} /></label>
               {initial && <label className="shipment-field shipment-field--conditional">Shipment status<select name="status" value={form.status} onChange={change}>{shipmentStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>}
@@ -494,8 +510,8 @@ function TTSentDateModal({ shipment, onClose, onSave }) {
         <div className="form-section">
           <p className="tt-sent-import">Import no. <strong>{shipment.importNo}</strong></p>
           <div className="form-grid">
-            <label>ETD<input type="date" value={etd} onChange={(event) => setEtd(event.target.value)} /></label>
-            <label>ETA CMB<input type="date" value={eta} onChange={(event) => setEta(event.target.value)} /></label>
+            <label>ETD<input type="date" value={etd} onClick={openDatePicker} onChange={(event) => setEtd(event.target.value)} /></label>
+            <label>ETA CMB<input type="date" value={eta} onClick={openDatePicker} onChange={(event) => setEta(event.target.value)} /></label>
           </div>
           <label className="tt-sent-remarks">Existing remarks<textarea value={remarks} onChange={(event) => setRemarks(event.target.value)} rows={4} maxLength={1000} placeholder="Add remarks" /></label>
         </div>
@@ -541,6 +557,44 @@ function UnderClearingModal({ shipment, onClose, onSave }) {
         </div>
         {error && <div className="form-error">{error}</div>}
         <div className="modal-footer"><button type="button" className="button secondary" onClick={onClose}>Cancel</button><button type="submit" className="button primary" disabled={saving}>{saving ? "Saving…" : "Move to Under Clearing"}</button></div>
+      </form>
+    </section>
+  </div>;
+}
+
+function ClearedShipmentModal({ shipment, onClose, onSave }) {
+  const [remarks, setRemarks] = useState(shipment.remarks || "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(event) {
+    event.preventDefault();
+    if (!/\bcleared\b/i.test(remarks)) {
+      setError('Remarks must include the word "cleared" before completing clearance.');
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await onSave(shipment, remarks);
+      onClose();
+    } catch (saveError) {
+      setError(saveError.message || "Unable to move the shipment to Cleared.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="shipment-modal tt-sent-date-modal" role="dialog" aria-modal="true" aria-labelledby="cleared-modal-title">
+      <div className="modal-head"><div><div className="eyebrow">CLEARED</div><h2 id="cleared-modal-title">Complete shipment clearance</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Close"><X size={20} /></button></div>
+      <form onSubmit={submit}>
+        <div className="form-section">
+          <p className="tt-sent-import">Import no. <strong>{shipment.importNo}</strong></p>
+          <label className="tt-sent-remarks">Remarks<textarea value={remarks} onChange={(event) => setRemarks(event.target.value)} rows={4} maxLength={1000} placeholder='Include "cleared" in the remarks to complete clearance' /></label>
+        </div>
+        {error && <div className="form-error">{error}</div>}
+        <div className="modal-footer"><button type="button" className="button secondary" onClick={onClose}>Cancel</button><button type="submit" className="button primary" disabled={saving}>{saving ? "Saving…" : "Mark Cleared"}</button></div>
       </form>
     </section>
   </div>;
@@ -969,6 +1023,7 @@ export default function App() {
   const [authState, setAuthState] = useState(null);
   const [authError, setAuthError] = useState("");
   const [active, setActive] = useState("dashboard");
+  const [reportsOpen, setReportsOpen] = useState(false);
   const [shipments, setShipments] = useState([]);
   const [consignees, setConsignees] = useState([]);
   const [countries, setCountries] = useState([]);
@@ -977,6 +1032,7 @@ export default function App() {
   const [modalShipment, setModalShipment] = useState(undefined);
   const [ttSentDateShipment, setTtSentDateShipment] = useState(undefined);
   const [underClearingShipment, setUnderClearingShipment] = useState(undefined);
+  const [clearedShipment, setClearedShipment] = useState(undefined);
   const [modalConsignee, setModalConsignee] = useState(undefined);
   const [modalCountry, setModalCountry] = useState(undefined);
   const [modalCurrency, setModalCurrency] = useState(undefined);
@@ -1114,6 +1170,13 @@ export default function App() {
     await refresh();
   }
 
+  async function saveClearedShipment(shipment, remarks) {
+    if (!/\bcleared\b/i.test(remarks)) throw new Error('Remarks must include the word "cleared" before completing clearance.');
+    await api.updateShipment(shipment.id, { ...shipment, remarks, status: "Cleared", clearanceStatus: "Cleared" });
+    setNotice("Shipment marked as Cleared");
+    await refresh();
+  }
+
   async function saveConsignee(consignee, id, remove = false) {
     if (remove) {
       await api.deleteConsignee(id);
@@ -1169,7 +1232,7 @@ export default function App() {
     }
   }
 
-  const activeTitle = navigation.find((item) => item.key === active)?.label || "Dashboard";
+  const activeTitle = [...navigation, ...reportNavigation].find((item) => item.key === active)?.label || "Dashboard";
   const openModal = (shipment) => setModalShipment(shipment || null);
   const markAuthenticated = (username) => {
     setAuthError("");
@@ -1214,11 +1277,19 @@ export default function App() {
     }
     if (active === "under-clearing") {
       const underClearingShipments = shipments.filter((shipment) => shipment.status === "Under Clearing");
-      return <ShipmentListPage eyebrow="CLEARANCE" title="Under Clearing Shipments" subtitle="Shipments currently progressing through customs clearance." rows={underClearingShipments} consignees={consignees} onEdit={openModal} onAdd={() => openModal(null)} showAdd={false} footer="shipments under clearing" />;
+      return <ShipmentListPage eyebrow="CLEARANCE" title="Under Clearing Shipments" subtitle="Shipments currently progressing through customs clearance." rows={underClearingShipments} mode="payments" consignees={consignees} onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} onCleared={setClearedShipment} showAdd={false} footer="shipments under clearing" />;
     }
     if (active === "cleared-shipments") {
       const clearedShipments = shipments.filter((shipment) => shipment.status === "Cleared");
-      return <ShipmentListPage eyebrow="CLEARANCE" title="Cleared Shipments" subtitle="Shipments that have completed customs clearance." rows={clearedShipments} consignees={consignees} onEdit={openModal} onAdd={() => openModal(null)} showAdd={false} footer="cleared shipments" />;
+      return <ShipmentListPage eyebrow="CLEARANCE" title="Cleared Shipments" subtitle="Shipments that have completed customs clearance." rows={clearedShipments} mode="payments" consignees={consignees} onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} showAdd={false} footer="cleared shipments" />;
+    }
+    if (active.startsWith("report-")) {
+      const report = reportNavigation.find((item) => item.key === active);
+      const consigneeCode = report?.consigneeName && consignees.find((item) => item.name.toUpperCase() === report.consigneeName)?.code;
+      const reportShipments = report?.key === "report-cleared"
+        ? shipments.filter((shipment) => shipment.status === "Cleared")
+        : report?.consigneeName ? shipments.filter((shipment) => shipment.status === "Cleared" && (shipment.company === consigneeCode || shipment.company === report.consigneeName)) : shipments;
+      return <ShipmentListPage eyebrow="REPORTS & ANALYTICS" title={report?.label || "SHIPMENT"} subtitle={report?.key === "report-cleared" ? "Cleared shipment records." : report?.consigneeName ? `Cleared shipment records for ${report.consigneeName}.` : "All shipment records."} rows={reportShipments} mode="payments" consignees={consignees} onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} showAdd={false} footer="shipment records" />;
     }
     if (active === "companies") return <><PageTitle eyebrow="CONSIGNEES" title="Consignee reports" subtitle="A clear view of imports and clearance progress for each consignee." />{error && <div className="inline-error">{error}</div>}<ConsigneeReports analytics={analytics} shipments={shipments} consignees={consignees} onEdit={openModal} /></>;
     if (active === "consignees") return <><PageTitle eyebrow="DIRECTORY" title="Consignees" subtitle="Create and manage the consignee records assigned to your shipments." action={<button className="button primary" onClick={() => setModalConsignee(null)}><Plus size={17} /> Create consignee</button>} />{error && <div className="inline-error">{error}</div>}<ConsigneeDirectory consignees={consignees} shipments={shipments} onEdit={setModalConsignee} onAdd={() => setModalConsignee(null)} /></>;
@@ -1247,7 +1318,11 @@ export default function App() {
       <aside className="sidebar">
         <div className="brand"><div className="brand-mark"><Ship size={21} /></div><div><strong>FMJ <span>ShipTrack</span></strong><small>IMPORT MANAGEMENT</small></div><button className="mobile-close icon-button" onClick={() => setSidebarOpen(false)}><X size={18} /></button></div>
         <div className="nav-caption">WORKSPACE</div>
-        <nav>{navigation.map(({ label, icon: Icon, key }) => <button key={key} className={`nav-item ${active === key ? "active" : ""}`} onClick={() => { setActive(key); setSidebarOpen(false); }}><Icon size={18} /><span>{label}</span>{key === "tracking" && analytics?.delayed > 0 && <i className="nav-count">{analytics.delayed}</i>}</button>)}</nav>
+        <nav>{navigation.map(({ label, icon: Icon, key }) => <button key={key} className={`nav-item ${active === key ? "active" : ""}`} onClick={() => { setActive(key); setSidebarOpen(false); }}><Icon size={18} /><span>{label}</span>{key === "tracking" && analytics?.delayed > 0 && <i className="nav-count">{analytics.delayed}</i>}</button>)}
+          <div className="reports-nav-group"><button className={`nav-item reports-nav-toggle ${active.startsWith("report-") ? "active" : ""}`} onClick={() => setReportsOpen((open) => !open)} aria-expanded={reportsOpen}><Activity size={18} /><span>Reports &amp; Analytics</span><ChevronDown size={15} className={reportsOpen ? "reports-nav-chevron open" : "reports-nav-chevron"} /></button>
+            {reportsOpen && <div className="reports-nav-links">{reportNavigation.map(({ label, key }) => <button key={key} className={`reports-nav-link ${active === key ? "active" : ""}`} onClick={() => { setActive(key); setSidebarOpen(false); }}>{label}</button>)}</div>}
+          </div>
+        </nav>
         <div className="sidebar-bottom"><div className="help-card"><div className="help-icon"><Settings2 size={17} /></div><strong>Need a hand?</strong><span>Manage your workspace and preferences.</span><button onClick={() => setNotice("Workspace settings are coming soon.")}>Workspace settings <ArrowRight size={14} /></button></div><div className="profile"><div className="profile-avatar">FM</div><div className="profile-name"><strong>{authState.username}</strong><span>Super administrator</span></div></div></div>
       </aside>
       <div className="main-area">
@@ -1264,7 +1339,7 @@ export default function App() {
             </div>
           </div>
         </header>
-        <main className={`content ${["to-be-tt", "tt-sent", "under-clearing", "cleared-shipments"].includes(active) ? "content-wide" : ""}`}>
+        <main className={`content ${["to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", ...reportNavigation.map((item) => item.key)].includes(active) ? "content-wide" : ""}`}>
           {renderContent()}
           <footer className="app-footer"><span>© 2026 FMJ ShipTrack</span><span>Shipment management, made simpler.</span></footer>
         </main>
@@ -1273,6 +1348,7 @@ export default function App() {
       {modalShipment !== undefined && <ShipmentModal initial={modalShipment} consignees={consigneeOptions} countries={countries} currencies={currencies} onClose={() => setModalShipment(undefined)} onSave={saveShipment} />}
       {ttSentDateShipment !== undefined && <TTSentDateModal shipment={ttSentDateShipment} onClose={() => setTtSentDateShipment(undefined)} onSave={saveTTSentDates} />}
       {underClearingShipment !== undefined && <UnderClearingModal shipment={underClearingShipment} onClose={() => setUnderClearingShipment(undefined)} onSave={saveUnderClearingShipment} />}
+      {clearedShipment !== undefined && <ClearedShipmentModal shipment={clearedShipment} onClose={() => setClearedShipment(undefined)} onSave={saveClearedShipment} />}
       {modalConsignee !== undefined && <ConsigneeModal initial={modalConsignee} onClose={() => setModalConsignee(undefined)} onSave={saveConsignee} />}
       {modalCountry !== undefined && <CountryModal initial={modalCountry} onClose={() => setModalCountry(undefined)} onSave={saveCountry} />}
       {modalCurrency !== undefined && <CurrencyModal initial={modalCurrency} onClose={() => setModalCurrency(undefined)} onSave={saveCurrency} />}

@@ -30,6 +30,15 @@ button { cursor: pointer; }
 .nav-item.active { color: #2865db; background: #edf3ff; font-weight: 700; }
 .nav-item.active::before { content: ""; position: absolute; left: 0; width: 3px; height: 29px; background: #3479ed; border-radius: 0 4px 4px 0; }
 .nav-item svg { flex: none; }
+.reports-nav-group { margin-top: 2px; }
+.reports-nav-toggle { position: relative; }
+.reports-nav-toggle > span { flex: 1; }
+.reports-nav-chevron { margin-left: auto; transition: transform .16s ease; }
+.reports-nav-chevron.open { transform: rotate(180deg); }
+.reports-nav-links { display: grid; gap: 2px; margin: 3px 0 5px 39px; padding-left: 10px; border-left: 1px solid #e1e7f0; }
+.reports-nav-link { min-height: 27px; padding: 0 9px; border: 0; border-radius: 5px; background: transparent; color: #768398; text-align: left; font-size: 10.5px; font-weight: 600; cursor: pointer; }
+.reports-nav-link:hover { color: #2865db; background: #f4f7fc; }
+.reports-nav-link.active { color: #2865db; background: #edf3ff; }
 .nav-count { margin-left: auto; font-style: normal; background: #fff0dc; color: #c4781d; border-radius: 9px; font-size: 10px; padding: 2px 6px; }
 .sidebar-bottom { margin-top: auto; }
 .help-card { padding: 14px; background: #f7f9fc; border: 1px solid #edf0f4; border-radius: 9px; }
@@ -451,6 +460,10 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .app-shell[data-theme="dark"] .nav-item { color: #aab5c5; }
 .app-shell[data-theme="dark"] .nav-item:hover { background: #222f42; color: #9bbcff; }
 .app-shell[data-theme="dark"] .nav-item.active { background: #243b5f; color: #9bbcff; }
+.app-shell[data-theme="dark"] .reports-nav-links { border-color: #344155; }
+.app-shell[data-theme="dark"] .reports-nav-link { color: #aab5c5; }
+.app-shell[data-theme="dark"] .reports-nav-link:hover { color: #9bbcff; background: #222f42; }
+.app-shell[data-theme="dark"] .reports-nav-link.active { color: #9bbcff; background: #243b5f; }
 .app-shell[data-theme="dark"] .help-card,
 .app-shell[data-theme="dark"] .company-tag,
 .app-shell[data-theme="dark"] .count-pill,

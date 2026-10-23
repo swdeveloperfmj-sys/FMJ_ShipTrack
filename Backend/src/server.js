@@ -445,6 +445,9 @@ function validateShipment(shipment) {
   if (shipment.currency !== undefined && !/^[A-Z]{3}$/.test(shipment.currency)) {
     return "Currency must be a three-letter code.";
   }
+  if (shipment.status === "Cleared" && !/\bcleared\b/i.test(shipment.remarks || "")) {
+    return 'Remarks must include the word "cleared" before completing clearance.';
+  }
   if (shipment.transportMode) {
     const incotermsByMode = {
       AIR: ["CIP", "CPT", "FCA", "EXW"],
