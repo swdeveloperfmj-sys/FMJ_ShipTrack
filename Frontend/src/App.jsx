@@ -371,6 +371,40 @@ function ShipmentListPage({ eyebrow, title, subtitle, rows, mode = "shipments", 
   </>;
 }
 
+function ShipmentSummarySections({ shipments, consignees, onEdit, onView, onDelete }) {
+  const underClearing = shipments.filter((shipment) => shipment.status === "Under Clearing");
+  const ttSent = shipments.filter((shipment) =>
+    shipment.status !== "Under Clearing"
+    && shipment.paymentMethod === "Advance TT"
+    && shipment.paymentStatus === "Paid"
+    && shipment.status === "Pending",
+  );
+  const toBeTT = shipments.filter((shipment) =>
+    shipment.status !== "Under Clearing"
+    && shipment.paymentMethod === "Advance TT"
+    && shipment.paymentStatus === "Pending",
+  );
+  const groupedIds = new Set([...underClearing, ...ttSent, ...toBeTT].map((shipment) => shipment.id));
+  const otherShipments = shipments.filter((shipment) => !groupedIds.has(shipment.id));
+  const sections = [
+    ["Under Clearing Shipment", underClearing],
+    ["TT SENT", ttSent],
+    ["To be TT", toBeTT],
+    ["Other shipments", otherShipments],
+  ];
+
+  return <>
+    <PageTitle eyebrow="REPORTS & ANALYTICS" title="SHIPMENT" subtitle="All shipment records, arranged in the same sections as the shipment workbook." />
+    <div className="shipment-summary-sections">
+      {sections.map(([title, rows]) => <section className="panel table-panel" key={title}>
+        <div className="table-toolbar"><div className="table-title"><h2>{title}</h2><span className="count-pill">{rows.length}</span></div></div>
+        <ShipmentTable rows={rows} mode="payments" onEdit={onEdit} onView={onView} onDelete={onDelete} consignees={consignees} />
+        <div className="table-footer"><span><strong>{rows.length}</strong> {rows.length === 1 ? "shipment" : "shipments"}</span><span>Data saved automatically</span></div>
+      </section>)}
+    </div>
+  </>;
+}
+
 function ShipmentDetailsModal({ shipment, onClose, onEdit }) {
   const display = (value) => value === undefined || value === null || value === "" ? "—" : value;
   const sections = [
@@ -1383,6 +1417,9 @@ export default function App() {
       const reportShipments = report?.key === "report-cleared"
         ? shipments.filter((shipment) => shipment.status === "Cleared")
         : report?.consigneeName ? shipments.filter((shipment) => shipment.status === "Cleared" && (shipment.company === consigneeCode || shipment.company === report.consigneeName)) : shipments;
+      if (report?.key === "report-shipment") {
+        return <ShipmentSummarySections shipments={reportShipments} consignees={consignees} onEdit={openModal} onView={openShipmentDetails} onDelete={deleteShipmentFromList} />;
+      }
       return <ShipmentListPage eyebrow="REPORTS & ANALYTICS" title={report?.label || "SHIPMENT"} subtitle={report?.key === "report-cleared" ? "Cleared shipment records." : report?.consigneeName ? `Cleared shipment records for ${report.consigneeName}.` : "All shipment records."} rows={reportShipments} mode="payments" consignees={consignees} onEdit={openModal} onView={openShipmentDetails} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} showAdd={false} footer="shipment records" />;
     }
     if (active === "companies") return <><PageTitle eyebrow="CONSIGNEES" title="Consignee reports" subtitle="A clear view of imports and clearance progress for each consignee." />{error && <div className="inline-error">{error}</div>}<ConsigneeReports analytics={analytics} shipments={shipments} consignees={consignees} onEdit={openModal} onView={openShipmentDetails} /></>;
