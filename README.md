@@ -109,6 +109,11 @@ recent-shipment overview; the former standalone shipment register, tracking, pay
 and customs pages are not included in the navigation. The consignee selector includes
 FMJ, JD, RL, AOP and UB; the shipment's recipient name is recorded separately.
 
+The **SHIPMENT** report presents all shipment records together in sections matching the
+shipment workbook: **Under Clearing Shipment**, **TT SENT**, and **To be TT**. Records
+that do not match those workflow sections remain visible under **Other shipments**.
+Each section retains the existing web-app shipment table columns.
+
 Shipment payment terms support Letter of Credit (Sight or Usance, with days for Usance),
 100% Advance Payment by TT, DA from BL date (30/60/90/120 days), DP of Sight, and Open
 Account (30/45/60/90/120 days). Shipment value currency can be selected as USD, AED or RMB.
