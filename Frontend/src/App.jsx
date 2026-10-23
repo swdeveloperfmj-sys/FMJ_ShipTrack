@@ -272,7 +272,6 @@ function ShipmentActions({ shipment, onEdit, onView, onDelete }) {
   </div>;
 }
 
-
 function ShipmentTable({ rows, mode, onEdit, onView, onDelete, onAdd, onTTSent, onUnderClearing, onCleared, consignees = [] }) {
   if (!rows.length) return <EmptyState message={mode === "shipments" ? "No shipment records yet" : "No shipments found"} onAdd={onAdd} />;
   if (mode === "payment-cards") return (
