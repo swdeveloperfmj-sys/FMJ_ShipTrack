@@ -29,6 +29,8 @@ const shipmentSchema = new mongoose.Schema(
     consignee: { type: String, required: true, trim: true },
     description: { type: String, required: true, trim: true },
     transportMode: { type: String, enum: ["AIR", "SEA", ""], default: "" },
+    incoterm: { type: String, enum: ["CIP", "CPT", "FCA", "EXW", "CIF", "CFR", "FOB", ""], default: "" },
+    incotermLocation: { type: String, trim: true, default: "" },
     fclLcl: { type: String, enum: ["FCL", "LCL", ""], default: "" },
     containerSize: { type: String, enum: ["20FT", "40FT", ""], default: "" },
     remarks: { type: String, trim: true, default: "" },
@@ -128,6 +130,8 @@ const shipmentFields = [
   "consignee",
   "description",
   "transportMode",
+  "incoterm",
+  "incotermLocation",
   "fclLcl",
   "containerSize",
   "remarks",
@@ -440,6 +444,23 @@ function validateShipment(shipment) {
   }
   if (shipment.currency !== undefined && !/^[A-Z]{3}$/.test(shipment.currency)) {
     return "Currency must be a three-letter code.";
+  }
+  if (shipment.transportMode) {
+    const incotermsByMode = {
+      AIR: ["CIP", "CPT", "FCA", "EXW"],
+      SEA: ["CIF", "CFR", "FOB", "EXW"],
+    };
+    if (!incotermsByMode[shipment.transportMode]?.includes(shipment.incoterm)) {
+      return "Select a valid Incoterm for the transport mode.";
+    }
+    const colomboTerms = ["CIP", "CPT", "CIF", "CFR"];
+    if (colomboTerms.includes(shipment.incoterm) && shipment.incotermLocation !== "Colombo, Sri Lanka") {
+      return "The selected Incoterm must use Colombo, Sri Lanka.";
+    }
+    if (["FCA", "FOB", "EXW"].includes(shipment.incoterm) &&
+      (typeof shipment.incotermLocation !== "string" || !shipment.incotermLocation.trim())) {
+      return "Select a country for the selected Incoterm.";
+    }
   }
   const paymentTerms = ["LETTER_OF_CREDIT", "ADVANCE_TT", "DA_BL", "DP_SIGHT", "OPEN_ACCOUNT"];
   if (shipment.paymentTerms && !paymentTerms.includes(shipment.paymentTerms)) {

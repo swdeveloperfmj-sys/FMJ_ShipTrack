@@ -70,6 +70,8 @@ const emptyShipment = {
   consignee: "",
   description: "",
   transportMode: "",
+  incoterm: "",
+  incotermLocation: "",
   fclLcl: "",
   containerSize: "",
   remarks: "",
@@ -252,19 +254,50 @@ function ShipmentActions({ shipment, onEdit, onDelete }) {
   </div>;
 }
 
-function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, consignees = [] }) {
+function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, consignees = [] }) {
   if (!rows.length) return <EmptyState message={mode === "shipments" ? "No shipment records yet" : "No shipments found"} onAdd={onAdd} />;
+  if (mode === "payment-cards") return (
+    <div className="payment-details-list">
+      {rows.map((shipment) => {
+        const incoterm = [shipment.incoterm, shipment.incotermLocation].filter(Boolean).join(" · ") || "—";
+        return <article className="payment-detail-card" key={shipment.id}>
+          <header className="payment-detail-card-head">
+            <div><span className="payment-detail-label">Import no.</span><strong>{shipment.importNo}</strong></div>
+            <div className="payment-detail-card-actions"><StatusBadge>{shipment.paymentStatus || "Pending"}</StatusBadge><ShipmentActions shipment={shipment} onEdit={onEdit} onDelete={onDelete} /></div>
+          </header>
+          <div className="payment-detail-grid">
+            <div><span>Consignee</span><strong>{shipment.consignee || shipment.company || "—"}</strong><small>{shipment.company || "—"}</small></div>
+            <div><span>Shipper</span><strong>{shipment.supplier || "—"}</strong></div>
+            <div><span>Item description</span><strong>{shipment.description || "—"}</strong></div>
+            <div><span>Transport</span><strong>{transportLabel(shipment)}</strong></div>
+            <div><span>Incoterm</span><strong>{incoterm}</strong></div>
+            <div><span>Payment terms</span><strong>{paymentTermsLabel(shipment)}</strong></div>
+            <div><span>Shipment value</span><strong>{currencyAmount(shipment.totalCost, shipment.currency)}</strong></div>
+            <div><span>ETD</span><strong>{dateLabel(shipment.etd)}</strong></div>
+            <div><span>ETA CMB</span><strong>{dateLabel(shipment.eta)}</strong></div>
+            <div><span>Arrival date</span><strong>{dateLabel(shipment.arrivalDate)}</strong></div>
+            <div><span>Delivery date</span><strong>{dateLabel(shipment.deliveryDate)}</strong></div>
+            <div><span>Duty (LKR)</span><strong>{decimalAmount(shipment.duty)}</strong></div>
+            <div><span>DO charges (LKR)</span><strong>{decimalAmount(shipment.doCharges)}</strong></div>
+            <div><span>Clearance status</span><strong>{shipment.clearanceStatus || "—"}</strong></div>
+            <div className="payment-detail-remarks"><span>Remarks</span><strong>{shipment.remarks || "—"}</strong></div>
+          </div>
+        </article>;
+      })}
+    </div>
+  );
   const headers = {
     shipments: ["Import No.", "Consignee", "Shipper", "Consignee name", "Description", "ETA", "Status", ""],
     tracking: ["Import No.", "Shipper", "ETD", "ETA", "Arrival", "Delivery", "Status", ""],
-    payments: ["Import No.", "Consignee", "Shipper", "Item description", "FCL/LCL", "Payment terms", "Value", "ETD", "ETA CMB", "Duty (LKR)", "DO (LKR)", "Remarks", ""],
+    payments: ["Import No.", "Consignee", "Shipper", "Item description", "Transport", "Incoterm", "Payment terms", "Value", "ETD", "ETA CMB", "Duty (LKR)", "DO (LKR)", "Clearance", "Remarks", ""],
     customs: ["Import No.", "Consignee", "Duty", "DO charges", "Clearance progress", "Clearance status", "Shipment status", ""],
   }[mode];
+  const visibleHeaders = onTTSent ? [...headers.slice(0, -1), "TT Sent", ""] : headers;
 
   return (
     <div className="table-scroll">
       <table>
-        <thead><tr>{headers.map((header, index) => <th key={`${header}-${index}`}>{header}</th>)}</tr></thead>
+        <thead><tr>{visibleHeaders.map((header, index) => <th key={`${header}-${index}`}>{header}</th>)}</tr></thead>
         <tbody>
           {rows.map((shipment) => (
             <tr key={shipment.id} onClick={mode === "payments" ? undefined : () => onEdit(shipment)} className={mode === "payments" ? "" : "clickable-row"}>
@@ -284,10 +317,13 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, consignees = [] })
                 <td><span className="import-id">{shipment.importNo}</span></td>
                 <td><ConsigneeBadge code={shipment.company} label={shipment.consignee || shipment.company || "—"} showName consignees={consignees} /></td><td>{shipment.supplier || "—"}</td>
                 <td className="description-cell">{shipment.description || "—"}</td><td>{transportLabel(shipment)}</td>
+                <td>{[shipment.incoterm, shipment.incotermLocation].filter(Boolean).join(" · ") || "—"}</td>
                 <td>{paymentTermsLabel(shipment)}</td><td>{currencyAmount(shipment.totalCost, shipment.currency)}</td>
                 <td>{dateLabel(shipment.etd)}</td><td>{dateLabel(shipment.eta)}</td>
                 <td>{decimalAmount(shipment.duty)}</td><td>{decimalAmount(shipment.doCharges)}</td>
+                <td>{shipment.clearanceStatus || "—"}</td>
                 <td className="description-cell">{shipment.remarks || "—"}</td>
+                {onTTSent && <td><button type="button" className="tt-sent-update-button" onClick={() => onTTSent(shipment)}>TT Sent</button></td>}
               </>}
               {mode === "customs" && <>
                 <td><span className="import-id">{shipment.importNo}</span><small>{shipment.supplier}</small></td>
@@ -305,18 +341,18 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, consignees = [] })
   );
 }
 
-function ShipmentListPage({ eyebrow, title, subtitle, rows, mode = "shipments", consignees, onEdit, onDelete, onAdd, footer }) {
+function ShipmentListPage({ eyebrow, title, subtitle, rows, mode = "shipments", consignees, onEdit, onDelete, onAdd, onTTSent, showAdd = true, footer }) {
   return <>
-    <PageTitle eyebrow={eyebrow} title={title} subtitle={subtitle} action={<button className="button primary" onClick={onAdd}><Plus size={17} /> Add shipment</button>} />
+    <PageTitle eyebrow={eyebrow} title={title} subtitle={subtitle} action={showAdd ? <button className="button primary" onClick={onAdd}><Plus size={17} /> Add shipment</button> : undefined} />
     <section className="panel table-panel">
       <div className="table-toolbar"><div className="table-title"><h2>{title}</h2><span className="count-pill">{rows.length}</span></div></div>
-      <ShipmentTable rows={rows} mode={mode} onEdit={onEdit} onDelete={onDelete} onAdd={onAdd} consignees={consignees} />
+      <ShipmentTable rows={rows} mode={mode} onEdit={onEdit} onDelete={onDelete} onAdd={showAdd ? onAdd : undefined} onTTSent={onTTSent} consignees={consignees} />
       <div className="table-footer"><span><strong>{rows.length}</strong> {footer || "shipments"}</span><span>Data saved automatically</span></div>
     </section>
   </>;
 }
 
-function ShipmentModal({ initial, consignees, currencies, onClose, onSave }) {
+function ShipmentModal({ initial, consignees, countries, currencies, onClose, onSave }) {
   const [form, setForm] = useState(() => ({
     ...emptyShipment,
     ...(initial || {}),
@@ -387,7 +423,14 @@ function ShipmentModal({ initial, consignees, currencies, onClose, onSave }) {
               {form.paymentTerms === "LETTER_OF_CREDIT" && form.paymentTermType === "Usance" && <label className="shipment-field shipment-field--conditional">Usance days<input name="paymentTermDays" type="number" min="1" max="365" value={form.paymentTermDays} onChange={change} required /></label>}
               {form.paymentTerms === "DA_BL" && <label className="shipment-field shipment-field--conditional">DA days<select name="paymentTermDays" value={form.paymentTermDays} onChange={change} required><option value="">Select days</option>{[30, 60, 90, 120].map((days) => <option key={days} value={days}>{days} days from BL</option>)}</select></label>}
               {form.paymentTerms === "OPEN_ACCOUNT" && <label className="shipment-field shipment-field--conditional">Open account days<select name="paymentTermDays" value={form.paymentTermDays} onChange={change} required><option value="">Select days</option>{[30, 45, 60, 90, 120].map((days) => <option key={days} value={days}>{days} days</option>)}</select></label>}
-              <label className="shipment-field shipment-field--mode">Transport Mode<select name="transportMode" value={form.transportMode} onChange={(event) => setForm((current) => ({ ...current, transportMode: event.target.value, fclLcl: "", containerSize: "" }))} required={!initial}><option value="">Select AIR/SEA</option><option value="AIR">AIR</option><option value="SEA">SEA</option></select></label>
+              <label className="shipment-field shipment-field--mode">Transport Mode<select name="transportMode" value={form.transportMode} onChange={(event) => setForm((current) => ({ ...current, transportMode: event.target.value, incoterm: "", incotermLocation: "", fclLcl: "", containerSize: "" }))} required={!initial}><option value="">Select AIR/SEA</option><option value="AIR">AIR</option><option value="SEA">SEA</option></select></label>
+              {form.transportMode && <label className="shipment-field shipment-field--conditional">Incoterm<select name="incoterm" value={form.incoterm} onChange={(event) => {
+                const incoterm = event.target.value;
+                const colomboTerms = ["CIP", "CPT", "CIF", "CFR"];
+                setForm((current) => ({ ...current, incoterm, incotermLocation: colomboTerms.includes(incoterm) ? "Colombo, Sri Lanka" : "" }));
+              }} required><option value="">Select Incoterm</option>{(form.transportMode === "AIR" ? ["CIP", "CPT", "FCA", "EXW"] : ["CIF", "CFR", "FOB", "EXW"]).map((incoterm) => <option key={incoterm} value={incoterm}>{incoterm}</option>)}</select></label>}
+              {["CIP", "CPT", "CIF", "CFR"].includes(form.incoterm) && <label className="shipment-field shipment-field--conditional">Incoterm location<input value="Colombo, Sri Lanka" readOnly /></label>}
+              {["FCA", "FOB", "EXW"].includes(form.incoterm) && <label className="shipment-field shipment-field--conditional">Incoterm country<select name="incotermLocation" value={form.incotermLocation} onChange={change} required><option value="">Select a country</option>{form.incotermLocation && !countries.some((country) => country.name === form.incotermLocation) && <option value={form.incotermLocation}>{form.incotermLocation} (existing)</option>}{countries.map((country) => <option key={country.id} value={country.name}>{country.name}</option>)}</select></label>}
               {form.transportMode === "SEA" && <label className="shipment-field shipment-field--conditional">FCL/LCL<select name="fclLcl" value={form.fclLcl} onChange={(event) => setForm((current) => ({ ...current, fclLcl: event.target.value, containerSize: "" }))} required><option value="">Select FCL/LCL</option><option value="FCL">FCL</option><option value="LCL">LCL</option></select></label>}
               {form.transportMode === "SEA" && form.fclLcl === "FCL" && <label className="shipment-field shipment-field--conditional">Container Size<select name="containerSize" value={form.containerSize} onChange={change} required><option value="">Select size</option><option value="20FT">20FT</option><option value="40FT">40FT</option></select></label>}
               <label className="shipment-field shipment-field--currency">Currency<select name="currency" value={form.currency} onChange={change} required>
@@ -401,8 +444,8 @@ function ShipmentModal({ initial, consignees, currencies, onClose, onSave }) {
               <label className="shipment-field shipment-field--date">ETA CMB<input name="eta" type="date" value={form.eta} onChange={change} /></label>
               <label className="shipment-field shipment-field--amount">Duty (LKR)<input name="duty" type="number" min="0" step="0.01" value={form.duty} onChange={change} /></label>
               <label className="shipment-field shipment-field--amount">DO (LKR)<input name="doCharges" type="number" min="0" step="0.01" value={form.doCharges} onChange={change} /></label>
-              <label className="shipment-field shipment-field--conditional">Shipment status<select name="status" value={form.status} onChange={change}>{shipmentStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
-              <label className="shipment-field shipment-field--conditional">Payment status<select name="paymentStatus" value={form.paymentStatus} onChange={change}>{paymentStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
+              {initial && <label className="shipment-field shipment-field--conditional">Shipment status<select name="status" value={form.status} onChange={change}>{shipmentStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>}
+              {initial && <label className="shipment-field shipment-field--conditional">Payment status<select name="paymentStatus" value={form.paymentStatus} onChange={change}>{paymentStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>}
               <label className="form-wide">Remarks<textarea name="remarks" value={form.remarks} onChange={change} rows={3} maxLength={1000} /></label>
             </div>
           </div>
@@ -420,6 +463,46 @@ function ShipmentModal({ initial, consignees, currencies, onClose, onSave }) {
       </section>
     </div>
   );
+}
+
+function TTSentDateModal({ shipment, onClose, onSave }) {
+  const [etd, setEtd] = useState(shipment.etd || "");
+  const [eta, setEta] = useState(shipment.eta || "");
+  const [remarks, setRemarks] = useState(shipment.remarks || "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(event) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      await onSave(shipment, etd, eta, remarks);
+      onClose();
+    } catch (saveError) {
+      setError(saveError.message || "Unable to update TT Sent dates.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="shipment-modal tt-sent-date-modal" role="dialog" aria-modal="true" aria-labelledby="tt-sent-date-modal-title">
+      <div className="modal-head"><div><div className="eyebrow">TT SENT</div><h2 id="tt-sent-date-modal-title">Mark payment as TT Sent</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Close"><X size={20} /></button></div>
+      <form onSubmit={submit}>
+        <div className="form-section">
+          <p className="tt-sent-import">Import no. <strong>{shipment.importNo}</strong></p>
+          <div className="form-grid">
+            <label>ETD<input type="date" value={etd} onChange={(event) => setEtd(event.target.value)} /></label>
+            <label>ETA CMB<input type="date" value={eta} onChange={(event) => setEta(event.target.value)} /></label>
+          </div>
+          <label className="tt-sent-remarks">Existing remarks<textarea value={remarks} onChange={(event) => setRemarks(event.target.value)} rows={4} maxLength={1000} placeholder="Add remarks" /></label>
+        </div>
+        {error && <div className="form-error">{error}</div>}
+        <div className="modal-footer"><button type="button" className="button secondary" onClick={onClose}>Cancel</button><button type="submit" className="button primary" disabled={saving}>{saving ? "Saving…" : "Mark TT Sent"}</button></div>
+      </form>
+    </section>
+  </div>;
 }
 
 function Dashboard({ shipments, consignees, analytics, onNavigate, onEdit, onAdd }) {
@@ -851,6 +934,7 @@ export default function App() {
   const [currencies, setCurrencies] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [modalShipment, setModalShipment] = useState(undefined);
+  const [ttSentDateShipment, setTtSentDateShipment] = useState(undefined);
   const [modalConsignee, setModalConsignee] = useState(undefined);
   const [modalCountry, setModalCountry] = useState(undefined);
   const [modalCurrency, setModalCurrency] = useState(undefined);
@@ -976,6 +1060,12 @@ export default function App() {
     }
   }
 
+  async function saveTTSentDates(shipment, etd, eta, remarks) {
+    await api.updateShipment(shipment.id, { ...shipment, etd, eta, remarks, paymentStatus: "Paid" });
+    setNotice("Shipment marked as TT Sent");
+    await refresh();
+  }
+
   async function saveConsignee(consignee, id, remove = false) {
     if (remove) {
       await api.deleteConsignee(id);
@@ -1065,22 +1155,22 @@ export default function App() {
             <label className="filter-select"><select value={ttFilters.fclLcl} onChange={(event) => setTtFilters((current) => ({ ...current, fclLcl: event.target.value }))} aria-label="Filter by FCL or LCL"><option value="">FCL / LCL</option><option value="FCL">FCL</option><option value="LCL">LCL</option></select></label>
             <button className="button secondary export-button" onClick={() => exportPendingTTToExcel(filteredPendingTTShipments)} disabled={!filteredPendingTTShipments.length}><ArrowDownToLine size={15} /> Export Excel</button>
           </div></div>
-          <ShipmentTable rows={filteredPendingTTShipments} mode="payments" onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} consignees={consignees} />
+          <ShipmentTable rows={filteredPendingTTShipments} mode="payments" onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} onTTSent={setTtSentDateShipment} consignees={consignees} />
           <div className="table-footer"><span><strong>{filteredPendingTTShipments.length}</strong> of {pendingTTShipments.length} shipments awaiting Advance TT</span><span>Data saved automatically</span></div>
         </section>
       </section>;
     }
     if (active === "tt-sent") {
       const ttSentShipments = shipments.filter((shipment) => shipment.paymentMethod === "Advance TT" && shipment.paymentStatus === "Paid");
-      return <ShipmentListPage eyebrow="PAYMENTS" title="TT Sent" subtitle="Advance TT shipments whose payment has been sent." rows={ttSentShipments} mode="payments" consignees={consignees} onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} footer="Advance TT payments sent" />;
+      return <ShipmentListPage eyebrow="PAYMENTS" title="TT Sent" subtitle="Advance TT shipments whose payment has been sent." rows={ttSentShipments} mode="payments" consignees={consignees} onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} showAdd={false} footer="Advance TT payments sent" />;
     }
     if (active === "under-clearing") {
       const underClearingShipments = shipments.filter((shipment) => shipment.status === "Under Clearing");
-      return <ShipmentListPage eyebrow="CLEARANCE" title="Under Clearing Shipments" subtitle="Shipments currently progressing through customs clearance." rows={underClearingShipments} consignees={consignees} onEdit={openModal} onAdd={() => openModal(null)} footer="shipments under clearing" />;
+      return <ShipmentListPage eyebrow="CLEARANCE" title="Under Clearing Shipments" subtitle="Shipments currently progressing through customs clearance." rows={underClearingShipments} consignees={consignees} onEdit={openModal} onAdd={() => openModal(null)} showAdd={false} footer="shipments under clearing" />;
     }
     if (active === "cleared-shipments") {
       const clearedShipments = shipments.filter((shipment) => shipment.status === "Cleared");
-      return <ShipmentListPage eyebrow="CLEARANCE" title="Cleared Shipments" subtitle="Shipments that have completed customs clearance." rows={clearedShipments} consignees={consignees} onEdit={openModal} onAdd={() => openModal(null)} footer="cleared shipments" />;
+      return <ShipmentListPage eyebrow="CLEARANCE" title="Cleared Shipments" subtitle="Shipments that have completed customs clearance." rows={clearedShipments} consignees={consignees} onEdit={openModal} onAdd={() => openModal(null)} showAdd={false} footer="cleared shipments" />;
     }
     if (active === "companies") return <><PageTitle eyebrow="CONSIGNEES" title="Consignee reports" subtitle="A clear view of imports and clearance progress for each consignee." />{error && <div className="inline-error">{error}</div>}<ConsigneeReports analytics={analytics} shipments={shipments} consignees={consignees} onEdit={openModal} /></>;
     if (active === "consignees") return <><PageTitle eyebrow="DIRECTORY" title="Consignees" subtitle="Create and manage the consignee records assigned to your shipments." action={<button className="button primary" onClick={() => setModalConsignee(null)}><Plus size={17} /> Create consignee</button>} />{error && <div className="inline-error">{error}</div>}<ConsigneeDirectory consignees={consignees} shipments={shipments} onEdit={setModalConsignee} onAdd={() => setModalConsignee(null)} /></>;
@@ -1132,7 +1222,8 @@ export default function App() {
         </main>
       </div>
       {sidebarOpen && <button className="sidebar-overlay" aria-label="Close navigation" onClick={() => setSidebarOpen(false)} />}
-      {modalShipment !== undefined && <ShipmentModal initial={modalShipment} consignees={consigneeOptions} currencies={currencies} onClose={() => setModalShipment(undefined)} onSave={saveShipment} />}
+      {modalShipment !== undefined && <ShipmentModal initial={modalShipment} consignees={consigneeOptions} countries={countries} currencies={currencies} onClose={() => setModalShipment(undefined)} onSave={saveShipment} />}
+      {ttSentDateShipment !== undefined && <TTSentDateModal shipment={ttSentDateShipment} onClose={() => setTtSentDateShipment(undefined)} onSave={saveTTSentDates} />}
       {modalConsignee !== undefined && <ConsigneeModal initial={modalConsignee} onClose={() => setModalConsignee(undefined)} onSave={saveConsignee} />}
       {modalCountry !== undefined && <CountryModal initial={modalCountry} onClose={() => setModalCountry(undefined)} onSave={saveCountry} />}
       {modalCurrency !== undefined && <CurrencyModal initial={modalCurrency} onClose={() => setModalCurrency(undefined)} onSave={saveCurrency} />}

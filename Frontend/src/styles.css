@@ -200,6 +200,23 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .tt-payments-panel th { padding-right: 9px; padding-left: 9px; }
 .tt-payments-panel td { padding-right: 9px; padding-left: 9px; }
 .tt-payments-panel th:first-child,.tt-payments-panel td:first-child { padding-left: 14px; }
+.tt-sent-update-button { min-height: 27px; padding: 0 9px; border: 1px solid #b9d1f5; border-radius: 5px; background: #eff6ff; color: #2865bd; font-size: 9px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+.tt-sent-update-button:hover { border-color: #6e9fe3; background: #e1eeff; }
+.tt-sent-date-modal { width: min(460px, 100%); }
+.tt-sent-import { margin: 0 0 15px; color: #778394; font-size: 10px; }.tt-sent-import strong { margin-left: 4px; color: #39485c; }
+.tt-sent-remarks { display: flex; flex-direction: column; gap: 6px; margin-top: 16px; color: #8290a0; font-size: 9px; font-weight: 700; text-transform: uppercase; }
+.tt-sent-remarks textarea { width: 100%; min-height: 82px; padding: 8px 9px; border: 1px solid #e6ebf2; border-radius: 6px; outline: 0; background: #f8fafc; color: #536174; font: inherit; font-size: 10px; font-weight: 400; line-height: 1.5; resize: vertical; text-transform: none; }
+.tt-sent-remarks textarea:focus { border-color: #7da6e8; box-shadow: 0 0 0 3px #e8f0ff; }
+.payment-details-list { display: grid; gap: 12px; padding: 14px; background: #f8fafc; }
+.payment-detail-card { overflow: hidden; border: 1px solid #e4e9f0; border-radius: 9px; background: #fff; }
+.payment-detail-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-bottom: 1px solid #edf0f4; }
+.payment-detail-label,.payment-detail-grid span { display: block; color: #8a96a5; font-size: 9px; font-weight: 600; }
+.payment-detail-card-head strong { display: block; margin-top: 3px; color: #30405a; font-size: 12px; }
+.payment-detail-card-actions { display: flex; align-items: center; gap: 8px; }
+.payment-detail-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px 18px; padding: 14px; }
+.payment-detail-grid strong { display: block; margin-top: 4px; color: #455467; font-size: 10px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.payment-detail-grid small { display: block; margin-top: 2px; color: #9aa4b1; font-size: 9px; }
+.payment-detail-remarks { grid-column: 1 / -1; padding-top: 2px; }
 .empty-state { display: flex; min-height: 180px; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #9ca6b3; }
 .empty-state svg { color: #b0bac7; }.empty-state strong { color: #5d697a; font-size: 12px; }.empty-state span { font-size: 10px; }
 .empty-add-button { margin-top: 5px; }
@@ -347,6 +364,7 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
   .table-toolbar { align-items: flex-start; flex-direction: column; }
   .table-actions { width: 100%; flex-wrap: wrap; }
   .tt-table-actions { margin-left: 0; justify-content: flex-start; }
+  .payment-detail-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
   .table-search { flex: 1; min-width: 145px; }
   .table-search input { width: 100%; min-width: 0; }
   .filter-select { flex: 1; justify-content: center; }
@@ -478,6 +496,15 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .app-shell[data-theme="dark"] .progress-copy { color: #d5deea; }
 .app-shell[data-theme="dark"] .company-tag { color: #c0cde0; }
 .app-shell[data-theme="dark"] .company-avatar { background: #2a3a51; color: #acc6ef; }
+.app-shell[data-theme="dark"] .payment-details-list { background: #172131; }
+.app-shell[data-theme="dark"] .payment-detail-card { border-color: #344155; background: #1b2636; }
+.app-shell[data-theme="dark"] .payment-detail-card-head { border-color: #2a3546; }
+.app-shell[data-theme="dark"] .payment-detail-card-head strong,
+.app-shell[data-theme="dark"] .payment-detail-grid strong { color: #d5deea; }
+.app-shell[data-theme="dark"] .payment-detail-label,
+.app-shell[data-theme="dark"] .payment-detail-grid span { color: #9eabbd; }
+.app-shell[data-theme="dark"] .tt-sent-remarks textarea { border-color: #344155; background: #172131; color: #d5deea; }
+.app-shell[data-theme="dark"] .tt-sent-import strong { color: #d5deea; }
 .app-shell[data-theme="dark"] .consignee-color-avatar { background: color-mix(in srgb, var(--consignee-color), #1b2636 78%); color: color-mix(in srgb, var(--consignee-color), white 35%); }
 .app-shell[data-theme="dark"] .company-progress { background: #344155; }
 .app-shell[data-theme="dark"] .help-icon,
