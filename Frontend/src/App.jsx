@@ -29,6 +29,7 @@ import {
   Moon,
   Sun,
   TrendingUp,
+  Upload,
   X,
 } from "lucide-react";
 import * as XLSX from "xlsx";
@@ -104,6 +105,85 @@ const emptyShipment = {
   documents: Object.fromEntries(documentTypes.map((name) => [name, "Pending"])),
 };
 
+const importHeaderAliases = {
+  "imp no": "importNo", "import no": "importNo", consignee: "consignee", shipper: "supplier",
+  "item descreption": "description", "item description": "description", "fcl lcl": "shippingType",
+  value: "value", etd: "etd", "eta cmb": "eta", duty: "duty", do: "doCharges", remarks: "remarks",
+};
+const normalizeImportHeader = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const importText = (value) => value === null || value === undefined ? "" : String(value).trim();
+const importDate = (value) => {
+  if (!value) return "";
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+  if (typeof value === "number") {
+    const parsed = XLSX.SSF.parse_date_code(value);
+    return parsed ? `${parsed.y}-${String(parsed.m).padStart(2, "0")}-${String(parsed.d).padStart(2, "0")}` : "";
+  }
+  const text = importText(value);
+  const dmy = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
+};
+const importAmount = (value) => Number(String(value || "").replace(/[^0-9.-]/g, "")) || 0;
+const importValue = (value) => {
+  const text = importText(value).toUpperCase();
+  const match = text.match(/([A-Z]{3})\s*\.?\s*([0-9][0-9,]*(?:\.\d+)?)/);
+  return { currency: match?.[1] || "USD", totalCost: match ? Number(match[2].replaceAll(",", "")) : importAmount(value) };
+};
+
+function parseShipmentWorkbook(file, consignees, existingShipments) {
+  const workbook = XLSX.read(file, { type: "array", cellDates: true });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: true });
+  const headerIndex = rows.findIndex((row) => row.some((cell) => normalizeImportHeader(cell) === "imp no"));
+  if (headerIndex < 0) throw new Error('Could not find the "Imp No." header row in this workbook.');
+  const headers = rows[headerIndex].map((header) => importHeaderAliases[normalizeImportHeader(header)] || "");
+  const sourceTitle = rows.slice(0, headerIndex).flat().map(importText).join(" ").toLowerCase();
+  let importSection = sourceTitle.includes("cleared") ? "cleared" : sourceTitle.includes("under clearing") ? "under-clearing" : sourceTitle.includes("tt sent") ? "tt-sent" : "to-be-tt";
+  const existingImportNos = new Set(existingShipments.map((shipment) => String(shipment.importNo).trim().toUpperCase()));
+  const workbookImportNos = new Set();
+  return rows.slice(headerIndex + 1).map((row, index) => {
+    const rowText = row.map(importText).join(" ").toLowerCase();
+    if (/^\s*tt\s+sent\s*$/.test(rowText)) { importSection = "tt-sent"; return null; }
+    if (/^\s*to\s+be\s+tt\s*$/.test(rowText)) { importSection = "to-be-tt"; return null; }
+    if (/^\s*under\s+clearing\s+shipment\s*$/.test(rowText)) { importSection = "under-clearing"; return null; }
+    if (/^\s*cleared(?:\s+shipments?)?\s*$/.test(rowText)) { importSection = "cleared"; return null; }
+    const values = Object.fromEntries(headers.map((key, column) => [key, row[column]]).filter(([key]) => key));
+    if (!importText(values.importNo) && !importText(values.supplier) && !importText(values.description)) return null;
+    const errors = [];
+    const importNo = importText(values.importNo);
+    const consigneeName = importText(values.consignee);
+    const consignee = consignees.find((item) => item.code.toLowerCase() === consigneeName.toLowerCase() || item.name.toLowerCase() === consigneeName.toLowerCase());
+    if (!importNo) errors.push("Missing import number");
+    const normalizedImportNo = importNo.toUpperCase();
+    if (existingImportNos.has(normalizedImportNo)) errors.push("Import number already exists");
+    if (importNo && workbookImportNos.has(normalizedImportNo)) errors.push("Import number is repeated in this workbook");
+    if (importNo) workbookImportNos.add(normalizedImportNo);
+    if (!consignee) errors.push(`Consignee not found: ${consigneeName || "blank"}`);
+    if (!importText(values.supplier)) errors.push("Missing shipper");
+    if (!importText(values.description)) errors.push("Missing item description");
+    const shippingType = importText(values.shippingType).toUpperCase();
+    const transportMode = shippingType.includes("AIR") ? "AIR" : "SEA";
+    const fclLcl = shippingType.includes("FCL") ? "FCL" : shippingType.includes("LCL") ? "LCL" : "";
+    // Some historical schedules contain the common "ceared" typo.  Correct it
+    // only while importing a Cleared section so it continues to satisfy the
+    // workflow's explicit cleared-remark rule without losing the full note.
+    let remarks = importText(values.remarks);
+    if (importSection === "cleared") remarks = remarks.replace(/\bceared\b/gi, "cleared");
+    const termMatch = remarks.match(/\b(CIP|CPT|FCA|EXW|CIF|CFR|FOB|C&F)\b/i);
+    const incoterm = termMatch?.[1]?.toUpperCase() === "C&F" ? "CFR" : termMatch?.[1]?.toUpperCase() || "";
+    const validTerms = transportMode === "AIR" ? ["CIP", "CPT", "FCA", "EXW"] : ["CIF", "CFR", "FOB", "EXW"];
+    if (!validTerms.includes(incoterm)) errors.push(`Could not identify a valid ${transportMode} Incoterm from remarks`);
+    const locationMatch = remarks.match(/\b(?:FCA|EXW|FOB)\s*[- ]\s*([A-Za-z]+)/i);
+    const incotermLocation = ["CIP", "CPT", "CIF", "CFR"].includes(incoterm) ? "Colombo, Sri Lanka" : locationMatch?.[1] || "";
+    if (["FCA", "FOB", "EXW"].includes(incoterm) && !incotermLocation) errors.push("Missing Incoterm country/location");
+    const { currency, totalCost } = importValue(values.value);
+    const workflow = importSection === "cleared" ? { status: "Cleared", clearanceStatus: "Cleared", paymentStatus: "Paid" } : importSection === "under-clearing" ? { status: "Under Clearing", paymentStatus: "Paid" } : importSection === "tt-sent" ? { status: "Pending", paymentStatus: "Paid" } : { status: "Pending", paymentStatus: "Pending" };
+    return { row: headerIndex + index + 2, errors, shipment: { ...emptyShipment, importNo, company: consignee?.code || "", consignee: consignee?.name || consigneeName, supplier: importText(values.supplier), description: importText(values.description), transportMode, fclLcl, incoterm, incotermLocation, currency, totalCost, etd: importDate(values.etd), eta: importDate(values.eta), duty: importAmount(values.duty), doCharges: importAmount(values.doCharges), remarks, paymentMethod: "Advance TT", paymentTerms: "ADVANCE_TT", ...workflow } };
+  }).filter(Boolean);
+}
+
 const money = (value) =>
   new Intl.NumberFormat("en-LK", {
     style: "currency",
@@ -120,14 +200,16 @@ const decimalAmount = (value) =>
 
 const currencyAmount = (value, currency) => `${currency || "LKR"}.${decimalAmount(value)}`;
 
-const dateLabel = (value) =>
+const formatDate = (value) =>
   value
     ? new Date(`${value}T00:00:00`).toLocaleDateString("en-GB", {
         day: "2-digit",
-        month: "short",
+        month: "2-digit",
         year: "numeric",
       })
-    : "—";
+    : "";
+
+const dateLabel = (value) => formatDate(value) || "—";
 
 const openDatePicker = (event) => {
   try {
@@ -136,6 +218,13 @@ const openDatePicker = (event) => {
     // Browsers without showPicker keep their native date-input behavior.
   }
 };
+
+function DatePickerField({ name, value, onChange, label }) {
+  return <span className="date-picker-field">
+    <input name={name} type="date" value={value} onClick={openDatePicker} onChange={onChange} aria-label={label} />
+    <span aria-hidden="true">{formatDate(value) || "dd/mm/yyyy"}</span>
+  </span>;
+}
 
 const paymentTermsLabel = (shipment) => {
   const labels = {
@@ -183,7 +272,7 @@ function exportPendingTTToExcel(shipments) {
   ];
   for (let index = 2; index <= lastRow; index += 1) {
     for (const column of ["H", "K", "L"]) if (worksheet[`${column}${index}`]) worksheet[`${column}${index}`].z = "0.00";
-    for (const column of ["I", "J"]) if (worksheet[`${column}${index}`]) worksheet[`${column}${index}`].z = "yyyy-mm-dd";
+    for (const column of ["I", "J"]) if (worksheet[`${column}${index}`]) worksheet[`${column}${index}`].z = "dd/mm/yyyy";
   }
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Pending TT");
@@ -358,26 +447,57 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
   );
 }
 
+const emptyShipmentFilters = { search: "", consignee: "", transportMode: "", fclLcl: "" };
+
+function filterShipmentRows(rows, filters) {
+  const search = filters.search.trim().toLowerCase();
+  return rows.filter((shipment) => {
+    const searchable = [shipment.importNo, shipment.consignee, shipment.company, shipment.supplier, shipment.description, shipment.remarks]
+      .filter(Boolean).join(" ").toLowerCase();
+    return (!search || searchable.includes(search))
+      && (!filters.consignee || shipment.company === filters.consignee)
+      && (!filters.transportMode || shipment.transportMode === filters.transportMode)
+      && (!filters.fclLcl || shipment.fclLcl === filters.fclLcl);
+  });
+}
+
+function ShipmentFilterControls({ filters, onChange, consignees, exportAction, exportDisabled }) {
+  const update = (field, value) => onChange((current) => ({ ...current, [field]: value }));
+  const hasFilters = Object.values(filters).some(Boolean);
+  return <div className="table-actions tt-table-actions">
+    <label className="table-search"><input value={filters.search} onChange={(event) => update("search", event.target.value)} placeholder="Search shipments" aria-label="Search shipments" /></label>
+    <label className="filter-select"><select value={filters.consignee} onChange={(event) => update("consignee", event.target.value)} aria-label="Filter by consignee"><option value="">All consignees</option>{consignees.map((consignee) => <option key={consignee.id} value={consignee.code}>{consignee.name}</option>)}</select></label>
+    <label className="filter-select"><select value={filters.transportMode} onChange={(event) => update("transportMode", event.target.value)} aria-label="Filter by transport mode"><option value="">All transport</option><option value="AIR">Air</option><option value="SEA">Sea</option></select></label>
+    <label className="filter-select"><select value={filters.fclLcl} onChange={(event) => update("fclLcl", event.target.value)} aria-label="Filter by FCL or LCL"><option value="">FCL / LCL</option><option value="FCL">FCL</option><option value="LCL">LCL</option></select></label>
+    {hasFilters && <button type="button" className="button secondary compact-filter-button" onClick={() => onChange(() => ({ ...emptyShipmentFilters }))}>Clear filters</button>}
+    {exportAction && <button className="button secondary export-button" onClick={exportAction} disabled={exportDisabled}><ArrowDownToLine size={15} /> Export Excel</button>}
+  </div>;
+}
+
 function ShipmentListPage({ eyebrow, title, subtitle, rows, mode = "shipments", consignees, onEdit, onDelete, onAdd, onTTSent, onUnderClearing, onCleared, showAdd = true, footer }) {
+  const [filters, setFilters] = useState(emptyShipmentFilters);
+  const filteredRows = filterShipmentRows(rows, filters);
   return <>
     <PageTitle eyebrow={eyebrow} title={title} subtitle={subtitle} action={showAdd ? <button className="button primary" onClick={onAdd}><Plus size={17} /> Add shipment</button> : undefined} />
     <section className="panel table-panel">
-      <div className="table-toolbar"><div className="table-title"><h2>{title}</h2><span className="count-pill">{rows.length}</span></div></div>
-      <ShipmentTable rows={rows} mode={mode} onEdit={onEdit} onDelete={onDelete} onAdd={showAdd ? onAdd : undefined} onTTSent={onTTSent} onUnderClearing={onUnderClearing} onCleared={onCleared} consignees={consignees} />
-      <div className="table-footer"><span><strong>{rows.length}</strong> {footer || "shipments"}</span><span>Data saved automatically</span></div>
+      <div className="table-toolbar"><div className="table-title"><h2>{title}</h2><span className="count-pill">{filteredRows.length}</span></div><ShipmentFilterControls filters={filters} onChange={setFilters} consignees={consignees} /></div>
+      <ShipmentTable rows={filteredRows} mode={mode} onEdit={onEdit} onDelete={onDelete} onAdd={showAdd ? onAdd : undefined} onTTSent={onTTSent} onUnderClearing={onUnderClearing} onCleared={onCleared} consignees={consignees} />
+      <div className="table-footer"><span><strong>{filteredRows.length}</strong> of {rows.length} {footer || "shipments"}</span><span>Data saved automatically</span></div>
     </section>
   </>;
 }
 
 function ShipmentSummarySections({ shipments, consignees, onEdit, onDelete }) {
-  const underClearing = shipments.filter((shipment) => shipment.status === "Under Clearing");
-  const ttSent = shipments.filter((shipment) =>
+  const [filters, setFilters] = useState(emptyShipmentFilters);
+  const filteredShipments = filterShipmentRows(shipments, filters);
+  const underClearing = filteredShipments.filter((shipment) => shipment.status === "Under Clearing");
+  const ttSent = filteredShipments.filter((shipment) =>
     shipment.status !== "Under Clearing"
     && shipment.paymentMethod === "Advance TT"
     && shipment.paymentStatus === "Paid"
     && shipment.status === "Pending",
   );
-  const toBeTT = shipments.filter((shipment) =>
+  const toBeTT = filteredShipments.filter((shipment) =>
     shipment.status !== "Under Clearing"
     && shipment.paymentMethod === "Advance TT"
     && shipment.paymentStatus === "Pending",
@@ -390,6 +510,7 @@ function ShipmentSummarySections({ shipments, consignees, onEdit, onDelete }) {
 
   return <>
     <PageTitle eyebrow="REPORTS & ANALYTICS" title="SHIPMENT" subtitle="All shipment records, arranged in the same sections as the shipment workbook." />
+    <section className="panel table-panel shipment-summary-filter"><div className="table-toolbar"><div className="table-title"><h2>Filters</h2><span className="count-pill">{filteredShipments.length}</span></div><ShipmentFilterControls filters={filters} onChange={setFilters} consignees={consignees} /></div></section>
     <div className="shipment-summary-sections">
       {sections.map(([title, rows]) => <section className="panel table-panel" key={title}>
         <div className="table-toolbar"><div className="table-title"><h2>{title}</h2><span className="count-pill">{rows.length}</span></div></div>
@@ -488,8 +609,8 @@ function ShipmentModal({ initial, consignees, countries, currencies, onClose, on
                 {currencies.map((currency) => <option key={currency.id} value={currency.code}>{currency.code} — {currency.name}</option>)}
               </select></label>
               <label className="shipment-field shipment-field--amount">Value<input name="totalCost" type="number" min="0" step="0.01" value={form.totalCost} onChange={change} /></label>
-              <label className="shipment-field shipment-field--date">ETD<input name="etd" type="date" value={form.etd} onClick={openDatePicker} onChange={change} /></label>
-              <label className="shipment-field shipment-field--date">ETA CMB<input name="eta" type="date" value={form.eta} onClick={openDatePicker} onChange={change} /></label>
+              <label className="shipment-field shipment-field--date">ETD<DatePickerField name="etd" value={form.etd} onChange={change} label="ETD" /></label>
+              <label className="shipment-field shipment-field--date">ETA CMB<DatePickerField name="eta" value={form.eta} onChange={change} label="ETA CMB" /></label>
               <label className="shipment-field shipment-field--amount">Duty (LKR)<input name="duty" type="number" min="0" step="0.01" value={form.duty} onChange={change} /></label>
               <label className="shipment-field shipment-field--amount">DO (LKR)<input name="doCharges" type="number" min="0" step="0.01" value={form.doCharges} onChange={change} /></label>
               {initial && <label className="shipment-field shipment-field--conditional">Shipment status<select name="status" value={form.status} onChange={change}>{shipmentStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>}
@@ -511,6 +632,54 @@ function ShipmentModal({ initial, consignees, countries, currencies, onClose, on
       </section>
     </div>
   );
+}
+
+function ShipmentImportModal({ consignees, shipments, onClose, onImport }) {
+  const [rows, setRows] = useState([]);
+  const [fileName, setFileName] = useState("");
+  const [error, setError] = useState("");
+  const [importing, setImporting] = useState(false);
+  const validRows = rows.filter((item) => !item.errors.length);
+
+  async function selectFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setError("");
+    try {
+      setFileName(file.name);
+      setRows(parseShipmentWorkbook(await file.arrayBuffer(), consignees, shipments));
+    } catch (fileError) {
+      setRows([]);
+      setError(fileError.message || "Unable to read the workbook.");
+    }
+  }
+
+  async function importRows() {
+    setImporting(true);
+    setError("");
+    try {
+      await onImport(validRows.map((item) => item.shipment));
+      onClose();
+    } catch (importError) {
+      setError(importError.message || "Unable to import shipments.");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="shipment-modal shipment-import-modal" role="dialog" aria-modal="true" aria-labelledby="shipment-import-title">
+      <div className="modal-head"><div><div className="eyebrow">EXCEL IMPORT</div><h2 id="shipment-import-title">Import shipments</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Close"><X size={20} /></button></div>
+      <div className="shipment-import-body">
+        <p>Select the shipment workbook. The import reads the “Imp No.” table and saves only valid rows; the spreadsheet itself is not changed.</p>
+        <label className="shipment-import-file"><Upload size={17} /><span>{fileName || "Choose Excel file (.xlsx)"}</span><input type="file" accept=".xlsx,.xls" onChange={selectFile} /></label>
+        {!!rows.length && <div className="shipment-import-summary"><strong>{validRows.length} valid</strong><span>{rows.length - validRows.length} need attention</span></div>}
+        {!!rows.length && <div className="shipment-import-review"><table><thead><tr><th>Row</th><th>Import no.</th><th>Consignee</th><th>Result</th></tr></thead><tbody>{rows.map((item) => <tr key={item.row}><td>{item.row}</td><td>{item.shipment.importNo || "—"}</td><td>{item.shipment.consignee || "—"}</td><td className={item.errors.length ? "import-error-copy" : "import-valid-copy"}>{item.errors.length ? item.errors.join("; ") : "Ready to import"}</td></tr>)}</tbody></table></div>}
+        {error && <div className="form-error">{error}</div>}
+      </div>
+      <div className="modal-footer"><button type="button" className="button secondary" onClick={onClose}>Cancel</button><button type="button" className="button primary" disabled={!validRows.length || importing} onClick={importRows}>{importing ? "Importing…" : `Import ${validRows.length || ""} shipment${validRows.length === 1 ? "" : "s"}`}</button></div>
+    </section>
+  </div>;
 }
 
 function TTSentDateModal({ shipment, onClose, onSave }) {
@@ -541,8 +710,8 @@ function TTSentDateModal({ shipment, onClose, onSave }) {
         <div className="form-section">
           <p className="tt-sent-import">Import no. <strong>{shipment.importNo}</strong></p>
           <div className="form-grid">
-            <label>ETD<input type="date" value={etd} onClick={openDatePicker} onChange={(event) => setEtd(event.target.value)} /></label>
-            <label>ETA CMB<input type="date" value={eta} onClick={openDatePicker} onChange={(event) => setEta(event.target.value)} /></label>
+            <label>ETD<DatePickerField value={etd} onChange={(event) => setEtd(event.target.value)} label="ETD" /></label>
+            <label>ETA CMB<DatePickerField value={eta} onChange={(event) => setEta(event.target.value)} label="ETA CMB" /></label>
           </div>
           <label className="tt-sent-remarks">Existing remarks<textarea value={remarks} onChange={(event) => setRemarks(event.target.value)} rows={4} maxLength={1000} placeholder="Add remarks" /></label>
         </div>
@@ -631,11 +800,11 @@ function ClearedShipmentModal({ shipment, onClose, onSave }) {
   </div>;
 }
 
-function Dashboard({ shipments, consignees, analytics, onNavigate, onEdit, onAdd }) {
+function Dashboard({ shipments, consignees, analytics, onNavigate, onEdit, onAdd, onImport }) {
   const maxMonthly = Math.max(1, ...((analytics?.monthly || []).map((item) => item.shipments)));
   return (
     <>
-      <PageTitle eyebrow="OVERVIEW" title="Good morning, team" subtitle="Here's what's happening with your shipments today." />
+      <PageTitle eyebrow="OVERVIEW" title="Good morning, team" subtitle="Here's what's happening with your shipments today." action={<button className="button secondary" onClick={onImport}><Upload size={16} /> Import Excel</button>} />
       <section className="stat-grid">
         <StatCard label="Total shipments" value={analytics?.total ?? "—"} helper="Live records from MongoDB" icon={Ship} color="blue" />
         <StatCard label="Pending" value={analytics?.pending ?? "—"} helper="Awaiting next action" icon={Clock3} color="amber" />
@@ -1061,6 +1230,7 @@ export default function App() {
   const [currencies, setCurrencies] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [modalShipment, setModalShipment] = useState(undefined);
+  const [modalShipmentImport, setModalShipmentImport] = useState(false);
   const [ttSentDateShipment, setTtSentDateShipment] = useState(undefined);
   const [underClearingShipment, setUnderClearingShipment] = useState(undefined);
   const [clearedShipment, setClearedShipment] = useState(undefined);
@@ -1073,7 +1243,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
-  const [ttFilters, setTtFilters] = useState({ search: "", consignee: "", fclLcl: "" });
+  const [ttFilters, setTtFilters] = useState(emptyShipmentFilters);
   const accountMenuRef = useRef(null);
 
   const refresh = useCallback(async () => {
@@ -1181,6 +1351,20 @@ export default function App() {
     await refresh();
   }
 
+  async function importShipments(items) {
+    const failures = [];
+    for (const shipment of items) {
+      try {
+        await api.createShipment(shipment);
+      } catch (importError) {
+        failures.push(`${shipment.importNo}: ${importError.message}`);
+      }
+    }
+    await refresh();
+    if (failures.length) throw new Error(`${items.length - failures.length} shipment(s) imported. ${failures.join("; ")}`);
+    setNotice(`${items.length} shipment${items.length === 1 ? "" : "s"} imported successfully`);
+  }
+
   async function deleteShipmentFromList(shipment) {
     try {
       await saveShipment(null, shipment.id);
@@ -1274,29 +1458,17 @@ export default function App() {
   function renderContent() {
     if (loading) return <div className="loading-state"><span className="loader" />Loading shipment workspace…</div>;
     if (error && !shipments.length) return <div className="error-state"><strong>Unable to load shipments</strong><span>{error}</span><button className="button secondary" onClick={refresh}>Try again</button></div>;
-    if (active === "dashboard") return <Dashboard shipments={shipments} consignees={consignees} analytics={analytics} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} />;
+    if (active === "dashboard") return <Dashboard shipments={shipments} consignees={consignees} analytics={analytics} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} onImport={() => setModalShipmentImport(true)} />;
     if (active === "to-be-tt") {
       const pendingTTShipments = shipments.filter((shipment) =>
         shipment.paymentMethod === "Advance TT" && shipment.paymentStatus === "Pending",
       );
-      const search = ttFilters.search.trim().toLowerCase();
-      const filteredPendingTTShipments = pendingTTShipments.filter((shipment) => {
-        const searchable = [shipment.importNo, shipment.consignee, shipment.company, shipment.supplier, shipment.description]
-          .filter(Boolean).join(" ").toLowerCase();
-        return (!search || searchable.includes(search))
-          && (!ttFilters.consignee || shipment.company === ttFilters.consignee)
-          && (!ttFilters.fclLcl || shipment.fclLcl === ttFilters.fclLcl);
-      });
+      const filteredPendingTTShipments = filterShipmentRows(pendingTTShipments, ttFilters);
       return <section className="to-be-tt-page">
         <PageTitle eyebrow="PAYMENTS" title="To be TT" subtitle="Shipments awaiting Advance TT payment." action={<button className="button primary" onClick={() => openModal(null)}><Plus size={17} /> Add shipment</button>} />
         {error && <div className="inline-error">{error}</div>}
         <section className="panel table-panel tt-payments-panel">
-          <div className="table-toolbar"><div className="table-title"><h2>Pending TT payments</h2><span className="count-pill">{filteredPendingTTShipments.length}</span></div><div className="table-actions tt-table-actions">
-            <label className="table-search"><input value={ttFilters.search} onChange={(event) => setTtFilters((current) => ({ ...current, search: event.target.value }))} placeholder="Search shipments" aria-label="Search pending TT payments" /></label>
-            <label className="filter-select"><select value={ttFilters.consignee} onChange={(event) => setTtFilters((current) => ({ ...current, consignee: event.target.value }))} aria-label="Filter by consignee"><option value="">All consignees</option>{consigneeOptions.map((consignee) => <option key={consignee.id} value={consignee.code}>{consignee.name}</option>)}</select></label>
-            <label className="filter-select"><select value={ttFilters.fclLcl} onChange={(event) => setTtFilters((current) => ({ ...current, fclLcl: event.target.value }))} aria-label="Filter by FCL or LCL"><option value="">FCL / LCL</option><option value="FCL">FCL</option><option value="LCL">LCL</option></select></label>
-            <button className="button secondary export-button" onClick={() => exportPendingTTToExcel(filteredPendingTTShipments)} disabled={!filteredPendingTTShipments.length}><ArrowDownToLine size={15} /> Export Excel</button>
-          </div></div>
+          <div className="table-toolbar"><div className="table-title"><h2>Pending TT payments</h2><span className="count-pill">{filteredPendingTTShipments.length}</span></div><ShipmentFilterControls filters={ttFilters} onChange={setTtFilters} consignees={consigneeOptions} exportAction={() => exportPendingTTToExcel(filteredPendingTTShipments)} exportDisabled={!filteredPendingTTShipments.length} /></div>
           <ShipmentTable rows={filteredPendingTTShipments} mode="payments" onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} onTTSent={setTtSentDateShipment} consignees={consignees} />
           <div className="table-footer"><span><strong>{filteredPendingTTShipments.length}</strong> of {pendingTTShipments.length} shipments awaiting Advance TT</span><span>Data saved automatically</span></div>
         </section>
@@ -1330,7 +1502,7 @@ export default function App() {
     if (active === "countries") return <><PageTitle eyebrow="DIRECTORY" title="Countries & currencies" subtitle="Manage country and currency lists separately." action={<button className="button primary" title="Create country (F1)" onClick={() => setModalCountry(null)}><Plus size={17} /> Create country</button>} />{error && <div className="inline-error">{error}</div>}<CountryDirectory countries={countries} onEdit={setModalCountry} onAdd={() => setModalCountry(null)} /><CurrencyDirectory currencies={currencies} onEdit={setModalCurrency} onAdd={() => setModalCurrency(null)} /></>;
     if (active === "documents") return <><PageTitle eyebrow="PAPERWORK" title="Documents" subtitle="Track required shipping and customs documents in one place." />{error && <div className="inline-error">{error}</div>}<DocumentsView shipments={shipments} consignees={consignees} onEdit={openModal} /></>;
     if (active === "analytics") return <><PageTitle eyebrow="PERFORMANCE" title="Reports & analytics" subtitle="Monitor shipment delays, landed costs and monthly activity." />{error && <div className="inline-error">{error}</div>}<AnalyticsView analytics={analytics} /></>;
-    return <Dashboard shipments={shipments} consignees={consignees} analytics={analytics} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} />;
+    return <Dashboard shipments={shipments} consignees={consignees} analytics={analytics} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} onImport={() => setModalShipmentImport(true)} />;
   }
 
   if (!authState?.authenticated) {
@@ -1380,6 +1552,7 @@ export default function App() {
       </div>
       {sidebarOpen && <button className="sidebar-overlay" aria-label="Close navigation" onClick={() => setSidebarOpen(false)} />}
       {modalShipment !== undefined && <ShipmentModal initial={modalShipment} consignees={consigneeOptions} countries={countries} currencies={currencies} onClose={() => setModalShipment(undefined)} onSave={saveShipment} />}
+      {modalShipmentImport && <ShipmentImportModal consignees={consigneeOptions} shipments={shipments} onClose={() => setModalShipmentImport(false)} onImport={importShipments} />}
       {ttSentDateShipment !== undefined && <TTSentDateModal shipment={ttSentDateShipment} onClose={() => setTtSentDateShipment(undefined)} onSave={saveTTSentDates} />}
       {underClearingShipment !== undefined && <UnderClearingModal shipment={underClearingShipment} onClose={() => setUnderClearingShipment(undefined)} onSave={saveUnderClearingShipment} />}
       {clearedShipment !== undefined && <ClearedShipmentModal shipment={clearedShipment} onClose={() => setClearedShipment(undefined)} onSave={saveClearedShipment} />}

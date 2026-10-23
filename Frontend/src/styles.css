@@ -159,6 +159,8 @@ button { cursor: pointer; }
 .count-pill,.document-count { padding: 3px 7px; background: #f0f3f7; border-radius: 10px; color: #778293; font-size: 9px; font-weight: 600; }
 .table-actions { display: flex; align-items: center; gap: 8px; }
 .tt-table-actions { justify-content: flex-end; margin-left: auto; flex-wrap: wrap; }
+.compact-filter-button { height: 32px; padding: 0 10px; font-size: 10px; white-space: nowrap; }
+.shipment-summary-filter { margin-bottom: 14px; }
 .export-button:disabled { opacity: .55; cursor: not-allowed; }
 .table-search,.filter-select { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 9px; border: 1px solid #e8ebef; border-radius: 5px; color: #9099a6; }
 .table-search input { width: 145px; border: 0; outline: 0; color: var(--ink); font-size: 10px; }
@@ -276,6 +278,15 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .inline-error { margin-bottom: 13px; }
 .modal-backdrop { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; padding: 22px; background: #15243b70; backdrop-filter: blur(2px); }
 .shipment-modal { display: flex; width: min(700px, 100%); max-height: min(90vh, 900px); flex-direction: column; overflow: hidden; border: 1px solid #e6e9ee; border-radius: 12px; background: #fff; box-shadow: 0 22px 80px #14213a40; }
+.shipment-import-modal { width: min(760px, 100%); }
+.shipment-import-body { display: grid; gap: 14px; overflow-y: auto; padding: 18px 22px; }
+.shipment-import-body > p { margin: 0; color: #68778a; font-size: 10px; line-height: 1.55; }
+.shipment-import-file { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 74px; padding: 12px; border: 1px dashed #9bb9eb; border-radius: 7px; background: #f5f9ff; color: #2865bd; font-size: 11px; font-weight: 700; cursor: pointer; }
+.shipment-import-file input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.shipment-import-summary { display: flex; gap: 8px; align-items: center; font-size: 10px; }.shipment-import-summary strong { color: #25845f; }.shipment-import-summary span { color: #b56a3b; }
+.shipment-import-review { max-height: 290px; overflow: auto; border: 1px solid #e8edf3; border-radius: 7px; }
+.shipment-import-review table { min-width: 560px; }.shipment-import-review th { position: sticky; top: 0; }.shipment-import-review td { height: auto; padding-top: 9px; padding-bottom: 9px; white-space: normal; }
+.import-valid-copy { color: #25845f; }.import-error-copy { color: #bf5548; }
 .shipment-summary-sections { display: grid; gap: 16px; }
 .shipment-fullscreen-backdrop { padding: 0; }
 .shipment-fullscreen-backdrop .shipment-modal-fullscreen { width: 100%; height: 100%; max-height: 100vh; max-height: 100dvh; border: 0; border-radius: 0; }
@@ -309,6 +320,10 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .form-grid input,.form-grid select,.form-grid textarea { width: 100%; min-height: 34px; padding: 0 9px; border: 1px solid #e5e9ee; border-radius: 5px; outline: 0; background: #fff; color: #435065; font: inherit; font-size: 10px; }
 .form-grid input,.form-grid select { height: 34px; }
 .form-grid textarea { min-height: 64px; padding: 8px 9px; resize: vertical; }
+.date-picker-field { position: relative; display: block; width: 100%; height: 34px; }
+.form-grid .date-picker-field > input { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; min-height: 0; padding: 0; opacity: 0; cursor: pointer; }
+.date-picker-field > span { display: flex; align-items: center; width: 100%; height: 100%; padding: 0 9px; border: 1px solid #e5e9ee; border-radius: 5px; background: #fff; color: #435065; font-size: 10px; }
+.date-picker-field:focus-within > span { border-color: #7da6e8; box-shadow: 0 0 0 3px #e8f0ff; }
 .form-grid input:focus,.form-grid select:focus,.form-grid textarea:focus { border-color: #78a0e8; box-shadow: 0 0 0 2px #edf3ff; }
 .consignee-code-hint { align-self: flex-start; padding: 3px 7px; border: 1px solid #dce7fa; border-radius: 4px; background: #f2f6fd; color: #6c7b91; font-size: 9px; font-weight: 500; }
 .consignee-code-hint strong { margin-left: 4px; color: #2865db; font-size: 9px; font-weight: 700; }
@@ -437,6 +452,7 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .app-shell[data-theme="dark"] .stat-card,
 .app-shell[data-theme="dark"] .company-report-card,
 .app-shell[data-theme="dark"] .shipment-modal,
+.app-shell[data-theme="dark"] .shipment-import-modal,
 .app-shell[data-theme="dark"] .signout-dialog,
 .app-shell[data-theme="dark"] .toast {
   background: #1b2636;
@@ -489,6 +505,9 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .app-shell[data-theme="dark"] .form-grid textarea {
   color: #e4eaf2;
 }
+.app-shell[data-theme="dark"] .date-picker-field > span { border-color: #344155; background: #172131; color: #e4eaf2; }
+.app-shell[data-theme="dark"] .shipment-import-file { border-color: #466898; background: #1b2b40; color: #a9c5fb; }
+.app-shell[data-theme="dark"] .shipment-import-review { border-color: #344155; }
 .app-shell[data-theme="dark"] .filter-select select option { color: #111827; background: #fff; }
 .app-shell[data-theme="dark"] .form-grid input,
 .app-shell[data-theme="dark"] .form-grid select,

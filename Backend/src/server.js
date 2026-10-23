@@ -434,6 +434,10 @@ function shipmentInput(body) {
   );
 }
 
+function normalizeImportNo(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
 function validateShipment(shipment) {
   const requiredFields = ["importNo", "supplier", "consignee", "description", "company"];
   const missing = requiredFields.filter(
@@ -820,9 +824,13 @@ app.post("/api/shipments", async (request, response, next) => {
     const input = shipmentInput(request.body);
     const validationError = validateShipment(input);
     if (validationError) return response.status(400).json({ error: validationError });
+    const importNo = normalizeImportNo(input.importNo);
+    if (await Shipment.exists({ importNo: new RegExp(`^${escapeRegex(importNo)}$`, "i") })) {
+      return response.status(409).json({ error: "Import No. already exists. Enter a unique Import No." });
+    }
     const shipment = await Shipment.create({
       ...input,
-      importNo: input.importNo.trim(),
+      importNo,
       _id: randomUUID(),
       createdAt: new Date().toISOString(),
     });
@@ -837,11 +845,15 @@ app.put("/api/shipments/:id", async (request, response, next) => {
     const input = shipmentInput(request.body);
     const validationError = validateShipment(input);
     if (validationError) return response.status(400).json({ error: validationError });
+    const importNo = normalizeImportNo(input.importNo);
+    if (await Shipment.exists({ _id: { $ne: request.params.id }, importNo: new RegExp(`^${escapeRegex(importNo)}$`, "i") })) {
+      return response.status(409).json({ error: "Import No. already exists. Enter a unique Import No." });
+    }
     const shipment = await Shipment.findByIdAndUpdate(
       request.params.id,
       {
         ...input,
-        importNo: input.importNo.trim(),
+        importNo,
         updatedAt: new Date().toISOString(),
       },
       { new: true, runValidators: true },
