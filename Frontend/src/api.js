@@ -33,6 +33,8 @@ export const api = {
   updateUser: (id, user) =>
     request(`/users/${id}`, { method: "PUT", body: JSON.stringify(user) }),
   deleteUser: (id) => request(`/users/${id}`, { method: "DELETE" }),
+  updateFontSize: (userId, fontSize) =>
+    request("/settings/font-size", { method: "PUT", body: JSON.stringify({ userId, fontSize }) }),
   getConsignees: () => request("/consignees"),
   getCountries: () => request("/countries"),
   createCountry: (country) =>

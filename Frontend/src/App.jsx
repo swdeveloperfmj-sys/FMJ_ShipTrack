@@ -28,6 +28,7 @@ import {
   Plus,
   ShieldCheck,
   Ship,
+  Settings,
   Moon,
   Sun,
   TrendingUp,
@@ -60,6 +61,7 @@ const reportNavigation = [
 const userAccessOptions = [
   ...navigation.map(({ key, label }) => ({ key, label })),
   { key: "reports", label: "Reports & Analytics" },
+  { key: "settings", label: "Settings" },
 ];
 
 const consigneeColorPresets = [
@@ -835,7 +837,15 @@ function ClearedShipmentModal({ shipment, onClose, onSave }) {
   </div>;
 }
 
-function Dashboard({ shipments, consignees, analytics, onNavigate, onEdit, onAdd, onImport }) {
+function Dashboard({ shipments, consignees, analytics, accountName, onNavigate, onEdit, onAdd, onImport }) {
+  const [currentTime, setCurrentTime] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const hour = currentTime.getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const displayName = String(accountName || "there").trim();
   const [monthRange, setMonthRange] = useState(6);
   const [statusMonthRange, setStatusMonthRange] = useState("all");
   const monthlyData = (analytics?.monthly || []).slice(-monthRange);
@@ -848,7 +858,7 @@ function Dashboard({ shipments, consignees, analytics, onNavigate, onEdit, onAdd
   const statusCounts = Object.fromEntries(shipmentStatuses.map((status) => [status, statusShipments.filter((shipment) => shipment.status === status).length]));
   return (
     <>
-      <PageTitle eyebrow="OVERVIEW" title="Good morning, team" subtitle="Here's what's happening with your shipments today." action={<div className="page-actions"><button className="button secondary" onClick={downloadShipmentImportTemplate}><Download size={16} /> Download template</button><button className="button secondary" onClick={onImport}><Upload size={16} /> Import Excel</button></div>} />
+      <PageTitle eyebrow="OVERVIEW" title={`${greeting}, ${displayName}`} subtitle="Here's what's happening with your shipments today." action={<div className="page-actions"><button className="button secondary" onClick={downloadShipmentImportTemplate}><Download size={16} /> Download template</button><button className="button secondary" onClick={onImport}><Upload size={16} /> Import Excel</button></div>} />
       <section className="stat-grid">
         <StatCard label="Total shipments" value={analytics?.total ?? "—"} helper="Live records from MongoDB" icon={Ship} color="blue" />
         <StatCard label="Pending" value={analytics?.pending ?? "—"} helper="Awaiting next action" icon={Clock3} color="amber" />
@@ -1161,6 +1171,39 @@ function UserDirectory({ users, onEdit }) {
   return <section className="panel table-panel"><div className="table-toolbar"><div className="table-title"><h2>Users</h2><span className="count-pill">{users.length}</span></div></div>{!users.length ? <EmptyState message="No users created" description="Use the Create user button above to add the first user." /> : <div className="table-scroll"><table><thead><tr><th>Name</th><th>Username</th><th>Left sidebar access</th><th /></tr></thead><tbody>{users.map((user) => <tr key={user.id} className="clickable-row" onClick={() => onEdit(user)}><td><span className="import-id">{user.name}</span></td><td>{user.username}</td><td>{user.sidebarAccess.map((key) => userAccessOptions.find((item) => item.key === key)?.label).filter(Boolean).join(", ") || "No access selected"}</td><td><button className="consignee-edit-button" aria-label={`Edit ${user.name}`} onClick={(event) => { event.stopPropagation(); onEdit(user); }}>Edit</button></td></tr>)}</tbody></table></div>}</section>;
 }
 
+function FontSizeSettings({ users, account, isSuperAdmin, onSave }) {
+  const accounts = isSuperAdmin
+    ? [{ id: "super-admin", name: account.name || account.username, username: account.username, fontSize: account.fontSize || 100, role: "Super administrator" }, ...users.map((user) => ({ ...user, role: "Team user" }))]
+    : [{ id: "self", name: account.name || account.username, username: account.username, fontSize: account.fontSize || 100, role: "My account" }];
+  const [selectedId, setSelectedId] = useState(isSuperAdmin ? "super-admin" : "self");
+  const selected = accounts.find((account) => account.id === selectedId) || accounts[0];
+  const [fontSize, setFontSize] = useState(selected.fontSize || 100);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  useEffect(() => { setFontSize(selected.fontSize || 100); }, [selectedId, selected.fontSize]);
+  const save = async () => {
+    setSaving(true);
+    setSaveError("");
+    try {
+      await onSave(selectedId, fontSize);
+    } catch (error) {
+      setSaveError(error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+  return <section className="panel settings-panel">
+    <div className="settings-heading"><div className="settings-icon"><Settings size={20} /></div><div><h2>User font size</h2><p>Choose an account and set the text size used throughout that user's workspace.</p></div></div>
+    <div className="settings-form">
+      {isSuperAdmin ? <label>User<select value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>{accounts.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.role})</option>)}</select></label> : <div className="settings-current-user"><span>Account</span><strong>{selected.name}</strong><small>@{selected.username} · Only your font size can be changed</small></div>}
+      <div className="font-size-control"><div className="font-size-control-head"><label htmlFor="font-size-range">Font size</label><strong>{fontSize}%</strong></div><input id="font-size-range" type="range" min="80" max="140" step="5" value={fontSize} onChange={(event) => setFontSize(Number(event.target.value))} /><div className="font-size-scale"><span>Smaller</span><span>Default</span><span>Larger</span></div></div>
+      <div className="font-preview" style={{ fontSize: `${fontSize / 100}em` }}><span>Preview</span><strong>FMJ ShipTrack</strong><p>Shipment details will appear at this text size for {selected.name}.</p></div>
+    </div>
+    {saveError && <div className="settings-error">{saveError}</div>}
+    <div className="settings-footer"><button className="button secondary" type="button" onClick={() => setFontSize(100)}>Reset to default</button><button className="button primary" type="button" disabled={saving || fontSize === selected.fontSize} onClick={save}>{saving ? "Saving…" : "Save font size"}</button></div>
+  </section>;
+}
+
 function AuthScreen({ setupRequired, theme, onToggleTheme, onAuthenticated, loading, connectionError, onRetry }) {
   const [mode, setMode] = useState(setupRequired ? "setup" : "login");
   const [username, setUsername] = useState("");
@@ -1359,7 +1402,7 @@ export default function App() {
   }, [authState?.role]);
   useEffect(() => {
     if (authState?.role !== "user") return;
-    const firstAllowed = navigation.find((item) => authState.sidebarAccess?.includes(item.key))?.key;
+    const firstAllowed = navigation.find((item) => authState.sidebarAccess?.includes(item.key))?.key || (authState.sidebarAccess?.includes("settings") ? "settings" : null);
     if (firstAllowed) setActive(firstAllowed);
   }, [authState?.role, authState?.sidebarAccess]);
   useEffect(() => {
@@ -1536,7 +1579,7 @@ export default function App() {
 
   const availableNavigation = authState?.role === "super-admin" ? navigation : navigation.filter((item) => authState?.sidebarAccess?.includes(item.key));
   const canAccessReports = authState?.role === "super-admin" || authState?.sidebarAccess?.includes("reports");
-  const activeTitle = [...navigation, ...reportNavigation].find((item) => item.key === active)?.label || "Dashboard";
+  const activeTitle = active === "settings" ? "Settings" : active === "users" ? "Users" : [...navigation, ...reportNavigation].find((item) => item.key === active)?.label || "Dashboard";
   const openModal = (shipment) => setModalShipment(shipment || null);
   const markAuthenticated = (account) => {
     setAuthError("");
@@ -1547,7 +1590,7 @@ export default function App() {
   function renderContent() {
     if (loading) return <div className="loading-state"><span className="loader" />Loading shipment workspace…</div>;
     if (error && !shipments.length) return <div className="error-state"><strong>Unable to load shipments</strong><span>{error}</span><button className="button secondary" onClick={refresh}>Try again</button></div>;
-    if (active === "dashboard") return <Dashboard shipments={shipments} consignees={consignees} analytics={analytics} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} onImport={() => setModalShipmentImport(true)} />;
+    if (active === "dashboard") return <Dashboard shipments={shipments} consignees={consignees} analytics={analytics} accountName={authState?.name || authState?.username} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} onImport={() => setModalShipmentImport(true)} />;
     if (active === "to-be-tt") {
       const pendingTTShipments = shipments.filter((shipment) =>
         shipment.paymentMethod === "Advance TT" && shipment.paymentStatus === "Pending",
@@ -1589,10 +1632,11 @@ export default function App() {
     if (active === "companies") return <><PageTitle eyebrow="CONSIGNEES" title="Consignee reports" subtitle="A clear view of imports and clearance progress for each consignee." />{error && <div className="inline-error">{error}</div>}<ConsigneeReports analytics={analytics} shipments={shipments} consignees={consignees} onEdit={openModal} /></>;
     if (active === "consignees") return <><PageTitle eyebrow="DIRECTORY" title="Consignees" subtitle="Create and manage the consignee records assigned to your shipments." action={<button className="button primary" onClick={() => setModalConsignee(null)}><Plus size={17} /> Create consignee</button>} />{error && <div className="inline-error">{error}</div>}<ConsigneeDirectory consignees={consignees} shipments={shipments} onEdit={setModalConsignee} onAdd={() => setModalConsignee(null)} /></>;
     if (active === "users" && authState?.role === "super-admin") return <><PageTitle eyebrow="ADMINISTRATION" title="Users" subtitle="Create user accounts and select their left sidebar access." action={<button className="button primary" onClick={() => setModalUser(null)}><Plus size={17} /> Create user</button>} /><UserDirectory users={users} onEdit={setModalUser} /></>;
+    if (active === "settings" && (authState?.role === "super-admin" || authState?.sidebarAccess?.includes("settings"))) return <><PageTitle eyebrow="ADMINISTRATION" title="Settings" subtitle={authState.role === "super-admin" ? "Manage user-specific display preferences." : "Manage your display preferences."} /><FontSizeSettings users={users} account={authState} isSuperAdmin={authState.role === "super-admin"} onSave={async (userId, fontSize) => { const updated = await api.updateFontSize(userId, fontSize); if (authState.role === "user" || userId === "super-admin") setAuthState((current) => ({ ...current, fontSize: updated.fontSize })); else setUsers((current) => current.map((user) => user.id === userId ? updated : user)); setNotice("Font size updated successfully"); }} /></>;
     if (active === "countries") return <><PageTitle eyebrow="DIRECTORY" title="Countries & currencies" subtitle="Manage country and currency lists separately." action={<button className="button primary" title="Create country (F1)" onClick={() => setModalCountry(null)}><Plus size={17} /> Create country</button>} />{error && <div className="inline-error">{error}</div>}<CountryDirectory countries={countries} onEdit={setModalCountry} onAdd={() => setModalCountry(null)} /><CurrencyDirectory currencies={currencies} onEdit={setModalCurrency} onAdd={() => setModalCurrency(null)} /></>;
     if (active === "documents") return <><PageTitle eyebrow="PAPERWORK" title="Documents" subtitle="Track required shipping and customs documents in one place." />{error && <div className="inline-error">{error}</div>}<DocumentsView shipments={shipments} consignees={consignees} onEdit={openModal} /></>;
     if (active === "analytics") return <><PageTitle eyebrow="PERFORMANCE" title="Reports & analytics" subtitle="Monitor shipment delays, landed costs and monthly activity." />{error && <div className="inline-error">{error}</div>}<AnalyticsView analytics={analytics} /></>;
-    return <Dashboard shipments={shipments} consignees={consignees} analytics={analytics} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} onImport={() => setModalShipmentImport(true)} />;
+    return <Dashboard shipments={shipments} consignees={consignees} analytics={analytics} accountName={authState?.name || authState?.username} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} onImport={() => setModalShipmentImport(true)} />;
   }
 
   if (!authState?.authenticated) {
@@ -1610,7 +1654,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app-shell ${sidebarOpen ? "sidebar-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} data-theme={theme}>
+    <div className={`app-shell ${sidebarOpen ? "sidebar-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} data-theme={theme} style={{ "--user-font-scale": (authState.fontSize || 100) / 100 }}>
       <aside className="sidebar">
         <div className="brand"><div className="brand-mark"><Ship size={21} /></div><div className="brand-copy"><strong>FMJ <span>ShipTrack</span></strong><small>IMPORT MANAGEMENT</small></div><button className="sidebar-toggle icon-button" onClick={() => setSidebarCollapsed((collapsed) => !collapsed)} aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>{sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}</button><button className="mobile-close icon-button" onClick={() => setSidebarOpen(false)}><X size={18} /></button></div>
         <div className="nav-caption">WORKSPACE</div>
@@ -1619,6 +1663,8 @@ export default function App() {
             {reportsOpen && <div className="reports-nav-links">{reportNavigation.map(({ label, key }) => <button key={key} className={`reports-nav-link ${active === key ? "active" : ""}`} onClick={() => { setActive(key); setSidebarOpen(false); }}>{label}</button>)}</div>}
           </div>}
           {authState?.role === "super-admin" && <button title={sidebarCollapsed ? "Users" : undefined} className={`nav-item ${active === "users" ? "active" : ""}`} onClick={() => { setActive("users"); setSidebarOpen(false); }}><Users size={18} /><span>Users</span></button>}
+          {authState?.role === "super-admin" && <button title={sidebarCollapsed ? "Settings" : undefined} className={`nav-item ${active === "settings" ? "active" : ""}`} onClick={() => { setActive("settings"); setSidebarOpen(false); }}><Settings size={18} /><span>Settings</span></button>}
+          {authState?.role === "user" && authState.sidebarAccess?.includes("settings") && <button title={sidebarCollapsed ? "Settings" : undefined} className={`nav-item ${active === "settings" ? "active" : ""}`} onClick={() => { setActive("settings"); setSidebarOpen(false); }}><Settings size={18} /><span>Settings</span></button>}
         </nav>
         <div className="sidebar-bottom"><div className="profile"><div className="profile-avatar">FM</div><div className="profile-name"><strong>{authState.name || authState.username}</strong><span>{authState.role === "super-admin" ? "Super administrator" : "Team user"}</span></div></div></div>
       </aside>

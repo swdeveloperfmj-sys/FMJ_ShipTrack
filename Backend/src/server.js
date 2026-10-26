@@ -108,6 +108,7 @@ const superAdminSchema = new mongoose.Schema(
     _id: { type: String, default: "super-admin" },
     username: { type: String, required: true, unique: true, trim: true, lowercase: true },
     passwordHash: { type: String, required: true },
+    fontSize: { type: Number, min: 80, max: 140, default: 100 },
   },
   { versionKey: false },
 );
@@ -118,6 +119,7 @@ const appUserSchema = new mongoose.Schema(
     username: { type: String, required: true, unique: true, trim: true, lowercase: true },
     passwordHash: { type: String, required: true },
     sidebarAccess: { type: [String], default: [] },
+    fontSize: { type: Number, min: 80, max: 140, default: 100 },
     createdAt: { type: String, default: () => new Date().toISOString() },
     updatedAt: { type: String },
   },
@@ -225,7 +227,7 @@ function createOtpHash(challengeId, otp) {
 
 function createSessionToken(account) {
   return jwt.sign(
-    { sub: account._id, username: account.username, name: account.name || account.username, role: account.role || "super-admin", sidebarAccess: account.sidebarAccess || [], purpose: "shiptrack-session" },
+    { sub: account._id, username: account.username, name: account.name || account.username, role: account.role || "super-admin", sidebarAccess: account.sidebarAccess || [], fontSize: account.fontSize || 100, purpose: "shiptrack-session" },
     process.env.AUTH_TOKEN_SECRET,
     { expiresIn: "8h" },
   );
@@ -257,7 +259,7 @@ function requireAuthenticated(request, response, next) {
     if (session.purpose !== "shiptrack-session") {
       return response.status(401).json({ error: "Sign in to continue" });
     }
-    request.user = { id: session.sub, username: session.username, name: session.name, role: session.role, sidebarAccess: session.sidebarAccess || [] };
+    request.user = { id: session.sub, username: session.username, name: session.name, role: session.role, sidebarAccess: session.sidebarAccess || [], fontSize: session.fontSize || 100 };
     next();
   } catch {
     clearSessionCookie(response);
@@ -305,13 +307,21 @@ app.get("/api/auth/status", async (request, response, next) => {
       try {
         const session = jwt.verify(token, process.env.AUTH_TOKEN_SECRET);
         if (session.purpose === "shiptrack-session") {
+          const account = session.role === "user"
+            ? await AppUser.findById(session.sub).lean()
+            : await SuperAdmin.findById(session.sub).lean();
+          if (!account) {
+            clearSessionCookie(response);
+            return response.json({ setupRequired: false, authenticated: false });
+          }
           return response.json({
             setupRequired: false,
             authenticated: true,
-            username: session.username,
-            name: session.name || session.username,
+            username: account.username,
+            name: account.name || account.username,
             role: session.role || "super-admin",
-            sidebarAccess: session.sidebarAccess || [],
+            sidebarAccess: account.sidebarAccess || [],
+            fontSize: account.fontSize || 100,
           });
         }
       } catch {
@@ -373,7 +383,7 @@ app.post("/api/auth/login", loginLimiter, async (request, response, next) => {
     }
     if (user) {
       setSessionCookie(response, { ...user.toObject(), role: "user" });
-      return response.json({ authenticated: true, username: user.username, name: user.name, role: "user", sidebarAccess: user.sidebarAccess || [] });
+      return response.json({ authenticated: true, username: user.username, name: user.name, role: "user", sidebarAccess: user.sidebarAccess || [], fontSize: user.fontSize || 100 });
     }
     if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
       return response.status(503).json({
@@ -439,7 +449,7 @@ app.post("/api/auth/verify", verifyLimiter, async (request, response, next) => {
 
     await LoginChallenge.deleteOne({ _id: challengeId });
     setSessionCookie(response, { ...admin.toObject(), role: "super-admin" });
-    response.json({ authenticated: true, username: admin.username, name: admin.username, role: "super-admin", sidebarAccess: [] });
+    response.json({ authenticated: true, username: admin.username, name: admin.username, role: "super-admin", sidebarAccess: [], fontSize: admin.fontSize || 100 });
   } catch (error) {
     next(error);
   }
@@ -609,8 +619,41 @@ app.get("/api/health", (_request, response) => {
 
 app.use("/api", requireAuthenticated);
 
-const sidebarAccessKeys = ["dashboard", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", "companies", "consignees", "countries", "reports"];
-const serializeUser = (user) => ({ id: user._id, name: user.name, username: user.username, sidebarAccess: user.sidebarAccess || [], createdAt: user.createdAt });
+const sidebarAccessKeys = ["dashboard", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", "companies", "consignees", "countries", "reports", "settings"];
+const serializeUser = (user) => ({ id: user._id, name: user.name, username: user.username, sidebarAccess: user.sidebarAccess || [], fontSize: user.fontSize || 100, createdAt: user.createdAt });
+
+app.put("/api/settings/font-size", async (request, response, next) => {
+  try {
+    const { userId, fontSize } = request.body || {};
+    const normalizedSize = Number(fontSize);
+    if (!Number.isInteger(normalizedSize) || normalizedSize < 80 || normalizedSize > 140) {
+      return response.status(400).json({ error: "Font size must be between 80% and 140%." });
+    }
+    if (request.user.role === "user") {
+      const currentUser = await AppUser.findById(request.user.id);
+      if (!currentUser) return response.status(404).json({ error: "User not found." });
+      if (!currentUser.sidebarAccess.includes("settings")) {
+        return response.status(403).json({ error: "Settings access is required." });
+      }
+      currentUser.fontSize = normalizedSize;
+      currentUser.updatedAt = new Date().toISOString();
+      const user = await currentUser.save();
+      setSessionCookie(response, { ...user.toObject(), role: "user" });
+      return response.json(serializeUser(user));
+    }
+    if (userId === "super-admin") {
+      const admin = await SuperAdmin.findByIdAndUpdate("super-admin", { fontSize: normalizedSize }, { new: true, runValidators: true });
+      if (!admin) return response.status(404).json({ error: "Super admin not found." });
+      setSessionCookie(response, { ...admin.toObject(), role: "super-admin" });
+      return response.json({ id: "super-admin", fontSize: admin.fontSize });
+    }
+    const user = await AppUser.findByIdAndUpdate(userId, { fontSize: normalizedSize, updatedAt: new Date().toISOString() }, { new: true, runValidators: true });
+    if (!user) return response.status(404).json({ error: "User not found." });
+    response.json(serializeUser(user));
+  } catch (error) {
+    next(error);
+  }
+});
 
 app.get("/api/users", requireSuperAdmin, async (_request, response, next) => {
   try { response.json((await AppUser.find().sort({ name: 1 }).lean()).map(serializeUser)); } catch (error) { next(error); }
