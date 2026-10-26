@@ -30,6 +30,9 @@ export const api = {
   logout: () => request("/auth/logout", { method: "POST" }),
   getUsers: () => request("/users"),
   createUser: (user) => request("/users", { method: "POST", body: JSON.stringify(user) }),
+  updateUser: (id, user) =>
+    request(`/users/${id}`, { method: "PUT", body: JSON.stringify(user) }),
+  deleteUser: (id) => request(`/users/${id}`, { method: "DELETE" }),
   getConsignees: () => request("/consignees"),
   getCountries: () => request("/countries"),
   createCountry: (country) =>

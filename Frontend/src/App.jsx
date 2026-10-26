@@ -1135,8 +1135,8 @@ function AnalyticsView({ analytics }) {
   </>;
 }
 
-function UserModal({ onClose, onSave }) {
-  const [form, setForm] = useState({ name: "", username: "", password: "", confirmPassword: "", sidebarAccess: [] });
+function UserModal({ initial, onClose, onSave }) {
+  const [form, setForm] = useState({ name: initial?.name || "", username: initial?.username || "", password: "", confirmPassword: "", sidebarAccess: initial?.sidebarAccess || [] });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const toggleAccess = (key) => setForm((current) => ({ ...current, sidebarAccess: current.sidebarAccess.includes(key) ? current.sidebarAccess.filter((item) => item !== key) : [...current.sidebarAccess, key] }));
@@ -1145,13 +1145,18 @@ function UserModal({ onClose, onSave }) {
     if (form.password !== form.confirmPassword) return setError("Passwords do not match.");
     if (!form.sidebarAccess.length) return setError("Select at least one left sidebar item.");
     setSaving(true); setError("");
-    try { await onSave(form); onClose(); } catch (saveError) { setError(saveError.message); } finally { setSaving(false); }
+    try { await onSave(form, initial?.id); onClose(); } catch (saveError) { setError(saveError.message); } finally { setSaving(false); }
   }
-  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="shipment-modal consignee-modal" role="dialog" aria-modal="true" aria-labelledby="user-modal-title"><div className="modal-head"><div><div className="eyebrow">NEW USER</div><h2 id="user-modal-title">Create user</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Close"><X size={20} /></button></div><form onSubmit={submit}><div className="form-section"><div className="form-grid"><label>Full name<input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required maxLength={120} /></label><label>Username<input value={form.username} onChange={(event) => setForm((current) => ({ ...current, username: event.target.value }))} required minLength={3} maxLength={40} pattern="[A-Za-z0-9._-]+" /></label><label>Password<input type="password" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} required minLength={12} maxLength={128} /></label><label>Re-enter password<input type="password" value={form.confirmPassword} onChange={(event) => setForm((current) => ({ ...current, confirmPassword: event.target.value }))} required minLength={12} maxLength={128} /></label></div></div><div className="form-section"><h3>Left sidebar access</h3><div className="user-access-list">{userAccessOptions.map((item) => <label key={item.key}><input type="checkbox" checked={form.sidebarAccess.includes(item.key)} onChange={() => toggleAccess(item.key)} />{item.label}</label>)}</div></div>{error && <div className="form-error">{error}</div>}<div className="modal-footer"><button type="button" className="button secondary" onClick={onClose}>Cancel</button><button className="button primary" disabled={saving}>{saving ? "Creating…" : "Create user"}</button></div></form></section></div>;
+  async function remove() {
+    if (!window.confirm(`Delete user ${initial.username}?`)) return;
+    setSaving(true); setError("");
+    try { await onSave(null, initial.id, true); onClose(); } catch (deleteError) { setError(deleteError.message); setSaving(false); }
+  }
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="shipment-modal consignee-modal" role="dialog" aria-modal="true" aria-labelledby="user-modal-title"><div className="modal-head"><div><div className="eyebrow">{initial ? "UPDATE USER" : "NEW USER"}</div><h2 id="user-modal-title">{initial ? "Edit user" : "Create user"}</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Close"><X size={20} /></button></div><form onSubmit={submit}><div className="form-section"><div className="form-grid"><label>Full name<input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required maxLength={120} /></label><label>Username<input value={form.username} onChange={(event) => setForm((current) => ({ ...current, username: event.target.value }))} required minLength={3} maxLength={40} pattern="[A-Za-z0-9._-]+" /></label><label>{initial ? "New password (optional)" : "Password"}<input type="password" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} required={!initial} minLength={6} maxLength={128} /></label><label>{initial ? "Re-enter new password" : "Re-enter password"}<input type="password" value={form.confirmPassword} onChange={(event) => setForm((current) => ({ ...current, confirmPassword: event.target.value }))} required={!initial} minLength={6} maxLength={128} /></label></div></div><div className="form-section"><h3>Left sidebar access</h3><div className="user-access-list">{userAccessOptions.map((item) => <label key={item.key}><input type="checkbox" checked={form.sidebarAccess.includes(item.key)} onChange={() => toggleAccess(item.key)} />{item.label}</label>)}</div></div>{error && <div className="form-error">{error}</div>}<div className="modal-footer">{initial && <button type="button" className="delete-button" onClick={remove} disabled={saving}>Delete user</button>}<button type="button" className="button secondary" onClick={onClose}>Cancel</button><button className="button primary" disabled={saving}>{saving ? "Saving…" : initial ? "Save changes" : "Create user"}</button></div></form></section></div>;
 }
 
-function UserDirectory({ users, onAdd }) {
-  return <section className="panel table-panel"><div className="table-toolbar"><div className="table-title"><h2>Users</h2><span className="count-pill">{users.length}</span></div><button className="button primary" onClick={onAdd}><Plus size={16} /> Create user</button></div>{!users.length ? <EmptyState message="No users created" description="Create a user and select their sidebar access." onAdd={onAdd} actionLabel="Create user" /> : <div className="table-scroll"><table><thead><tr><th>Name</th><th>Username</th><th>Left sidebar access</th></tr></thead><tbody>{users.map((user) => <tr key={user.id}><td><span className="import-id">{user.name}</span></td><td>{user.username}</td><td>{user.sidebarAccess.map((key) => userAccessOptions.find((item) => item.key === key)?.label).filter(Boolean).join(", ") || "No access selected"}</td></tr>)}</tbody></table></div>}</section>;
+function UserDirectory({ users, onEdit }) {
+  return <section className="panel table-panel"><div className="table-toolbar"><div className="table-title"><h2>Users</h2><span className="count-pill">{users.length}</span></div></div>{!users.length ? <EmptyState message="No users created" description="Use the Create user button above to add the first user." /> : <div className="table-scroll"><table><thead><tr><th>Name</th><th>Username</th><th>Left sidebar access</th><th /></tr></thead><tbody>{users.map((user) => <tr key={user.id} className="clickable-row" onClick={() => onEdit(user)}><td><span className="import-id">{user.name}</span></td><td>{user.username}</td><td>{user.sidebarAccess.map((key) => userAccessOptions.find((item) => item.key === key)?.label).filter(Boolean).join(", ") || "No access selected"}</td><td><button className="consignee-edit-button" aria-label={`Edit ${user.name}`} onClick={(event) => { event.stopPropagation(); onEdit(user); }}>Edit</button></td></tr>)}</tbody></table></div>}</section>;
 }
 
 function AuthScreen({ setupRequired, theme, onToggleTheme, onAuthenticated, loading, connectionError, onRetry }) {
@@ -1303,7 +1308,7 @@ export default function App() {
   const [modalConsignee, setModalConsignee] = useState(undefined);
   const [modalCountry, setModalCountry] = useState(undefined);
   const [modalCurrency, setModalCurrency] = useState(undefined);
-  const [modalUser, setModalUser] = useState(false);
+  const [modalUser, setModalUser] = useState(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -1577,7 +1582,7 @@ export default function App() {
     }
     if (active === "companies") return <><PageTitle eyebrow="CONSIGNEES" title="Consignee reports" subtitle="A clear view of imports and clearance progress for each consignee." />{error && <div className="inline-error">{error}</div>}<ConsigneeReports analytics={analytics} shipments={shipments} consignees={consignees} onEdit={openModal} /></>;
     if (active === "consignees") return <><PageTitle eyebrow="DIRECTORY" title="Consignees" subtitle="Create and manage the consignee records assigned to your shipments." action={<button className="button primary" onClick={() => setModalConsignee(null)}><Plus size={17} /> Create consignee</button>} />{error && <div className="inline-error">{error}</div>}<ConsigneeDirectory consignees={consignees} shipments={shipments} onEdit={setModalConsignee} onAdd={() => setModalConsignee(null)} /></>;
-    if (active === "users" && authState?.role === "super-admin") return <><PageTitle eyebrow="ADMINISTRATION" title="Users" subtitle="Create user accounts and select their left sidebar access." action={<button className="button primary" onClick={() => setModalUser(true)}><Plus size={17} /> Create user</button>} /><UserDirectory users={users} onAdd={() => setModalUser(true)} /></>;
+    if (active === "users" && authState?.role === "super-admin") return <><PageTitle eyebrow="ADMINISTRATION" title="Users" subtitle="Create user accounts and select their left sidebar access." action={<button className="button primary" onClick={() => setModalUser(null)}><Plus size={17} /> Create user</button>} /><UserDirectory users={users} onEdit={setModalUser} /></>;
     if (active === "countries") return <><PageTitle eyebrow="DIRECTORY" title="Countries & currencies" subtitle="Manage country and currency lists separately." action={<button className="button primary" title="Create country (F1)" onClick={() => setModalCountry(null)}><Plus size={17} /> Create country</button>} />{error && <div className="inline-error">{error}</div>}<CountryDirectory countries={countries} onEdit={setModalCountry} onAdd={() => setModalCountry(null)} /><CurrencyDirectory currencies={currencies} onEdit={setModalCurrency} onAdd={() => setModalCurrency(null)} /></>;
     if (active === "documents") return <><PageTitle eyebrow="PAPERWORK" title="Documents" subtitle="Track required shipping and customs documents in one place." />{error && <div className="inline-error">{error}</div>}<DocumentsView shipments={shipments} consignees={consignees} onEdit={openModal} /></>;
     if (active === "analytics") return <><PageTitle eyebrow="PERFORMANCE" title="Reports & analytics" subtitle="Monitor shipment delays, landed costs and monthly activity." />{error && <div className="inline-error">{error}</div>}<AnalyticsView analytics={analytics} /></>;
@@ -1639,7 +1644,21 @@ export default function App() {
       {modalConsignee !== undefined && <ConsigneeModal initial={modalConsignee} onClose={() => setModalConsignee(undefined)} onSave={saveConsignee} />}
       {modalCountry !== undefined && <CountryModal initial={modalCountry} onClose={() => setModalCountry(undefined)} onSave={saveCountry} />}
       {modalCurrency !== undefined && <CurrencyModal initial={modalCurrency} onClose={() => setModalCurrency(undefined)} onSave={saveCurrency} />}
-      {modalUser && <UserModal onClose={() => setModalUser(false)} onSave={async (user) => { const created = await api.createUser(user); setUsers((current) => [...current, created]); }} />}
+      {modalUser !== undefined && <UserModal initial={modalUser} onClose={() => setModalUser(undefined)} onSave={async (user, id, remove = false) => {
+        if (remove) {
+          await api.deleteUser(id);
+          setUsers((current) => current.filter((item) => item.id !== id));
+          setNotice("User deleted");
+        } else if (id) {
+          const updated = await api.updateUser(id, user);
+          setUsers((current) => current.map((item) => item.id === id ? updated : item));
+          setNotice("User updated successfully");
+        } else {
+          const created = await api.createUser(user);
+          setUsers((current) => [...current, created]);
+          setNotice("User created successfully");
+        }
+      }} />}
       {confirmSignOut && <div className="modal-backdrop signout-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setConfirmSignOut(false); }}><section className="signout-dialog" role="alertdialog" aria-modal="true" aria-labelledby="signout-title" aria-describedby="signout-description"><div className="signout-icon"><LogOut size={19} /></div><h2 id="signout-title">Sign out of ShipTrack?</h2><p id="signout-description">Are you sure you want to sign out? You’ll need to verify your email again to access your shipment workspace.</p><div className="signout-actions"><button className="button secondary" onClick={() => setConfirmSignOut(false)}>No, stay signed in</button><button className="button signout-confirm" onClick={signOut}>Yes, sign out</button></div></section></div>}
       {notice && <div className="toast"><CheckCircle2 size={17} />{notice}<button onClick={() => setNotice("")} aria-label="Dismiss"><X size={15} /></button></div>}
     </div>

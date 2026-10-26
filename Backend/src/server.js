@@ -119,6 +119,7 @@ const appUserSchema = new mongoose.Schema(
     passwordHash: { type: String, required: true },
     sidebarAccess: { type: [String], default: [] },
     createdAt: { type: String, default: () => new Date().toISOString() },
+    updatedAt: { type: String },
   },
   { versionKey: false },
 );
@@ -620,13 +621,42 @@ app.post("/api/users", requireSuperAdmin, async (request, response, next) => {
     const { name, username, password, sidebarAccess } = request.body || {};
     if (typeof name !== "string" || !name.trim()) return response.status(400).json({ error: "Name is required." });
     if (typeof username !== "string" || !/^[a-zA-Z0-9._-]{3,40}$/.test(username.trim())) return response.status(400).json({ error: "Username must be 3–40 characters and use only letters, numbers, dots, underscores or hyphens." });
-    if (typeof password !== "string" || password.length < 12 || password.length > 128) return response.status(400).json({ error: "Password must be between 12 and 128 characters." });
+    if (typeof password !== "string" || password.length < 6 || password.length > 128) return response.status(400).json({ error: "Password must be between 6 and 128 characters." });
     const access = [...new Set(Array.isArray(sidebarAccess) ? sidebarAccess.filter((key) => sidebarAccessKeys.includes(key)) : [])];
     if (!access.length) return response.status(400).json({ error: "Select at least one left sidebar item." });
     const user = await AppUser.create({ _id: randomUUID(), name: name.trim(), username: username.trim().toLowerCase(), passwordHash: await bcrypt.hash(password, 12), sidebarAccess: access });
     response.status(201).json(serializeUser(user));
   } catch (error) {
     if (error.code === 11000) return response.status(409).json({ error: "That username is already in use." });
+    next(error);
+  }
+});
+
+app.put("/api/users/:id", requireSuperAdmin, async (request, response, next) => {
+  try {
+    const { name, username, password, sidebarAccess } = request.body || {};
+    if (typeof name !== "string" || !name.trim()) return response.status(400).json({ error: "Name is required." });
+    if (typeof username !== "string" || !/^[a-zA-Z0-9._-]{3,40}$/.test(username.trim())) return response.status(400).json({ error: "Username must be 3–40 characters and use only letters, numbers, dots, underscores or hyphens." });
+    if (password && (typeof password !== "string" || password.length < 6 || password.length > 128)) return response.status(400).json({ error: "Password must be between 6 and 128 characters." });
+    const access = [...new Set(Array.isArray(sidebarAccess) ? sidebarAccess.filter((key) => sidebarAccessKeys.includes(key)) : [])];
+    if (!access.length) return response.status(400).json({ error: "Select at least one left sidebar item." });
+    const updates = { name: name.trim(), username: username.trim().toLowerCase(), sidebarAccess: access, updatedAt: new Date().toISOString() };
+    if (password) updates.passwordHash = await bcrypt.hash(password, 12);
+    const user = await AppUser.findByIdAndUpdate(request.params.id, updates, { new: true, runValidators: true });
+    if (!user) return response.status(404).json({ error: "User not found." });
+    response.json(serializeUser(user));
+  } catch (error) {
+    if (error.code === 11000) return response.status(409).json({ error: "That username is already in use." });
+    next(error);
+  }
+});
+
+app.delete("/api/users/:id", requireSuperAdmin, async (request, response, next) => {
+  try {
+    const user = await AppUser.findByIdAndDelete(request.params.id);
+    if (!user) return response.status(404).json({ error: "User not found." });
+    response.status(204).end();
+  } catch (error) {
     next(error);
   }
 });
