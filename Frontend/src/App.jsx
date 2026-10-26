@@ -14,6 +14,7 @@ import {
   CircleDollarSign,
   Clock3,
   ContactRound,
+  Download,
   FileText,
   Globe2,
   LayoutDashboard,
@@ -23,7 +24,6 @@ import {
   MoreHorizontal,
   PackageCheck,
   Plus,
-  Settings2,
   ShieldCheck,
   Ship,
   Moon,
@@ -280,6 +280,33 @@ function exportPendingTTToExcel(shipments) {
   XLSX.writeFile(workbook, `pending-tt-payments-${stamp}.xlsx`, { compression: true });
 }
 
+function downloadShipmentImportTemplate() {
+  const headers = ["Imp No.", "Consignee", "Shipper", "Item Description", "FCL/LCL", "Value", "ETD", "ETA CMB", "Duty", "DO", "Remarks"];
+  const worksheet = XLSX.utils.aoa_to_sheet([headers]);
+  worksheet["!autofilter"] = { ref: "A1:K1" };
+  worksheet["!cols"] = [
+    { wch: 16 }, { wch: 24 }, { wch: 30 }, { wch: 32 }, { wch: 14 }, { wch: 16 },
+    { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 44 },
+  ];
+
+  const instructions = XLSX.utils.aoa_to_sheet([
+    ["Shipment import template"],
+    ["Complete one shipment per row on the Shipment Import sheet."],
+    ["Required: Imp No., Consignee, Shipper, Item Description, FCL/LCL and Remarks."],
+    ["Consignee must match an existing consignee code or name in ShipTrack."],
+    ["FCL/LCL must include SEA or AIR (for example: SEA FCL, SEA LCL, or AIR)."],
+    ["Remarks must include a valid Incoterm: SEA uses CIF, CFR, FOB or EXW; AIR uses CIP, CPT, FCA or EXW."],
+    ["For FOB, FCA and EXW, include the origin location in Remarks (for example: FOB - Shanghai)."],
+    ["Value can be a number or include its currency (for example: USD 1,250.00). Dates use dd/mm/yyyy."],
+  ]);
+  instructions["!cols"] = [{ wch: 118 }];
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Shipment Import");
+  XLSX.utils.book_append_sheet(workbook, instructions, "Instructions");
+  XLSX.writeFile(workbook, "shiptrack-shipment-import-template.xlsx", { compression: true });
+}
+
 function StatusBadge({ children, tone }) {
   const value = String(children || "Pending").toLowerCase().replaceAll(" ", "-");
   return <span className={`badge ${tone || value}`}>{children}</span>;
@@ -359,7 +386,7 @@ function ShipmentActions({ shipment, onEdit, onDelete }) {
   </div>;
 }
 
-function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderClearing, onCleared, consignees = [] }) {
+function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderClearing, onCleared, showActions = true, consignees = [] }) {
   if (!rows.length) return <EmptyState message={mode === "shipments" ? "No shipment records yet" : "No shipments found"} onAdd={onAdd} />;
   if (mode === "payment-cards") return (
     <div className="payment-details-list">
@@ -399,11 +426,12 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
   }[mode];
   const workflowAction = onTTSent ? { label: "TT Sent", onClick: onTTSent } : onUnderClearing ? { label: "Under Clearing", onClick: onUnderClearing } : onCleared ? { label: "Cleared", onClick: onCleared } : null;
   const visibleHeaders = workflowAction ? [...headers.slice(0, -1), workflowAction.label, ""] : headers;
+  const tableHeaders = showActions ? visibleHeaders : visibleHeaders.slice(0, -1);
 
   return (
     <div className="table-scroll">
       <table>
-        <thead><tr>{visibleHeaders.map((header, index) => <th key={`${header}-${index}`}>{header}</th>)}</tr></thead>
+        <thead><tr>{tableHeaders.map((header, index) => <th key={`${header}-${index}`}>{header}</th>)}</tr></thead>
         <tbody>
           {rows.map((shipment) => (
             <tr key={shipment.id}>
@@ -438,7 +466,7 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
                 <td><StatusBadge tone={shipment.clearanceStatus === "Cleared" ? "cleared" : "under-clearing"}>{shipment.clearanceStatus}</StatusBadge></td>
                 <td><StatusBadge>{shipment.status}</StatusBadge></td>
               </>}
-              <td>{mode === "payments" ? <ShipmentActions shipment={shipment} onEdit={onEdit} onDelete={onDelete} /> : <button className="icon-button row-more" aria-label={`Edit ${shipment.importNo}`} title="Edit shipment" onClick={() => onEdit(shipment)}><MoreHorizontal size={18} /></button>}</td>
+              {showActions && <td>{mode === "payments" ? <ShipmentActions shipment={shipment} onEdit={onEdit} onDelete={onDelete} /> : <button className="icon-button row-more" aria-label={`Edit ${shipment.importNo}`} title="Edit shipment" onClick={() => onEdit(shipment)}><MoreHorizontal size={18} /></button>}</td>}
             </tr>
           ))}
         </tbody>
@@ -801,10 +829,14 @@ function ClearedShipmentModal({ shipment, onClose, onSave }) {
 }
 
 function Dashboard({ shipments, consignees, analytics, onNavigate, onEdit, onAdd, onImport }) {
-  const maxMonthly = Math.max(1, ...((analytics?.monthly || []).map((item) => item.shipments)));
+  const [monthRange, setMonthRange] = useState(6);
+  const monthlyData = (analytics?.monthly || []).slice(-monthRange);
+  const maxMonthly = Math.max(1, ...monthlyData.map((item) => item.shipments));
+  const chartMaximum = Math.max(4, Math.ceil(maxMonthly / 4) * 4);
+  const chartTicks = Array.from({ length: 5 }, (_, index) => chartMaximum - (chartMaximum / 4) * index);
   return (
     <>
-      <PageTitle eyebrow="OVERVIEW" title="Good morning, team" subtitle="Here's what's happening with your shipments today." action={<button className="button secondary" onClick={onImport}><Upload size={16} /> Import Excel</button>} />
+      <PageTitle eyebrow="OVERVIEW" title="Good morning, team" subtitle="Here's what's happening with your shipments today." action={<div className="page-actions"><button className="button secondary" onClick={downloadShipmentImportTemplate}><Download size={16} /> Download template</button><button className="button secondary" onClick={onImport}><Upload size={16} /> Import Excel</button></div>} />
       <section className="stat-grid">
         <StatCard label="Total shipments" value={analytics?.total ?? "—"} helper="Live records from MongoDB" icon={Ship} color="blue" />
         <StatCard label="Pending" value={analytics?.pending ?? "—"} helper="Awaiting next action" icon={Clock3} color="amber" />
@@ -813,13 +845,13 @@ function Dashboard({ shipments, consignees, analytics, onNavigate, onEdit, onAdd
       </section>
       <div className="dashboard-grid">
         <section className="panel monthly-panel">
-          <div className="panel-heading"><div><h2>Shipment activity</h2><p>Shipments by expected arrival month</p></div><button className="select-button">Last 6 months <ChevronDown size={14} /></button></div>
+          <div className="panel-heading"><div><h2>Shipment activity</h2><p>Shipments by expected arrival month</p></div><select className="select-button" value={monthRange} onChange={(event) => setMonthRange(Number(event.target.value))} aria-label="Shipment activity period"><option value={3}>Last 3 months</option><option value={6}>Last 6 months</option><option value={12}>Last 12 months</option></select></div>
           <div className="chart">
-            <div className="chart-y"><span>8</span><span>6</span><span>4</span><span>2</span><span>0</span></div>
+            <div className="chart-y">{chartTicks.map((tick) => <span key={tick}>{tick}</span>)}</div>
             <div className="chart-main">
               <div className="chart-gridlines"><i /><i /><i /><i /><i /></div>
-              <div className="bar-list">{(analytics?.monthly || []).map((item) => {
-                const barHeight = `${Math.max(8, (item.shipments / maxMonthly) * 100)}%`;
+              <div className="bar-list">{monthlyData.map((item) => {
+                const barHeight = `${Math.max(8, (item.shipments / chartMaximum) * 100)}%`;
                 return <div className="bar-column" key={item.month} style={{ "--bar-height": barHeight }}><div className="bar-value">{item.shipments}</div><div className="bar" /><span>{new Date(`${item.month}-01T00:00:00`).toLocaleDateString("en", { month: "short" })}</span></div>;
               })}</div>
             </div>
@@ -835,11 +867,11 @@ function Dashboard({ shipments, consignees, analytics, onNavigate, onEdit, onAdd
         </section>
         <section className="panel recent-panel">
           <div className="panel-heading"><div><h2>Recent shipments</h2><p>Latest updates across your imports</p></div></div>
-          <ShipmentTable rows={shipments.slice(0, 5)} mode="shipments" onEdit={onEdit} onAdd={onAdd} consignees={consignees} />
+          <ShipmentTable rows={shipments.slice(0, 5)} mode="shipments" onEdit={onEdit} onAdd={onAdd} showActions={false} consignees={consignees} />
         </section>
         <section className="panel company-panel">
           <div className="panel-heading"><div><h2>Consignee overview</h2><p>Shipments by consignee</p></div><button className="icon-button"><MoreHorizontal size={20} /></button></div>
-          <div className="company-list">{(analytics?.byCompany || []).map((company) => { const color = consigneeColorFor(company.company, consignees); return <div className="company-row" key={company.company}><span className="company-avatar consignee-color-avatar" style={{ "--consignee-color": color }}>{company.company.slice(0, 1)}</span><div className="company-name"><strong>{company.company}</strong><small>{company.total} shipments</small></div><div className="company-progress"><i style={{ width: `${company.total ? Math.max(12, (company.cleared / company.total) * 100) : 0}%`, backgroundColor: color }} /></div><b>{company.cleared}/{company.total}</b></div>; })}</div>
+          <div className="company-list">{(analytics?.byCompany || []).map((company) => { const color = consigneeColorFor(company.company, consignees); const consignee = consignees.find((item) => item.code === company.company); const consigneeName = consignee?.name || company.company; return <div className="company-row" key={company.company}><span className="company-avatar consignee-color-avatar" style={{ "--consignee-color": color }}>{consigneeName.slice(0, 1)}</span><div className="company-name"><strong>{consigneeName}</strong><small>{company.total} shipments</small></div><div className="company-progress"><i style={{ width: `${company.total ? Math.max(12, (company.cleared / company.total) * 100) : 0}%`, backgroundColor: color }} /></div><b>{company.cleared}/{company.total}</b></div>; })}</div>
           <button className="company-footer" onClick={() => onNavigate("companies")}>View consignee reports <ArrowRight size={15} /></button>
         </section>
       </div>
@@ -1529,7 +1561,7 @@ export default function App() {
             {reportsOpen && <div className="reports-nav-links">{reportNavigation.map(({ label, key }) => <button key={key} className={`reports-nav-link ${active === key ? "active" : ""}`} onClick={() => { setActive(key); setSidebarOpen(false); }}>{label}</button>)}</div>}
           </div>
         </nav>
-        <div className="sidebar-bottom"><div className="help-card"><div className="help-icon"><Settings2 size={17} /></div><strong>Need a hand?</strong><span>Manage your workspace and preferences.</span><button onClick={() => setNotice("Workspace settings are coming soon.")}>Workspace settings <ArrowRight size={14} /></button></div><div className="profile"><div className="profile-avatar">FM</div><div className="profile-name"><strong>{authState.username}</strong><span>Super administrator</span></div></div></div>
+        <div className="sidebar-bottom"><div className="profile"><div className="profile-avatar">FM</div><div className="profile-name"><strong>{authState.username}</strong><span>Super administrator</span></div></div></div>
       </aside>
       <div className="main-area">
         <header className="topbar">

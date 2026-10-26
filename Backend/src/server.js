@@ -565,7 +565,7 @@ function dashboardSummary(shipments, consigneeCodes) {
     totalCost: shipments.reduce((sum, item) => sum + Number(item.totalCost || 0), 0),
     byStatus,
     byCompany,
-    monthly: [...monthlyMap.values()].sort((a, b) => a.month.localeCompare(b.month)).slice(-6),
+    monthly: [...monthlyMap.values()].sort((a, b) => a.month.localeCompare(b.month)),
     delayedShipments: delayed,
   };
 }
