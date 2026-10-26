@@ -141,7 +141,7 @@ button { cursor: pointer; }
 .recent-panel { grid-column: 1 / -1; padding-top: 17px; overflow: hidden; }
 .recent-panel > .panel-heading { padding: 0 18px 15px; }
 .text-button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: #3473d8; font-size: 10px; font-weight: 600; padding: 2px; }
-.company-panel { display: flex; flex-direction: column; }
+.company-panel { display: flex; grid-column: 1 / -1; flex-direction: column; }
 .company-list { display: grid; gap: 17px; margin-top: 20px; }
 .company-row { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .company-avatar { display: grid; flex: none; place-items: center; width: 29px; height: 29px; border-radius: 8px; background: #eef3fb; color: #5576a9; font-size: 11px; font-weight: 700; }
@@ -393,7 +393,7 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
   .stat-top { font-size: 9px; }.stat-icon { width: 26px; height: 26px; }
   .dashboard-grid { grid-template-columns: 1fr; gap: 10px; }
   .recent-panel { grid-column: auto; }
-  .company-panel { min-height: 265px; }
+  .company-panel { grid-column: auto; min-height: 265px; }
   .table-toolbar { align-items: flex-start; flex-direction: column; }
   .shipment-summary-sections { gap: 12px; }
   .table-actions { width: 100%; flex-wrap: wrap; }
