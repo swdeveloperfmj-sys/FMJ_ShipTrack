@@ -108,6 +108,20 @@ const superAdminSchema = new mongoose.Schema(
     _id: { type: String, default: "super-admin" },
     username: { type: String, required: true, unique: true, trim: true, lowercase: true },
     passwordHash: { type: String, required: true },
+    fontSize: { type: Number, min: 80, max: 140, default: 100 },
+  },
+  { versionKey: false },
+);
+const appUserSchema = new mongoose.Schema(
+  {
+    _id: { type: String, required: true },
+    name: { type: String, required: true, trim: true, maxlength: 120 },
+    username: { type: String, required: true, unique: true, trim: true, lowercase: true },
+    passwordHash: { type: String, required: true },
+    sidebarAccess: { type: [String], default: [] },
+    fontSize: { type: Number, min: 80, max: 140, default: 100 },
+    createdAt: { type: String, default: () => new Date().toISOString() },
+    updatedAt: { type: String },
   },
   { versionKey: false },
 );
@@ -122,6 +136,7 @@ const loginChallengeSchema = new mongoose.Schema(
   { versionKey: false },
 );
 const SuperAdmin = mongoose.model("SuperAdmin", superAdminSchema);
+const AppUser = mongoose.model("AppUser", appUserSchema);
 const LoginChallenge = mongoose.model("LoginChallenge", loginChallengeSchema);
 const shipmentFields = [
   "importNo",
@@ -210,16 +225,16 @@ function createOtpHash(challengeId, otp) {
     .digest("hex");
 }
 
-function createSessionToken(admin) {
+function createSessionToken(account) {
   return jwt.sign(
-    { sub: admin._id, username: admin.username, purpose: "super-admin-session" },
+    { sub: account._id, username: account.username, name: account.name || account.username, role: account.role || "super-admin", sidebarAccess: account.sidebarAccess || [], fontSize: account.fontSize || 100, purpose: "shiptrack-session" },
     process.env.AUTH_TOKEN_SECRET,
     { expiresIn: "8h" },
   );
 }
 
-function setSessionCookie(response, admin) {
-  response.cookie(cookieName, createSessionToken(admin), {
+function setSessionCookie(response, account) {
+  response.cookie(cookieName, createSessionToken(account), {
     httpOnly: true,
     secure: isDeployed,
     sameSite: isDeployed ? "none" : "lax",
@@ -235,21 +250,28 @@ const clearSessionCookie = (response) => response.clearCookie(cookieName, {
   path: "/",
 });
 
-function requireSuperAdmin(request, response, next) {
+function requireAuthenticated(request, response, next) {
   const token = request.cookies[cookieName];
   if (!token) return response.status(401).json({ error: "Sign in to continue" });
 
   try {
     const session = jwt.verify(token, process.env.AUTH_TOKEN_SECRET);
-    if (session.purpose !== "super-admin-session" || session.sub !== "super-admin") {
+    if (session.purpose !== "shiptrack-session") {
       return response.status(401).json({ error: "Sign in to continue" });
     }
-    request.superAdmin = { id: session.sub, username: session.username };
+    request.user = { id: session.sub, username: session.username, name: session.name, role: session.role, sidebarAccess: session.sidebarAccess || [], fontSize: session.fontSize || 100 };
     next();
   } catch {
     clearSessionCookie(response);
     response.status(401).json({ error: "Your session expired. Sign in again." });
   }
+}
+
+function requireSuperAdmin(request, response, next) {
+  requireAuthenticated(request, response, () => {
+    if (request.user.role !== "super-admin") return response.status(403).json({ error: "Super-admin access is required." });
+    next();
+  });
 }
 
 async function sendLoginOtp(otp) {
@@ -284,11 +306,22 @@ app.get("/api/auth/status", async (request, response, next) => {
     if (token) {
       try {
         const session = jwt.verify(token, process.env.AUTH_TOKEN_SECRET);
-        if (session.purpose === "super-admin-session" && session.sub === admin._id) {
+        if (session.purpose === "shiptrack-session") {
+          const account = session.role === "user"
+            ? await AppUser.findById(session.sub).lean()
+            : await SuperAdmin.findById(session.sub).lean();
+          if (!account) {
+            clearSessionCookie(response);
+            return response.json({ setupRequired: false, authenticated: false });
+          }
           return response.json({
             setupRequired: false,
             authenticated: true,
-            username: admin.username,
+            username: account.username,
+            name: account.name || account.username,
+            role: session.role || "super-admin",
+            sidebarAccess: account.sidebarAccess || [],
+            fontSize: account.fontSize || 100,
           });
         }
       } catch {
@@ -343,8 +376,14 @@ app.post("/api/auth/login", loginLimiter, async (request, response, next) => {
       typeof body.username === "string" ? body.username.trim().toLowerCase() : "";
     const password = typeof body.password === "string" ? body.password : "";
     const admin = await SuperAdmin.findOne({ username });
-    if (!admin || !(await bcrypt.compare(password, admin.passwordHash))) {
+    const user = admin ? null : await AppUser.findOne({ username });
+    const account = admin || user;
+    if (!account || !(await bcrypt.compare(password, account.passwordHash))) {
       return response.status(401).json({ error: "Username or password is incorrect." });
+    }
+    if (user) {
+      setSessionCookie(response, { ...user.toObject(), role: "user" });
+      return response.json({ authenticated: true, username: user.username, name: user.name, role: "user", sidebarAccess: user.sidebarAccess || [], fontSize: user.fontSize || 100 });
     }
     if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
       return response.status(503).json({
@@ -409,14 +448,14 @@ app.post("/api/auth/verify", verifyLimiter, async (request, response, next) => {
     }
 
     await LoginChallenge.deleteOne({ _id: challengeId });
-    setSessionCookie(response, admin);
-    response.json({ authenticated: true, username: admin.username });
+    setSessionCookie(response, { ...admin.toObject(), role: "super-admin" });
+    response.json({ authenticated: true, username: admin.username, name: admin.username, role: "super-admin", sidebarAccess: [], fontSize: admin.fontSize || 100 });
   } catch (error) {
     next(error);
   }
 });
 
-app.post("/api/auth/logout", requireSuperAdmin, (_request, response) => {
+app.post("/api/auth/logout", requireAuthenticated, (_request, response) => {
   clearSessionCookie(response);
   response.status(204).end();
 });
@@ -578,7 +617,92 @@ app.get("/api/health", (_request, response) => {
   });
 });
 
-app.use("/api", requireSuperAdmin);
+app.use("/api", requireAuthenticated);
+
+const sidebarAccessKeys = ["dashboard", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", "companies", "consignees", "countries", "reports", "settings"];
+const serializeUser = (user) => ({ id: user._id, name: user.name, username: user.username, sidebarAccess: user.sidebarAccess || [], fontSize: user.fontSize || 100, createdAt: user.createdAt });
+
+app.put("/api/settings/font-size", async (request, response, next) => {
+  try {
+    const { userId, fontSize } = request.body || {};
+    const normalizedSize = Number(fontSize);
+    if (!Number.isInteger(normalizedSize) || normalizedSize < 80 || normalizedSize > 140) {
+      return response.status(400).json({ error: "Font size must be between 80% and 140%." });
+    }
+    if (request.user.role === "user") {
+      const currentUser = await AppUser.findById(request.user.id);
+      if (!currentUser) return response.status(404).json({ error: "User not found." });
+      if (!currentUser.sidebarAccess.includes("settings")) {
+        return response.status(403).json({ error: "Settings access is required." });
+      }
+      currentUser.fontSize = normalizedSize;
+      currentUser.updatedAt = new Date().toISOString();
+      const user = await currentUser.save();
+      setSessionCookie(response, { ...user.toObject(), role: "user" });
+      return response.json(serializeUser(user));
+    }
+    if (userId === "super-admin") {
+      const admin = await SuperAdmin.findByIdAndUpdate("super-admin", { fontSize: normalizedSize }, { new: true, runValidators: true });
+      if (!admin) return response.status(404).json({ error: "Super admin not found." });
+      setSessionCookie(response, { ...admin.toObject(), role: "super-admin" });
+      return response.json({ id: "super-admin", fontSize: admin.fontSize });
+    }
+    const user = await AppUser.findByIdAndUpdate(userId, { fontSize: normalizedSize, updatedAt: new Date().toISOString() }, { new: true, runValidators: true });
+    if (!user) return response.status(404).json({ error: "User not found." });
+    response.json(serializeUser(user));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/users", requireSuperAdmin, async (_request, response, next) => {
+  try { response.json((await AppUser.find().sort({ name: 1 }).lean()).map(serializeUser)); } catch (error) { next(error); }
+});
+
+app.post("/api/users", requireSuperAdmin, async (request, response, next) => {
+  try {
+    const { name, username, password, sidebarAccess } = request.body || {};
+    if (typeof name !== "string" || !name.trim()) return response.status(400).json({ error: "Name is required." });
+    if (typeof username !== "string" || !/^[a-zA-Z0-9._-]{3,40}$/.test(username.trim())) return response.status(400).json({ error: "Username must be 3–40 characters and use only letters, numbers, dots, underscores or hyphens." });
+    if (typeof password !== "string" || password.length < 6 || password.length > 128) return response.status(400).json({ error: "Password must be between 6 and 128 characters." });
+    const access = [...new Set(Array.isArray(sidebarAccess) ? sidebarAccess.filter((key) => sidebarAccessKeys.includes(key)) : [])];
+    if (!access.length) return response.status(400).json({ error: "Select at least one left sidebar item." });
+    const user = await AppUser.create({ _id: randomUUID(), name: name.trim(), username: username.trim().toLowerCase(), passwordHash: await bcrypt.hash(password, 12), sidebarAccess: access });
+    response.status(201).json(serializeUser(user));
+  } catch (error) {
+    if (error.code === 11000) return response.status(409).json({ error: "That username is already in use." });
+    next(error);
+  }
+});
+
+app.put("/api/users/:id", requireSuperAdmin, async (request, response, next) => {
+  try {
+    const { name, username, password, sidebarAccess } = request.body || {};
+    if (typeof name !== "string" || !name.trim()) return response.status(400).json({ error: "Name is required." });
+    if (typeof username !== "string" || !/^[a-zA-Z0-9._-]{3,40}$/.test(username.trim())) return response.status(400).json({ error: "Username must be 3–40 characters and use only letters, numbers, dots, underscores or hyphens." });
+    if (password && (typeof password !== "string" || password.length < 6 || password.length > 128)) return response.status(400).json({ error: "Password must be between 6 and 128 characters." });
+    const access = [...new Set(Array.isArray(sidebarAccess) ? sidebarAccess.filter((key) => sidebarAccessKeys.includes(key)) : [])];
+    if (!access.length) return response.status(400).json({ error: "Select at least one left sidebar item." });
+    const updates = { name: name.trim(), username: username.trim().toLowerCase(), sidebarAccess: access, updatedAt: new Date().toISOString() };
+    if (password) updates.passwordHash = await bcrypt.hash(password, 12);
+    const user = await AppUser.findByIdAndUpdate(request.params.id, updates, { new: true, runValidators: true });
+    if (!user) return response.status(404).json({ error: "User not found." });
+    response.json(serializeUser(user));
+  } catch (error) {
+    if (error.code === 11000) return response.status(409).json({ error: "That username is already in use." });
+    next(error);
+  }
+});
+
+app.delete("/api/users/:id", requireSuperAdmin, async (request, response, next) => {
+  try {
+    const user = await AppUser.findByIdAndDelete(request.params.id);
+    if (!user) return response.status(404).json({ error: "User not found." });
+    response.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
 
 app.get("/api/shipments", async (request, response, next) => {
   try {

@@ -23,13 +23,17 @@ import {
   Menu,
   MoreHorizontal,
   PackageCheck,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   ShieldCheck,
   Ship,
+  Settings,
   Moon,
   Sun,
   TrendingUp,
   Upload,
+  Users,
   X,
 } from "lucide-react";
 import * as XLSX from "xlsx";
@@ -53,6 +57,11 @@ const reportNavigation = [
   { label: "RLA", key: "report-rla", consigneeName: "RLA" },
   { label: "AOP", key: "report-aop", consigneeName: "AOP" },
   { label: "UB", key: "report-ub", consigneeName: "UB" },
+];
+const userAccessOptions = [
+  ...navigation.map(({ key, label }) => ({ key, label })),
+  { key: "reports", label: "Reports & Analytics" },
+  { key: "settings", label: "Settings" },
 ];
 
 const consigneeColorPresets = [
@@ -456,7 +465,7 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
                 <td>{dateLabel(shipment.etd)}</td><td>{dateLabel(shipment.eta)}</td>
                 <td>{decimalAmount(shipment.duty)}</td><td>{decimalAmount(shipment.doCharges)}</td>
                 <td>{shipment.clearanceStatus || "—"}</td>
-                <td className="description-cell">{shipment.remarks || "—"}</td>
+                <td className="remarks-cell">{shipment.remarks || "—"}</td>
                 {workflowAction && <td><button type="button" className="tt-sent-update-button" onClick={() => workflowAction.onClick(shipment)}>{workflowAction.label}</button></td>}
               </>}
               {mode === "customs" && <>
@@ -828,15 +837,28 @@ function ClearedShipmentModal({ shipment, onClose, onSave }) {
   </div>;
 }
 
-function Dashboard({ shipments, consignees, analytics, onNavigate, onEdit, onAdd, onImport }) {
+function Dashboard({ shipments, consignees, analytics, accountName, onNavigate, onEdit, onAdd, onImport }) {
+  const [currentTime, setCurrentTime] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const hour = currentTime.getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const displayName = String(accountName || "there").trim();
   const [monthRange, setMonthRange] = useState(6);
+  const [statusMonthRange, setStatusMonthRange] = useState("all");
   const monthlyData = (analytics?.monthly || []).slice(-monthRange);
   const maxMonthly = Math.max(1, ...monthlyData.map((item) => item.shipments));
   const chartMaximum = Math.max(4, Math.ceil(maxMonthly / 4) * 4);
   const chartTicks = Array.from({ length: 5 }, (_, index) => chartMaximum - (chartMaximum / 4) * index);
+  const shipmentMonths = [...new Set(shipments.map((shipment) => (shipment.eta || shipment.etd || "").slice(0, 7)).filter(Boolean))].sort();
+  const statusMonths = statusMonthRange === "all" ? null : new Set(shipmentMonths.slice(-Number(statusMonthRange)));
+  const statusShipments = statusMonths ? shipments.filter((shipment) => statusMonths.has((shipment.eta || shipment.etd || "").slice(0, 7))) : shipments;
+  const statusCounts = Object.fromEntries(shipmentStatuses.map((status) => [status, statusShipments.filter((shipment) => shipment.status === status).length]));
   return (
     <>
-      <PageTitle eyebrow="OVERVIEW" title="Good morning, team" subtitle="Here's what's happening with your shipments today." action={<div className="page-actions"><button className="button secondary" onClick={downloadShipmentImportTemplate}><Download size={16} /> Download template</button><button className="button secondary" onClick={onImport}><Upload size={16} /> Import Excel</button></div>} />
+      <PageTitle eyebrow="OVERVIEW" title={`${greeting}, ${displayName}`} subtitle="Here's what's happening with your shipments today." action={<div className="page-actions"><button className="button secondary" onClick={downloadShipmentImportTemplate}><Download size={16} /> Download template</button><button className="button secondary" onClick={onImport}><Upload size={16} /> Import Excel</button></div>} />
       <section className="stat-grid">
         <StatCard label="Total shipments" value={analytics?.total ?? "—"} helper="Live records from MongoDB" icon={Ship} color="blue" />
         <StatCard label="Pending" value={analytics?.pending ?? "—"} helper="Awaiting next action" icon={Clock3} color="amber" />
@@ -858,11 +880,11 @@ function Dashboard({ shipments, consignees, analytics, onNavigate, onEdit, onAdd
           </div>
         </section>
         <section className="panel status-panel">
-          <div className="panel-heading"><div><h2>Shipment status</h2><p>Current portfolio overview</p></div><button className="icon-button"><MoreHorizontal size={20} /></button></div>
-          <div className="status-total"><strong>{analytics?.total ?? 0}</strong><span>Total shipments</span></div>
-          <div className="status-stack"><i className="stack-cleared" style={{ flex: analytics?.cleared || 0.1 }} /><i className="stack-clearing" style={{ flex: analytics?.underClearing || 0.1 }} /><i className="stack-pending" style={{ flex: analytics?.pending || 0.1 }} /></div>
+          <div className="panel-heading"><div><h2>Shipment status</h2><p>Current portfolio overview</p></div><select className="select-button" value={statusMonthRange} onChange={(event) => setStatusMonthRange(event.target.value)} aria-label="Shipment status period"><option value="all">All months</option><option value="3">Last 3 months</option><option value="6">Last 6 months</option><option value="12">Last 12 months</option></select></div>
+          <div className="status-total"><strong>{statusShipments.length}</strong><span>Total shipments</span></div>
+          <div className="status-stack"><i className="stack-cleared" style={{ flex: statusCounts.Cleared || 0.1 }} /><i className="stack-clearing" style={{ flex: statusCounts["Under Clearing"] || 0.1 }} /><i className="stack-pending" style={{ flex: statusCounts.Pending || 0.1 }} /></div>
           <div className="legend-list">
-            {shipmentStatuses.map((status) => <div className="legend-row" key={status}><span><i className={`legend-dot ${status.toLowerCase().replace(" ", "-")}`} />{status}</span><strong>{analytics?.byStatus?.[status] ?? 0}</strong></div>)}
+            {shipmentStatuses.map((status) => <div className="legend-row" key={status}><span><i className={`legend-dot ${status.toLowerCase().replace(" ", "-")}`} />{status}</span><strong>{statusCounts[status]}</strong></div>)}
           </div>
         </section>
         <section className="panel recent-panel">
@@ -1125,6 +1147,63 @@ function AnalyticsView({ analytics }) {
   </>;
 }
 
+function UserModal({ initial, onClose, onSave }) {
+  const [form, setForm] = useState({ name: initial?.name || "", username: initial?.username || "", password: "", confirmPassword: "", sidebarAccess: initial?.sidebarAccess || [] });
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const toggleAccess = (key) => setForm((current) => ({ ...current, sidebarAccess: current.sidebarAccess.includes(key) ? current.sidebarAccess.filter((item) => item !== key) : [...current.sidebarAccess, key] }));
+  async function submit(event) {
+    event.preventDefault();
+    if (form.password !== form.confirmPassword) return setError("Passwords do not match.");
+    if (!form.sidebarAccess.length) return setError("Select at least one left sidebar item.");
+    setSaving(true); setError("");
+    try { await onSave(form, initial?.id); onClose(); } catch (saveError) { setError(saveError.message); } finally { setSaving(false); }
+  }
+  async function remove() {
+    if (!window.confirm(`Delete user ${initial.username}?`)) return;
+    setSaving(true); setError("");
+    try { await onSave(null, initial.id, true); onClose(); } catch (deleteError) { setError(deleteError.message); setSaving(false); }
+  }
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="shipment-modal consignee-modal" role="dialog" aria-modal="true" aria-labelledby="user-modal-title"><div className="modal-head"><div><div className="eyebrow">{initial ? "UPDATE USER" : "NEW USER"}</div><h2 id="user-modal-title">{initial ? "Edit user" : "Create user"}</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Close"><X size={20} /></button></div><form onSubmit={submit}><div className="form-section"><div className="form-grid"><label>Full name<input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required maxLength={120} /></label><label>Username<input value={form.username} onChange={(event) => setForm((current) => ({ ...current, username: event.target.value }))} required minLength={3} maxLength={40} pattern="[A-Za-z0-9._-]+" /></label><label>{initial ? "New password (optional)" : "Password"}<input type="password" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} required={!initial} minLength={6} maxLength={128} /></label><label>{initial ? "Re-enter new password" : "Re-enter password"}<input type="password" value={form.confirmPassword} onChange={(event) => setForm((current) => ({ ...current, confirmPassword: event.target.value }))} required={!initial} minLength={6} maxLength={128} /></label></div></div><div className="form-section"><h3>Left sidebar access</h3><div className="user-access-list">{userAccessOptions.map((item) => <label key={item.key}><input type="checkbox" checked={form.sidebarAccess.includes(item.key)} onChange={() => toggleAccess(item.key)} />{item.label}</label>)}</div></div>{error && <div className="form-error">{error}</div>}<div className="modal-footer">{initial && <button type="button" className="delete-button" onClick={remove} disabled={saving}>Delete user</button>}<button type="button" className="button secondary" onClick={onClose}>Cancel</button><button className="button primary" disabled={saving}>{saving ? "Saving…" : initial ? "Save changes" : "Create user"}</button></div></form></section></div>;
+}
+
+function UserDirectory({ users, onEdit }) {
+  return <section className="panel table-panel"><div className="table-toolbar"><div className="table-title"><h2>Users</h2><span className="count-pill">{users.length}</span></div></div>{!users.length ? <EmptyState message="No users created" description="Use the Create user button above to add the first user." /> : <div className="table-scroll"><table><thead><tr><th>Name</th><th>Username</th><th>Left sidebar access</th><th /></tr></thead><tbody>{users.map((user) => <tr key={user.id} className="clickable-row" onClick={() => onEdit(user)}><td><span className="import-id">{user.name}</span></td><td>{user.username}</td><td>{user.sidebarAccess.map((key) => userAccessOptions.find((item) => item.key === key)?.label).filter(Boolean).join(", ") || "No access selected"}</td><td><button className="consignee-edit-button" aria-label={`Edit ${user.name}`} onClick={(event) => { event.stopPropagation(); onEdit(user); }}>Edit</button></td></tr>)}</tbody></table></div>}</section>;
+}
+
+function FontSizeSettings({ users, account, isSuperAdmin, onSave }) {
+  const accounts = isSuperAdmin
+    ? [{ id: "super-admin", name: account.name || account.username, username: account.username, fontSize: account.fontSize || 100, role: "Super administrator" }, ...users.map((user) => ({ ...user, role: "Team user" }))]
+    : [{ id: "self", name: account.name || account.username, username: account.username, fontSize: account.fontSize || 100, role: "My account" }];
+  const [selectedId, setSelectedId] = useState(isSuperAdmin ? "super-admin" : "self");
+  const selected = accounts.find((account) => account.id === selectedId) || accounts[0];
+  const [fontSize, setFontSize] = useState(selected.fontSize || 100);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  useEffect(() => { setFontSize(selected.fontSize || 100); }, [selectedId, selected.fontSize]);
+  const save = async () => {
+    setSaving(true);
+    setSaveError("");
+    try {
+      await onSave(selectedId, fontSize);
+    } catch (error) {
+      setSaveError(error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+  return <section className="panel settings-panel">
+    <div className="settings-heading"><div className="settings-icon"><Settings size={20} /></div><div><h2>User font size</h2><p>Choose an account and set the text size used throughout that user's workspace.</p></div></div>
+    <div className="settings-form">
+      {isSuperAdmin ? <label>User<select value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>{accounts.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.role})</option>)}</select></label> : <div className="settings-current-user"><span>Account</span><strong>{selected.name}</strong><small>@{selected.username} · Only your font size can be changed</small></div>}
+      <div className="font-size-control"><div className="font-size-control-head"><label htmlFor="font-size-range">Font size</label><strong>{fontSize}%</strong></div><input id="font-size-range" type="range" min="80" max="140" step="5" value={fontSize} onChange={(event) => setFontSize(Number(event.target.value))} /><div className="font-size-scale"><span>Smaller</span><span>Default</span><span>Larger</span></div></div>
+      <div className="font-preview" style={{ fontSize: `${fontSize / 100}em` }}><span>Preview</span><strong>FMJ ShipTrack</strong><p>Shipment details will appear at this text size for {selected.name}.</p></div>
+    </div>
+    {saveError && <div className="settings-error">{saveError}</div>}
+    <div className="settings-footer"><button className="button secondary" type="button" onClick={() => setFontSize(100)}>Reset to default</button><button className="button primary" type="button" disabled={saving || fontSize === selected.fontSize} onClick={save}>{saving ? "Saving…" : "Save font size"}</button></div>
+  </section>;
+}
+
 function AuthScreen({ setupRequired, theme, onToggleTheme, onAuthenticated, loading, connectionError, onRetry }) {
   const [mode, setMode] = useState(setupRequired ? "setup" : "login");
   const [username, setUsername] = useState("");
@@ -1146,6 +1225,10 @@ function AuthScreen({ setupRequired, theme, onToggleTheme, onAuthenticated, load
     setBusy(true);
     try {
       const result = await api.login({ username: accountName, password: accountPassword });
+      if (result.authenticated) {
+        onAuthenticated(result);
+        return;
+      }
       setChallengeId(result.challengeId);
       setMode("otp");
       setPassword("");
@@ -1201,8 +1284,8 @@ function AuthScreen({ setupRequired, theme, onToggleTheme, onAuthenticated, load
             <h1>Your shipments.<br />One clear view.</h1>
             <p>Track every import, payment and clearance milestone from a secure workspace built for your team.</p>
             <div className="auth-benefits">
-              <div><span><ShieldCheck size={17} /></span><strong>Private super-admin access</strong></div>
-              <div><span><MailCheck size={17} /></span><strong>One-time email verification code</strong></div>
+              <div><span><ShieldCheck size={17} /></span><strong>Secure team access</strong></div>
+              <div><span><MailCheck size={17} /></span><strong>Extra verification for administrators</strong></div>
               <div><span><CheckCircle2 size={17} /></span><strong>Shipment records protected behind sign-in</strong></div>
             </div>
           </div>
@@ -1211,14 +1294,14 @@ function AuthScreen({ setupRequired, theme, onToggleTheme, onAuthenticated, load
         <section className="auth-card-wrap">
           <div className="auth-card">
             <div className="auth-card-icon">{mode === "otp" ? <MailCheck size={21} /> : <ShieldCheck size={21} />}</div>
-            <div className="auth-card-eyebrow">{mode === "setup" ? "ONE-TIME INITIALIZATION" : "SUPER-ADMIN ACCESS"}</div>
+            <div className="auth-card-eyebrow">{mode === "setup" ? "ONE-TIME INITIALIZATION" : mode === "otp" ? "ADMIN VERIFICATION" : "TEAM ACCESS"}</div>
             <h2>{mode === "setup" ? "Create your admin account" : mode === "otp" ? "Check your email" : "Welcome back"}</h2>
             <p className="auth-card-subtitle">
               {mode === "setup"
                 ? "Set up the only super-admin account. This page locks after setup."
                 : mode === "otp"
                   ? "Enter the 6-digit code sent to your registered admin email."
-                  : "Sign in with your own credentials to receive a one-time verification code."}
+                  : "Sign in with your username and password. Administrators will also verify by email."}
             </p>
             {loading && <div className="auth-message">Checking secure sign-in…</div>}
             {!loading && connectionError && <div className="auth-error">{connectionError}<button type="button" onClick={onRetry}>Retry connection</button></div>}
@@ -1226,7 +1309,7 @@ function AuthScreen({ setupRequired, theme, onToggleTheme, onAuthenticated, load
               {mode !== "otp" && <>
                 {mode === "setup" && <label>One-time setup key<input type="password" autoComplete="off" value={setupKey} onChange={(event) => setSetupKey(event.target.value)} required minLength={32} placeholder="Paste the private setup key" /></label>}
                 <label>Username<input type="text" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required minLength={3} maxLength={40} pattern="[A-Za-z0-9._\-]+" placeholder="Your username" /></label>
-                <label>Password<input type="password" autoComplete={mode === "setup" ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} required minLength={12} maxLength={128} placeholder={mode === "setup" ? "At least 12 characters" : "Your password"} /></label>
+                <label>Password<input type="password" autoComplete={mode === "setup" ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} required minLength={mode === "setup" ? 12 : 6} maxLength={128} placeholder={mode === "setup" ? "At least 12 characters" : "Your password"} /></label>
               </>}
               {mode === "otp" && <>
                 <div className="otp-destination"><MailCheck size={16} /><span>Code sent to <strong>sw.developer.fmj@gmail.com</strong></span></div>
@@ -1234,7 +1317,7 @@ function AuthScreen({ setupRequired, theme, onToggleTheme, onAuthenticated, load
               </>}
               {notice && <div className="auth-message">{notice}</div>}
               {error && <div className="auth-error">{error}</div>}
-              <button className="auth-submit" disabled={busy}>{busy ? "Please wait…" : mode === "setup" ? "Create account & continue" : mode === "otp" ? "Verify & sign in" : "Continue with email code"}<ArrowRight size={16} /></button>
+              <button className="auth-submit" disabled={busy}>{busy ? "Please wait…" : mode === "setup" ? "Create account & continue" : mode === "otp" ? "Verify & sign in" : "Sign in"}<ArrowRight size={16} /></button>
               {mode === "otp" && <div className="auth-secondary-actions"><button type="button" onClick={() => { setMode("login"); setChallengeId(""); setCode(""); setError(""); setNotice(""); }}>Back to sign in</button><button type="button" onClick={() => { setMode("login"); setChallengeId(""); setCode(""); setError(""); setNotice("Sign in again to request a new code."); }}>Sign in for a new code</button></div>}
             </form>}
             <div className="auth-security-note"><LockKeyholeIcon /> Your password is protected and never sent by email.</div>
@@ -1260,6 +1343,7 @@ export default function App() {
   const [consignees, setConsignees] = useState([]);
   const [countries, setCountries] = useState([]);
   const [currencies, setCurrencies] = useState([]);
+  const [users, setUsers] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [modalShipment, setModalShipment] = useState(undefined);
   const [modalShipmentImport, setModalShipmentImport] = useState(false);
@@ -1269,10 +1353,12 @@ export default function App() {
   const [modalConsignee, setModalConsignee] = useState(undefined);
   const [modalCountry, setModalCountry] = useState(undefined);
   const [modalCurrency, setModalCurrency] = useState(undefined);
+  const [modalUser, setModalUser] = useState(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("fmj-shiptrack-sidebar-collapsed") === "true");
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [ttFilters, setTtFilters] = useState(emptyShipmentFilters);
@@ -1311,6 +1397,15 @@ export default function App() {
 
   useEffect(() => { loadAuthStatus(); }, [loadAuthStatus]);
   useEffect(() => {
+    if (authState?.role !== "super-admin") { setUsers([]); return; }
+    api.getUsers().then(setUsers).catch((loadError) => setError(loadError.message));
+  }, [authState?.role]);
+  useEffect(() => {
+    if (authState?.role !== "user") return;
+    const firstAllowed = navigation.find((item) => authState.sidebarAccess?.includes(item.key))?.key || (authState.sidebarAccess?.includes("settings") ? "settings" : null);
+    if (firstAllowed) setActive(firstAllowed);
+  }, [authState?.role, authState?.sidebarAccess]);
+  useEffect(() => {
     if (authState?.authenticated) refresh();
   }, [authState, refresh]);
   useEffect(() => {
@@ -1328,6 +1423,9 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("fmj-shiptrack-theme", theme);
   }, [theme]);
+  useEffect(() => {
+    localStorage.setItem("fmj-shiptrack-sidebar-collapsed", String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
   useEffect(() => {
     if (!notice) return undefined;
     const timer = window.setTimeout(() => setNotice(""), 3500);
@@ -1479,18 +1577,20 @@ export default function App() {
     }
   }
 
-  const activeTitle = [...navigation, ...reportNavigation].find((item) => item.key === active)?.label || "Dashboard";
+  const availableNavigation = authState?.role === "super-admin" ? navigation : navigation.filter((item) => authState?.sidebarAccess?.includes(item.key));
+  const canAccessReports = authState?.role === "super-admin" || authState?.sidebarAccess?.includes("reports");
+  const activeTitle = active === "settings" ? "Settings" : active === "users" ? "Users" : [...navigation, ...reportNavigation].find((item) => item.key === active)?.label || "Dashboard";
   const openModal = (shipment) => setModalShipment(shipment || null);
-  const markAuthenticated = (username) => {
+  const markAuthenticated = (account) => {
     setAuthError("");
-    setAuthState({ setupRequired: false, authenticated: true, username });
+    setAuthState(typeof account === "string" ? { setupRequired: false, authenticated: true, username: account, name: account, role: "super-admin", sidebarAccess: [] } : { setupRequired: false, ...account });
     setLoading(true);
   };
 
   function renderContent() {
     if (loading) return <div className="loading-state"><span className="loader" />Loading shipment workspace…</div>;
     if (error && !shipments.length) return <div className="error-state"><strong>Unable to load shipments</strong><span>{error}</span><button className="button secondary" onClick={refresh}>Try again</button></div>;
-    if (active === "dashboard") return <Dashboard shipments={shipments} consignees={consignees} analytics={analytics} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} onImport={() => setModalShipmentImport(true)} />;
+    if (active === "dashboard") return <Dashboard shipments={shipments} consignees={consignees} analytics={analytics} accountName={authState?.name || authState?.username} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} onImport={() => setModalShipmentImport(true)} />;
     if (active === "to-be-tt") {
       const pendingTTShipments = shipments.filter((shipment) =>
         shipment.paymentMethod === "Advance TT" && shipment.paymentStatus === "Pending",
@@ -1531,10 +1631,12 @@ export default function App() {
     }
     if (active === "companies") return <><PageTitle eyebrow="CONSIGNEES" title="Consignee reports" subtitle="A clear view of imports and clearance progress for each consignee." />{error && <div className="inline-error">{error}</div>}<ConsigneeReports analytics={analytics} shipments={shipments} consignees={consignees} onEdit={openModal} /></>;
     if (active === "consignees") return <><PageTitle eyebrow="DIRECTORY" title="Consignees" subtitle="Create and manage the consignee records assigned to your shipments." action={<button className="button primary" onClick={() => setModalConsignee(null)}><Plus size={17} /> Create consignee</button>} />{error && <div className="inline-error">{error}</div>}<ConsigneeDirectory consignees={consignees} shipments={shipments} onEdit={setModalConsignee} onAdd={() => setModalConsignee(null)} /></>;
+    if (active === "users" && authState?.role === "super-admin") return <><PageTitle eyebrow="ADMINISTRATION" title="Users" subtitle="Create user accounts and select their left sidebar access." action={<button className="button primary" onClick={() => setModalUser(null)}><Plus size={17} /> Create user</button>} /><UserDirectory users={users} onEdit={setModalUser} /></>;
+    if (active === "settings" && (authState?.role === "super-admin" || authState?.sidebarAccess?.includes("settings"))) return <><PageTitle eyebrow="ADMINISTRATION" title="Settings" subtitle={authState.role === "super-admin" ? "Manage user-specific display preferences." : "Manage your display preferences."} /><FontSizeSettings users={users} account={authState} isSuperAdmin={authState.role === "super-admin"} onSave={async (userId, fontSize) => { const updated = await api.updateFontSize(userId, fontSize); if (authState.role === "user" || userId === "super-admin") setAuthState((current) => ({ ...current, fontSize: updated.fontSize })); else setUsers((current) => current.map((user) => user.id === userId ? updated : user)); setNotice("Font size updated successfully"); }} /></>;
     if (active === "countries") return <><PageTitle eyebrow="DIRECTORY" title="Countries & currencies" subtitle="Manage country and currency lists separately." action={<button className="button primary" title="Create country (F1)" onClick={() => setModalCountry(null)}><Plus size={17} /> Create country</button>} />{error && <div className="inline-error">{error}</div>}<CountryDirectory countries={countries} onEdit={setModalCountry} onAdd={() => setModalCountry(null)} /><CurrencyDirectory currencies={currencies} onEdit={setModalCurrency} onAdd={() => setModalCurrency(null)} /></>;
     if (active === "documents") return <><PageTitle eyebrow="PAPERWORK" title="Documents" subtitle="Track required shipping and customs documents in one place." />{error && <div className="inline-error">{error}</div>}<DocumentsView shipments={shipments} consignees={consignees} onEdit={openModal} /></>;
     if (active === "analytics") return <><PageTitle eyebrow="PERFORMANCE" title="Reports & analytics" subtitle="Monitor shipment delays, landed costs and monthly activity." />{error && <div className="inline-error">{error}</div>}<AnalyticsView analytics={analytics} /></>;
-    return <Dashboard shipments={shipments} consignees={consignees} analytics={analytics} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} onImport={() => setModalShipmentImport(true)} />;
+    return <Dashboard shipments={shipments} consignees={consignees} analytics={analytics} accountName={authState?.name || authState?.username} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} onImport={() => setModalShipmentImport(true)} />;
   }
 
   if (!authState?.authenticated) {
@@ -1552,16 +1654,19 @@ export default function App() {
   }
 
   return (
-    <div className={`app-shell ${sidebarOpen ? "sidebar-open" : ""}`} data-theme={theme}>
+    <div className={`app-shell ${sidebarOpen ? "sidebar-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} data-theme={theme} style={{ "--user-font-scale": (authState.fontSize || 100) / 100 }}>
       <aside className="sidebar">
-        <div className="brand"><div className="brand-mark"><Ship size={21} /></div><div><strong>FMJ <span>ShipTrack</span></strong><small>IMPORT MANAGEMENT</small></div><button className="mobile-close icon-button" onClick={() => setSidebarOpen(false)}><X size={18} /></button></div>
+        <div className="brand"><div className="brand-mark"><Ship size={21} /></div><div className="brand-copy"><strong>FMJ <span>ShipTrack</span></strong><small>IMPORT MANAGEMENT</small></div><button className="sidebar-toggle icon-button" onClick={() => setSidebarCollapsed((collapsed) => !collapsed)} aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>{sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}</button><button className="mobile-close icon-button" onClick={() => setSidebarOpen(false)}><X size={18} /></button></div>
         <div className="nav-caption">WORKSPACE</div>
-        <nav>{navigation.map(({ label, icon: Icon, key }) => <button key={key} className={`nav-item ${active === key ? "active" : ""}`} onClick={() => { setActive(key); setSidebarOpen(false); }}><Icon size={18} /><span>{label}</span>{key === "tracking" && analytics?.delayed > 0 && <i className="nav-count">{analytics.delayed}</i>}</button>)}
-          <div className="reports-nav-group"><button className={`nav-item reports-nav-toggle ${active.startsWith("report-") ? "active" : ""}`} onClick={() => setReportsOpen((open) => !open)} aria-expanded={reportsOpen}><Activity size={18} /><span>Reports &amp; Analytics</span><ChevronDown size={15} className={reportsOpen ? "reports-nav-chevron open" : "reports-nav-chevron"} /></button>
+        <nav>{availableNavigation.map(({ label, icon: Icon, key }) => <button key={key} title={sidebarCollapsed ? label : undefined} className={`nav-item ${active === key ? "active" : ""}`} onClick={() => { setActive(key); setSidebarOpen(false); }}><Icon size={18} /><span>{label}</span>{key === "tracking" && analytics?.delayed > 0 && <i className="nav-count">{analytics.delayed}</i>}</button>)}
+          {canAccessReports && <div className="reports-nav-group"><button title={sidebarCollapsed ? "Reports & Analytics" : undefined} className={`nav-item reports-nav-toggle ${active.startsWith("report-") ? "active" : ""}`} onClick={() => sidebarCollapsed ? setSidebarCollapsed(false) : setReportsOpen((open) => !open)} aria-expanded={reportsOpen}><Activity size={18} /><span>Reports &amp; Analytics</span><ChevronDown size={15} className={reportsOpen ? "reports-nav-chevron open" : "reports-nav-chevron"} /></button>
             {reportsOpen && <div className="reports-nav-links">{reportNavigation.map(({ label, key }) => <button key={key} className={`reports-nav-link ${active === key ? "active" : ""}`} onClick={() => { setActive(key); setSidebarOpen(false); }}>{label}</button>)}</div>}
-          </div>
+          </div>}
+          {authState?.role === "super-admin" && <button title={sidebarCollapsed ? "Users" : undefined} className={`nav-item ${active === "users" ? "active" : ""}`} onClick={() => { setActive("users"); setSidebarOpen(false); }}><Users size={18} /><span>Users</span></button>}
+          {authState?.role === "super-admin" && <button title={sidebarCollapsed ? "Settings" : undefined} className={`nav-item ${active === "settings" ? "active" : ""}`} onClick={() => { setActive("settings"); setSidebarOpen(false); }}><Settings size={18} /><span>Settings</span></button>}
+          {authState?.role === "user" && authState.sidebarAccess?.includes("settings") && <button title={sidebarCollapsed ? "Settings" : undefined} className={`nav-item ${active === "settings" ? "active" : ""}`} onClick={() => { setActive("settings"); setSidebarOpen(false); }}><Settings size={18} /><span>Settings</span></button>}
         </nav>
-        <div className="sidebar-bottom"><div className="profile"><div className="profile-avatar">FM</div><div className="profile-name"><strong>{authState.username}</strong><span>Super administrator</span></div></div></div>
+        <div className="sidebar-bottom"><div className="profile"><div className="profile-avatar">FM</div><div className="profile-name"><strong>{authState.name || authState.username}</strong><span>{authState.role === "super-admin" ? "Super administrator" : "Team user"}</span></div></div></div>
       </aside>
       <div className="main-area">
         <header className="topbar">
@@ -1573,7 +1678,7 @@ export default function App() {
             <div className="top-divider" />
             <div className="account-menu-wrap" ref={accountMenuRef}>
               <button className="top-user account-trigger" aria-expanded={accountMenuOpen} aria-haspopup="menu" aria-label="Open account menu" onClick={() => setAccountMenuOpen((open) => !open)}><span className="profile-avatar small">FM</span><ChevronDown size={15} /></button>
-              {accountMenuOpen && <div className="account-menu" role="menu"><div className="account-menu-user"><strong>{authState.username}</strong><span>Super administrator</span></div><button className="account-menu-signout" role="menuitem" onClick={() => { setAccountMenuOpen(false); setConfirmSignOut(true); }}><LogOut size={16} />Sign out</button></div>}
+              {accountMenuOpen && <div className="account-menu" role="menu"><div className="account-menu-user"><strong>{authState.name || authState.username}</strong><span>{authState.role === "super-admin" ? "Super administrator" : `@${authState.username}`}</span></div><button className="account-menu-signout" role="menuitem" onClick={() => { setAccountMenuOpen(false); setConfirmSignOut(true); }}><LogOut size={16} />Sign out</button></div>}
             </div>
           </div>
         </header>
@@ -1591,6 +1696,21 @@ export default function App() {
       {modalConsignee !== undefined && <ConsigneeModal initial={modalConsignee} onClose={() => setModalConsignee(undefined)} onSave={saveConsignee} />}
       {modalCountry !== undefined && <CountryModal initial={modalCountry} onClose={() => setModalCountry(undefined)} onSave={saveCountry} />}
       {modalCurrency !== undefined && <CurrencyModal initial={modalCurrency} onClose={() => setModalCurrency(undefined)} onSave={saveCurrency} />}
+      {modalUser !== undefined && <UserModal initial={modalUser} onClose={() => setModalUser(undefined)} onSave={async (user, id, remove = false) => {
+        if (remove) {
+          await api.deleteUser(id);
+          setUsers((current) => current.filter((item) => item.id !== id));
+          setNotice("User deleted");
+        } else if (id) {
+          const updated = await api.updateUser(id, user);
+          setUsers((current) => current.map((item) => item.id === id ? updated : item));
+          setNotice("User updated successfully");
+        } else {
+          const created = await api.createUser(user);
+          setUsers((current) => [...current, created]);
+          setNotice("User created successfully");
+        }
+      }} />}
       {confirmSignOut && <div className="modal-backdrop signout-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setConfirmSignOut(false); }}><section className="signout-dialog" role="alertdialog" aria-modal="true" aria-labelledby="signout-title" aria-describedby="signout-description"><div className="signout-icon"><LogOut size={19} /></div><h2 id="signout-title">Sign out of ShipTrack?</h2><p id="signout-description">Are you sure you want to sign out? You’ll need to verify your email again to access your shipment workspace.</p><div className="signout-actions"><button className="button secondary" onClick={() => setConfirmSignOut(false)}>No, stay signed in</button><button className="button signout-confirm" onClick={signOut}>Yes, sign out</button></div></section></div>}
       {notice && <div className="toast"><CheckCircle2 size={17} />{notice}<button onClick={() => setNotice("")} aria-label="Dismiss"><X size={15} /></button></div>}
     </div>
