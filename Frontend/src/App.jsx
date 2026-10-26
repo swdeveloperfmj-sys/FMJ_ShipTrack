@@ -341,9 +341,9 @@ function PageTitle({ eyebrow, title, subtitle, action }) {
   );
 }
 
-function StatCard({ label, value, helper, icon: Icon, color, trend }) {
+function StatCard({ label, value, helper, icon: Icon, color, trend, onClick }) {
   return (
-    <article className="stat-card">
+    <article className={`stat-card ${onClick ? "stat-card-clickable" : ""}`} onClick={onClick} onKeyDown={(event) => { if (onClick && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onClick(); } }} role={onClick ? "button" : undefined} tabIndex={onClick ? 0 : undefined}>
       <div className="stat-top">
         <span>{label}</span>
         <span className={`stat-icon ${color}`}><Icon size={18} /></span>
@@ -860,10 +860,10 @@ function Dashboard({ shipments, consignees, analytics, accountName, onNavigate, 
     <>
       <PageTitle eyebrow="OVERVIEW" title={`${greeting}, ${displayName}`} subtitle="Here's what's happening with your shipments today." action={<div className="page-actions"><button className="button secondary" onClick={downloadShipmentImportTemplate}><Download size={16} /> Download template</button><button className="button secondary" onClick={onImport}><Upload size={16} /> Import Excel</button></div>} />
       <section className="stat-grid">
-        <StatCard label="Total shipments" value={analytics?.total ?? "—"} helper="Live records from MongoDB" icon={Ship} color="blue" />
-        <StatCard label="Pending" value={analytics?.pending ?? "—"} helper="Awaiting next action" icon={Clock3} color="amber" />
-        <StatCard label="Under clearing" value={analytics?.underClearing ?? "—"} helper="At customs now" icon={ArrowDownToLine} color="violet" />
-        <StatCard label="Cleared" value={analytics?.cleared ?? "—"} helper="Currently cleared" icon={PackageCheck} color="green" />
+        <StatCard label="Total shipments" value={analytics?.total ?? "—"} helper="View all shipment records" icon={Ship} color="blue" onClick={() => onNavigate("report-shipment")} />
+        <StatCard label="Pending" value={analytics?.pending ?? "—"} helper="View pending TT shipments" icon={Clock3} color="amber" onClick={() => onNavigate("to-be-tt")} />
+        <StatCard label="Under clearing" value={analytics?.underClearing ?? "—"} helper="View shipments at customs" icon={ArrowDownToLine} color="violet" onClick={() => onNavigate("under-clearing")} />
+        <StatCard label="Cleared" value={analytics?.cleared ?? "—"} helper="View cleared shipments" icon={PackageCheck} color="green" onClick={() => onNavigate("cleared-shipments")} />
       </section>
       <div className="dashboard-grid">
         <section className="panel monthly-panel">
