@@ -829,7 +829,11 @@ function ClearedShipmentModal({ shipment, onClose, onSave }) {
 }
 
 function Dashboard({ shipments, consignees, analytics, onNavigate, onEdit, onAdd, onImport }) {
-  const maxMonthly = Math.max(1, ...((analytics?.monthly || []).map((item) => item.shipments)));
+  const [monthRange, setMonthRange] = useState(6);
+  const monthlyData = (analytics?.monthly || []).slice(-monthRange);
+  const maxMonthly = Math.max(1, ...monthlyData.map((item) => item.shipments));
+  const chartMaximum = Math.max(4, Math.ceil(maxMonthly / 4) * 4);
+  const chartTicks = Array.from({ length: 5 }, (_, index) => chartMaximum - (chartMaximum / 4) * index);
   return (
     <>
       <PageTitle eyebrow="OVERVIEW" title="Good morning, team" subtitle="Here's what's happening with your shipments today." action={<div className="page-actions"><button className="button secondary" onClick={downloadShipmentImportTemplate}><Download size={16} /> Download template</button><button className="button secondary" onClick={onImport}><Upload size={16} /> Import Excel</button></div>} />
@@ -841,13 +845,13 @@ function Dashboard({ shipments, consignees, analytics, onNavigate, onEdit, onAdd
       </section>
       <div className="dashboard-grid">
         <section className="panel monthly-panel">
-          <div className="panel-heading"><div><h2>Shipment activity</h2><p>Shipments by expected arrival month</p></div><button className="select-button">Last 6 months <ChevronDown size={14} /></button></div>
+          <div className="panel-heading"><div><h2>Shipment activity</h2><p>Shipments by expected arrival month</p></div><select className="select-button" value={monthRange} onChange={(event) => setMonthRange(Number(event.target.value))} aria-label="Shipment activity period"><option value={3}>Last 3 months</option><option value={6}>Last 6 months</option><option value={12}>Last 12 months</option></select></div>
           <div className="chart">
-            <div className="chart-y"><span>8</span><span>6</span><span>4</span><span>2</span><span>0</span></div>
+            <div className="chart-y">{chartTicks.map((tick) => <span key={tick}>{tick}</span>)}</div>
             <div className="chart-main">
               <div className="chart-gridlines"><i /><i /><i /><i /><i /></div>
-              <div className="bar-list">{(analytics?.monthly || []).map((item) => {
-                const barHeight = `${Math.max(8, (item.shipments / maxMonthly) * 100)}%`;
+              <div className="bar-list">{monthlyData.map((item) => {
+                const barHeight = `${Math.max(8, (item.shipments / chartMaximum) * 100)}%`;
                 return <div className="bar-column" key={item.month} style={{ "--bar-height": barHeight }}><div className="bar-value">{item.shipments}</div><div className="bar" /><span>{new Date(`${item.month}-01T00:00:00`).toLocaleDateString("en", { month: "short" })}</span></div>;
               })}</div>
             </div>
