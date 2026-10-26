@@ -23,6 +23,8 @@ import {
   Menu,
   MoreHorizontal,
   PackageCheck,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   ShieldCheck,
   Ship,
@@ -461,7 +463,7 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
                 <td>{dateLabel(shipment.etd)}</td><td>{dateLabel(shipment.eta)}</td>
                 <td>{decimalAmount(shipment.duty)}</td><td>{decimalAmount(shipment.doCharges)}</td>
                 <td>{shipment.clearanceStatus || "—"}</td>
-                <td className="description-cell">{shipment.remarks || "—"}</td>
+                <td className="remarks-cell">{shipment.remarks || "—"}</td>
                 {workflowAction && <td><button type="button" className="tt-sent-update-button" onClick={() => workflowAction.onClick(shipment)}>{workflowAction.label}</button></td>}
               </>}
               {mode === "customs" && <>
@@ -1239,8 +1241,8 @@ function AuthScreen({ setupRequired, theme, onToggleTheme, onAuthenticated, load
             <h1>Your shipments.<br />One clear view.</h1>
             <p>Track every import, payment and clearance milestone from a secure workspace built for your team.</p>
             <div className="auth-benefits">
-              <div><span><ShieldCheck size={17} /></span><strong>Private super-admin access</strong></div>
-              <div><span><MailCheck size={17} /></span><strong>One-time email verification code</strong></div>
+              <div><span><ShieldCheck size={17} /></span><strong>Secure team access</strong></div>
+              <div><span><MailCheck size={17} /></span><strong>Extra verification for administrators</strong></div>
               <div><span><CheckCircle2 size={17} /></span><strong>Shipment records protected behind sign-in</strong></div>
             </div>
           </div>
@@ -1249,14 +1251,14 @@ function AuthScreen({ setupRequired, theme, onToggleTheme, onAuthenticated, load
         <section className="auth-card-wrap">
           <div className="auth-card">
             <div className="auth-card-icon">{mode === "otp" ? <MailCheck size={21} /> : <ShieldCheck size={21} />}</div>
-            <div className="auth-card-eyebrow">{mode === "setup" ? "ONE-TIME INITIALIZATION" : "SUPER-ADMIN ACCESS"}</div>
+            <div className="auth-card-eyebrow">{mode === "setup" ? "ONE-TIME INITIALIZATION" : mode === "otp" ? "ADMIN VERIFICATION" : "TEAM ACCESS"}</div>
             <h2>{mode === "setup" ? "Create your admin account" : mode === "otp" ? "Check your email" : "Welcome back"}</h2>
             <p className="auth-card-subtitle">
               {mode === "setup"
                 ? "Set up the only super-admin account. This page locks after setup."
                 : mode === "otp"
                   ? "Enter the 6-digit code sent to your registered admin email."
-                  : "Sign in with your own credentials to receive a one-time verification code."}
+                  : "Sign in with your username and password. Administrators will also verify by email."}
             </p>
             {loading && <div className="auth-message">Checking secure sign-in…</div>}
             {!loading && connectionError && <div className="auth-error">{connectionError}<button type="button" onClick={onRetry}>Retry connection</button></div>}
@@ -1264,7 +1266,7 @@ function AuthScreen({ setupRequired, theme, onToggleTheme, onAuthenticated, load
               {mode !== "otp" && <>
                 {mode === "setup" && <label>One-time setup key<input type="password" autoComplete="off" value={setupKey} onChange={(event) => setSetupKey(event.target.value)} required minLength={32} placeholder="Paste the private setup key" /></label>}
                 <label>Username<input type="text" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required minLength={3} maxLength={40} pattern="[A-Za-z0-9._\-]+" placeholder="Your username" /></label>
-                <label>Password<input type="password" autoComplete={mode === "setup" ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} required minLength={12} maxLength={128} placeholder={mode === "setup" ? "At least 12 characters" : "Your password"} /></label>
+                <label>Password<input type="password" autoComplete={mode === "setup" ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} required minLength={mode === "setup" ? 12 : 6} maxLength={128} placeholder={mode === "setup" ? "At least 12 characters" : "Your password"} /></label>
               </>}
               {mode === "otp" && <>
                 <div className="otp-destination"><MailCheck size={16} /><span>Code sent to <strong>sw.developer.fmj@gmail.com</strong></span></div>
@@ -1272,7 +1274,7 @@ function AuthScreen({ setupRequired, theme, onToggleTheme, onAuthenticated, load
               </>}
               {notice && <div className="auth-message">{notice}</div>}
               {error && <div className="auth-error">{error}</div>}
-              <button className="auth-submit" disabled={busy}>{busy ? "Please wait…" : mode === "setup" ? "Create account & continue" : mode === "otp" ? "Verify & sign in" : "Continue with email code"}<ArrowRight size={16} /></button>
+              <button className="auth-submit" disabled={busy}>{busy ? "Please wait…" : mode === "setup" ? "Create account & continue" : mode === "otp" ? "Verify & sign in" : "Sign in"}<ArrowRight size={16} /></button>
               {mode === "otp" && <div className="auth-secondary-actions"><button type="button" onClick={() => { setMode("login"); setChallengeId(""); setCode(""); setError(""); setNotice(""); }}>Back to sign in</button><button type="button" onClick={() => { setMode("login"); setChallengeId(""); setCode(""); setError(""); setNotice("Sign in again to request a new code."); }}>Sign in for a new code</button></div>}
             </form>}
             <div className="auth-security-note"><LockKeyholeIcon /> Your password is protected and never sent by email.</div>
@@ -1313,6 +1315,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("fmj-shiptrack-sidebar-collapsed") === "true");
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [ttFilters, setTtFilters] = useState(emptyShipmentFilters);
@@ -1377,6 +1380,9 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("fmj-shiptrack-theme", theme);
   }, [theme]);
+  useEffect(() => {
+    localStorage.setItem("fmj-shiptrack-sidebar-collapsed", String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
   useEffect(() => {
     if (!notice) return undefined;
     const timer = window.setTimeout(() => setNotice(""), 3500);
@@ -1604,17 +1610,17 @@ export default function App() {
   }
 
   return (
-    <div className={`app-shell ${sidebarOpen ? "sidebar-open" : ""}`} data-theme={theme}>
+    <div className={`app-shell ${sidebarOpen ? "sidebar-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} data-theme={theme}>
       <aside className="sidebar">
-        <div className="brand"><div className="brand-mark"><Ship size={21} /></div><div><strong>FMJ <span>ShipTrack</span></strong><small>IMPORT MANAGEMENT</small></div><button className="mobile-close icon-button" onClick={() => setSidebarOpen(false)}><X size={18} /></button></div>
+        <div className="brand"><div className="brand-mark"><Ship size={21} /></div><div className="brand-copy"><strong>FMJ <span>ShipTrack</span></strong><small>IMPORT MANAGEMENT</small></div><button className="sidebar-toggle icon-button" onClick={() => setSidebarCollapsed((collapsed) => !collapsed)} aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>{sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}</button><button className="mobile-close icon-button" onClick={() => setSidebarOpen(false)}><X size={18} /></button></div>
         <div className="nav-caption">WORKSPACE</div>
-        <nav>{availableNavigation.map(({ label, icon: Icon, key }) => <button key={key} className={`nav-item ${active === key ? "active" : ""}`} onClick={() => { setActive(key); setSidebarOpen(false); }}><Icon size={18} /><span>{label}</span>{key === "tracking" && analytics?.delayed > 0 && <i className="nav-count">{analytics.delayed}</i>}</button>)}
-          {canAccessReports && <div className="reports-nav-group"><button className={`nav-item reports-nav-toggle ${active.startsWith("report-") ? "active" : ""}`} onClick={() => setReportsOpen((open) => !open)} aria-expanded={reportsOpen}><Activity size={18} /><span>Reports &amp; Analytics</span><ChevronDown size={15} className={reportsOpen ? "reports-nav-chevron open" : "reports-nav-chevron"} /></button>
+        <nav>{availableNavigation.map(({ label, icon: Icon, key }) => <button key={key} title={sidebarCollapsed ? label : undefined} className={`nav-item ${active === key ? "active" : ""}`} onClick={() => { setActive(key); setSidebarOpen(false); }}><Icon size={18} /><span>{label}</span>{key === "tracking" && analytics?.delayed > 0 && <i className="nav-count">{analytics.delayed}</i>}</button>)}
+          {canAccessReports && <div className="reports-nav-group"><button title={sidebarCollapsed ? "Reports & Analytics" : undefined} className={`nav-item reports-nav-toggle ${active.startsWith("report-") ? "active" : ""}`} onClick={() => sidebarCollapsed ? setSidebarCollapsed(false) : setReportsOpen((open) => !open)} aria-expanded={reportsOpen}><Activity size={18} /><span>Reports &amp; Analytics</span><ChevronDown size={15} className={reportsOpen ? "reports-nav-chevron open" : "reports-nav-chevron"} /></button>
             {reportsOpen && <div className="reports-nav-links">{reportNavigation.map(({ label, key }) => <button key={key} className={`reports-nav-link ${active === key ? "active" : ""}`} onClick={() => { setActive(key); setSidebarOpen(false); }}>{label}</button>)}</div>}
           </div>}
-          {authState?.role === "super-admin" && <button className={`nav-item ${active === "users" ? "active" : ""}`} onClick={() => { setActive("users"); setSidebarOpen(false); }}><Users size={18} /><span>Users</span></button>}
+          {authState?.role === "super-admin" && <button title={sidebarCollapsed ? "Users" : undefined} className={`nav-item ${active === "users" ? "active" : ""}`} onClick={() => { setActive("users"); setSidebarOpen(false); }}><Users size={18} /><span>Users</span></button>}
         </nav>
-        <div className="sidebar-bottom"><div className="profile"><div className="profile-avatar">FM</div><div className="profile-name"><strong>{authState.username}</strong><span>Super administrator</span></div></div></div>
+        <div className="sidebar-bottom"><div className="profile"><div className="profile-avatar">FM</div><div className="profile-name"><strong>{authState.name || authState.username}</strong><span>{authState.role === "super-admin" ? "Super administrator" : "Team user"}</span></div></div></div>
       </aside>
       <div className="main-area">
         <header className="topbar">
@@ -1626,7 +1632,7 @@ export default function App() {
             <div className="top-divider" />
             <div className="account-menu-wrap" ref={accountMenuRef}>
               <button className="top-user account-trigger" aria-expanded={accountMenuOpen} aria-haspopup="menu" aria-label="Open account menu" onClick={() => setAccountMenuOpen((open) => !open)}><span className="profile-avatar small">FM</span><ChevronDown size={15} /></button>
-              {accountMenuOpen && <div className="account-menu" role="menu"><div className="account-menu-user"><strong>{authState.username}</strong><span>Super administrator</span></div><button className="account-menu-signout" role="menuitem" onClick={() => { setAccountMenuOpen(false); setConfirmSignOut(true); }}><LogOut size={16} />Sign out</button></div>}
+              {accountMenuOpen && <div className="account-menu" role="menu"><div className="account-menu-user"><strong>{authState.name || authState.username}</strong><span>{authState.role === "super-admin" ? "Super administrator" : `@${authState.username}`}</span></div><button className="account-menu-signout" role="menuitem" onClick={() => { setAccountMenuOpen(false); setConfirmSignOut(true); }}><LogOut size={16} />Sign out</button></div>}
             </div>
           </div>
         </header>
