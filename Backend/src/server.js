@@ -111,6 +111,17 @@ const superAdminSchema = new mongoose.Schema(
   },
   { versionKey: false },
 );
+const appUserSchema = new mongoose.Schema(
+  {
+    _id: { type: String, required: true },
+    name: { type: String, required: true, trim: true, maxlength: 120 },
+    username: { type: String, required: true, unique: true, trim: true, lowercase: true },
+    passwordHash: { type: String, required: true },
+    sidebarAccess: { type: [String], default: [] },
+    createdAt: { type: String, default: () => new Date().toISOString() },
+  },
+  { versionKey: false },
+);
 const loginChallengeSchema = new mongoose.Schema(
   {
     _id: { type: String, required: true },
@@ -122,6 +133,7 @@ const loginChallengeSchema = new mongoose.Schema(
   { versionKey: false },
 );
 const SuperAdmin = mongoose.model("SuperAdmin", superAdminSchema);
+const AppUser = mongoose.model("AppUser", appUserSchema);
 const LoginChallenge = mongoose.model("LoginChallenge", loginChallengeSchema);
 const shipmentFields = [
   "importNo",
@@ -210,16 +222,16 @@ function createOtpHash(challengeId, otp) {
     .digest("hex");
 }
 
-function createSessionToken(admin) {
+function createSessionToken(account) {
   return jwt.sign(
-    { sub: admin._id, username: admin.username, purpose: "super-admin-session" },
+    { sub: account._id, username: account.username, name: account.name || account.username, role: account.role || "super-admin", sidebarAccess: account.sidebarAccess || [], purpose: "shiptrack-session" },
     process.env.AUTH_TOKEN_SECRET,
     { expiresIn: "8h" },
   );
 }
 
-function setSessionCookie(response, admin) {
-  response.cookie(cookieName, createSessionToken(admin), {
+function setSessionCookie(response, account) {
+  response.cookie(cookieName, createSessionToken(account), {
     httpOnly: true,
     secure: isDeployed,
     sameSite: isDeployed ? "none" : "lax",
@@ -235,21 +247,28 @@ const clearSessionCookie = (response) => response.clearCookie(cookieName, {
   path: "/",
 });
 
-function requireSuperAdmin(request, response, next) {
+function requireAuthenticated(request, response, next) {
   const token = request.cookies[cookieName];
   if (!token) return response.status(401).json({ error: "Sign in to continue" });
 
   try {
     const session = jwt.verify(token, process.env.AUTH_TOKEN_SECRET);
-    if (session.purpose !== "super-admin-session" || session.sub !== "super-admin") {
+    if (session.purpose !== "shiptrack-session") {
       return response.status(401).json({ error: "Sign in to continue" });
     }
-    request.superAdmin = { id: session.sub, username: session.username };
+    request.user = { id: session.sub, username: session.username, name: session.name, role: session.role, sidebarAccess: session.sidebarAccess || [] };
     next();
   } catch {
     clearSessionCookie(response);
     response.status(401).json({ error: "Your session expired. Sign in again." });
   }
+}
+
+function requireSuperAdmin(request, response, next) {
+  requireAuthenticated(request, response, () => {
+    if (request.user.role !== "super-admin") return response.status(403).json({ error: "Super-admin access is required." });
+    next();
+  });
 }
 
 async function sendLoginOtp(otp) {
@@ -284,11 +303,14 @@ app.get("/api/auth/status", async (request, response, next) => {
     if (token) {
       try {
         const session = jwt.verify(token, process.env.AUTH_TOKEN_SECRET);
-        if (session.purpose === "super-admin-session" && session.sub === admin._id) {
+        if (session.purpose === "shiptrack-session") {
           return response.json({
             setupRequired: false,
             authenticated: true,
-            username: admin.username,
+            username: session.username,
+            name: session.name || session.username,
+            role: session.role || "super-admin",
+            sidebarAccess: session.sidebarAccess || [],
           });
         }
       } catch {
@@ -343,8 +365,14 @@ app.post("/api/auth/login", loginLimiter, async (request, response, next) => {
       typeof body.username === "string" ? body.username.trim().toLowerCase() : "";
     const password = typeof body.password === "string" ? body.password : "";
     const admin = await SuperAdmin.findOne({ username });
-    if (!admin || !(await bcrypt.compare(password, admin.passwordHash))) {
+    const user = admin ? null : await AppUser.findOne({ username });
+    const account = admin || user;
+    if (!account || !(await bcrypt.compare(password, account.passwordHash))) {
       return response.status(401).json({ error: "Username or password is incorrect." });
+    }
+    if (user) {
+      setSessionCookie(response, { ...user.toObject(), role: "user" });
+      return response.json({ authenticated: true, username: user.username, name: user.name, role: "user", sidebarAccess: user.sidebarAccess || [] });
     }
     if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
       return response.status(503).json({
@@ -409,14 +437,14 @@ app.post("/api/auth/verify", verifyLimiter, async (request, response, next) => {
     }
 
     await LoginChallenge.deleteOne({ _id: challengeId });
-    setSessionCookie(response, admin);
-    response.json({ authenticated: true, username: admin.username });
+    setSessionCookie(response, { ...admin.toObject(), role: "super-admin" });
+    response.json({ authenticated: true, username: admin.username, name: admin.username, role: "super-admin", sidebarAccess: [] });
   } catch (error) {
     next(error);
   }
 });
 
-app.post("/api/auth/logout", requireSuperAdmin, (_request, response) => {
+app.post("/api/auth/logout", requireAuthenticated, (_request, response) => {
   clearSessionCookie(response);
   response.status(204).end();
 });
@@ -578,7 +606,30 @@ app.get("/api/health", (_request, response) => {
   });
 });
 
-app.use("/api", requireSuperAdmin);
+app.use("/api", requireAuthenticated);
+
+const sidebarAccessKeys = ["dashboard", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", "companies", "consignees", "countries", "reports"];
+const serializeUser = (user) => ({ id: user._id, name: user.name, username: user.username, sidebarAccess: user.sidebarAccess || [], createdAt: user.createdAt });
+
+app.get("/api/users", requireSuperAdmin, async (_request, response, next) => {
+  try { response.json((await AppUser.find().sort({ name: 1 }).lean()).map(serializeUser)); } catch (error) { next(error); }
+});
+
+app.post("/api/users", requireSuperAdmin, async (request, response, next) => {
+  try {
+    const { name, username, password, sidebarAccess } = request.body || {};
+    if (typeof name !== "string" || !name.trim()) return response.status(400).json({ error: "Name is required." });
+    if (typeof username !== "string" || !/^[a-zA-Z0-9._-]{3,40}$/.test(username.trim())) return response.status(400).json({ error: "Username must be 3–40 characters and use only letters, numbers, dots, underscores or hyphens." });
+    if (typeof password !== "string" || password.length < 12 || password.length > 128) return response.status(400).json({ error: "Password must be between 12 and 128 characters." });
+    const access = [...new Set(Array.isArray(sidebarAccess) ? sidebarAccess.filter((key) => sidebarAccessKeys.includes(key)) : [])];
+    if (!access.length) return response.status(400).json({ error: "Select at least one left sidebar item." });
+    const user = await AppUser.create({ _id: randomUUID(), name: name.trim(), username: username.trim().toLowerCase(), passwordHash: await bcrypt.hash(password, 12), sidebarAccess: access });
+    response.status(201).json(serializeUser(user));
+  } catch (error) {
+    if (error.code === 11000) return response.status(409).json({ error: "That username is already in use." });
+    next(error);
+  }
+});
 
 app.get("/api/shipments", async (request, response, next) => {
   try {

@@ -333,6 +333,9 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .consignee-code-hint { align-self: flex-start; padding: 3px 7px; border: 1px solid #dce7fa; border-radius: 4px; background: #f2f6fd; color: #6c7b91; font-size: 9px; font-weight: 500; }
 .consignee-code-hint strong { margin-left: 4px; color: #2865db; font-size: 9px; font-weight: 700; }
 .form-wide { grid-column: 1 / -1; }
+.user-access-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 14px; }
+.user-access-list label { display: flex; align-items: center; gap: 8px; color: #5f6b7b; font-size: 10.5px; cursor: pointer; }
+.user-access-list input { width: 14px; height: 14px; accent-color: #2865db; }
 .consignee-color-field { grid-column: 1 / -1; }
 .consignee-color-control { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .consignee-color-swatches { display: flex; flex-wrap: wrap; gap: 9px; }
@@ -434,6 +437,7 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
   .modal-head { padding: 15px 16px 12px; }
   .shipment-modal form { padding: 0 16px; }
   .form-grid { gap: 10px; }
+  .user-access-list { grid-template-columns: 1fr; }
   .form-footer { gap: 5px; }
   .modal-footer .button { padding: 0 9px; }
   .delete-button { font-size: 9px; }

@@ -30,6 +30,7 @@ import {
   Sun,
   TrendingUp,
   Upload,
+  Users,
   X,
 } from "lucide-react";
 import * as XLSX from "xlsx";
@@ -53,6 +54,10 @@ const reportNavigation = [
   { label: "RLA", key: "report-rla", consigneeName: "RLA" },
   { label: "AOP", key: "report-aop", consigneeName: "AOP" },
   { label: "UB", key: "report-ub", consigneeName: "UB" },
+];
+const userAccessOptions = [
+  ...navigation.map(({ key, label }) => ({ key, label })),
+  { key: "reports", label: "Reports & Analytics" },
 ];
 
 const consigneeColorPresets = [
@@ -830,10 +835,15 @@ function ClearedShipmentModal({ shipment, onClose, onSave }) {
 
 function Dashboard({ shipments, consignees, analytics, onNavigate, onEdit, onAdd, onImport }) {
   const [monthRange, setMonthRange] = useState(6);
+  const [statusMonthRange, setStatusMonthRange] = useState("all");
   const monthlyData = (analytics?.monthly || []).slice(-monthRange);
   const maxMonthly = Math.max(1, ...monthlyData.map((item) => item.shipments));
   const chartMaximum = Math.max(4, Math.ceil(maxMonthly / 4) * 4);
   const chartTicks = Array.from({ length: 5 }, (_, index) => chartMaximum - (chartMaximum / 4) * index);
+  const shipmentMonths = [...new Set(shipments.map((shipment) => (shipment.eta || shipment.etd || "").slice(0, 7)).filter(Boolean))].sort();
+  const statusMonths = statusMonthRange === "all" ? null : new Set(shipmentMonths.slice(-Number(statusMonthRange)));
+  const statusShipments = statusMonths ? shipments.filter((shipment) => statusMonths.has((shipment.eta || shipment.etd || "").slice(0, 7))) : shipments;
+  const statusCounts = Object.fromEntries(shipmentStatuses.map((status) => [status, statusShipments.filter((shipment) => shipment.status === status).length]));
   return (
     <>
       <PageTitle eyebrow="OVERVIEW" title="Good morning, team" subtitle="Here's what's happening with your shipments today." action={<div className="page-actions"><button className="button secondary" onClick={downloadShipmentImportTemplate}><Download size={16} /> Download template</button><button className="button secondary" onClick={onImport}><Upload size={16} /> Import Excel</button></div>} />
@@ -858,11 +868,11 @@ function Dashboard({ shipments, consignees, analytics, onNavigate, onEdit, onAdd
           </div>
         </section>
         <section className="panel status-panel">
-          <div className="panel-heading"><div><h2>Shipment status</h2><p>Current portfolio overview</p></div><button className="icon-button"><MoreHorizontal size={20} /></button></div>
-          <div className="status-total"><strong>{analytics?.total ?? 0}</strong><span>Total shipments</span></div>
-          <div className="status-stack"><i className="stack-cleared" style={{ flex: analytics?.cleared || 0.1 }} /><i className="stack-clearing" style={{ flex: analytics?.underClearing || 0.1 }} /><i className="stack-pending" style={{ flex: analytics?.pending || 0.1 }} /></div>
+          <div className="panel-heading"><div><h2>Shipment status</h2><p>Current portfolio overview</p></div><select className="select-button" value={statusMonthRange} onChange={(event) => setStatusMonthRange(event.target.value)} aria-label="Shipment status period"><option value="all">All months</option><option value="3">Last 3 months</option><option value="6">Last 6 months</option><option value="12">Last 12 months</option></select></div>
+          <div className="status-total"><strong>{statusShipments.length}</strong><span>Total shipments</span></div>
+          <div className="status-stack"><i className="stack-cleared" style={{ flex: statusCounts.Cleared || 0.1 }} /><i className="stack-clearing" style={{ flex: statusCounts["Under Clearing"] || 0.1 }} /><i className="stack-pending" style={{ flex: statusCounts.Pending || 0.1 }} /></div>
           <div className="legend-list">
-            {shipmentStatuses.map((status) => <div className="legend-row" key={status}><span><i className={`legend-dot ${status.toLowerCase().replace(" ", "-")}`} />{status}</span><strong>{analytics?.byStatus?.[status] ?? 0}</strong></div>)}
+            {shipmentStatuses.map((status) => <div className="legend-row" key={status}><span><i className={`legend-dot ${status.toLowerCase().replace(" ", "-")}`} />{status}</span><strong>{statusCounts[status]}</strong></div>)}
           </div>
         </section>
         <section className="panel recent-panel">
@@ -1125,6 +1135,25 @@ function AnalyticsView({ analytics }) {
   </>;
 }
 
+function UserModal({ onClose, onSave }) {
+  const [form, setForm] = useState({ name: "", username: "", password: "", confirmPassword: "", sidebarAccess: [] });
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const toggleAccess = (key) => setForm((current) => ({ ...current, sidebarAccess: current.sidebarAccess.includes(key) ? current.sidebarAccess.filter((item) => item !== key) : [...current.sidebarAccess, key] }));
+  async function submit(event) {
+    event.preventDefault();
+    if (form.password !== form.confirmPassword) return setError("Passwords do not match.");
+    if (!form.sidebarAccess.length) return setError("Select at least one left sidebar item.");
+    setSaving(true); setError("");
+    try { await onSave(form); onClose(); } catch (saveError) { setError(saveError.message); } finally { setSaving(false); }
+  }
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="shipment-modal consignee-modal" role="dialog" aria-modal="true" aria-labelledby="user-modal-title"><div className="modal-head"><div><div className="eyebrow">NEW USER</div><h2 id="user-modal-title">Create user</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Close"><X size={20} /></button></div><form onSubmit={submit}><div className="form-section"><div className="form-grid"><label>Full name<input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required maxLength={120} /></label><label>Username<input value={form.username} onChange={(event) => setForm((current) => ({ ...current, username: event.target.value }))} required minLength={3} maxLength={40} pattern="[A-Za-z0-9._-]+" /></label><label>Password<input type="password" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} required minLength={12} maxLength={128} /></label><label>Re-enter password<input type="password" value={form.confirmPassword} onChange={(event) => setForm((current) => ({ ...current, confirmPassword: event.target.value }))} required minLength={12} maxLength={128} /></label></div></div><div className="form-section"><h3>Left sidebar access</h3><div className="user-access-list">{userAccessOptions.map((item) => <label key={item.key}><input type="checkbox" checked={form.sidebarAccess.includes(item.key)} onChange={() => toggleAccess(item.key)} />{item.label}</label>)}</div></div>{error && <div className="form-error">{error}</div>}<div className="modal-footer"><button type="button" className="button secondary" onClick={onClose}>Cancel</button><button className="button primary" disabled={saving}>{saving ? "Creating…" : "Create user"}</button></div></form></section></div>;
+}
+
+function UserDirectory({ users, onAdd }) {
+  return <section className="panel table-panel"><div className="table-toolbar"><div className="table-title"><h2>Users</h2><span className="count-pill">{users.length}</span></div><button className="button primary" onClick={onAdd}><Plus size={16} /> Create user</button></div>{!users.length ? <EmptyState message="No users created" description="Create a user and select their sidebar access." onAdd={onAdd} actionLabel="Create user" /> : <div className="table-scroll"><table><thead><tr><th>Name</th><th>Username</th><th>Left sidebar access</th></tr></thead><tbody>{users.map((user) => <tr key={user.id}><td><span className="import-id">{user.name}</span></td><td>{user.username}</td><td>{user.sidebarAccess.map((key) => userAccessOptions.find((item) => item.key === key)?.label).filter(Boolean).join(", ") || "No access selected"}</td></tr>)}</tbody></table></div>}</section>;
+}
+
 function AuthScreen({ setupRequired, theme, onToggleTheme, onAuthenticated, loading, connectionError, onRetry }) {
   const [mode, setMode] = useState(setupRequired ? "setup" : "login");
   const [username, setUsername] = useState("");
@@ -1146,6 +1175,10 @@ function AuthScreen({ setupRequired, theme, onToggleTheme, onAuthenticated, load
     setBusy(true);
     try {
       const result = await api.login({ username: accountName, password: accountPassword });
+      if (result.authenticated) {
+        onAuthenticated(result);
+        return;
+      }
       setChallengeId(result.challengeId);
       setMode("otp");
       setPassword("");
@@ -1260,6 +1293,7 @@ export default function App() {
   const [consignees, setConsignees] = useState([]);
   const [countries, setCountries] = useState([]);
   const [currencies, setCurrencies] = useState([]);
+  const [users, setUsers] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [modalShipment, setModalShipment] = useState(undefined);
   const [modalShipmentImport, setModalShipmentImport] = useState(false);
@@ -1269,6 +1303,7 @@ export default function App() {
   const [modalConsignee, setModalConsignee] = useState(undefined);
   const [modalCountry, setModalCountry] = useState(undefined);
   const [modalCurrency, setModalCurrency] = useState(undefined);
+  const [modalUser, setModalUser] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -1310,6 +1345,15 @@ export default function App() {
   }, []);
 
   useEffect(() => { loadAuthStatus(); }, [loadAuthStatus]);
+  useEffect(() => {
+    if (authState?.role !== "super-admin") { setUsers([]); return; }
+    api.getUsers().then(setUsers).catch((loadError) => setError(loadError.message));
+  }, [authState?.role]);
+  useEffect(() => {
+    if (authState?.role !== "user") return;
+    const firstAllowed = navigation.find((item) => authState.sidebarAccess?.includes(item.key))?.key;
+    if (firstAllowed) setActive(firstAllowed);
+  }, [authState?.role, authState?.sidebarAccess]);
   useEffect(() => {
     if (authState?.authenticated) refresh();
   }, [authState, refresh]);
@@ -1479,11 +1523,13 @@ export default function App() {
     }
   }
 
+  const availableNavigation = authState?.role === "super-admin" ? navigation : navigation.filter((item) => authState?.sidebarAccess?.includes(item.key));
+  const canAccessReports = authState?.role === "super-admin" || authState?.sidebarAccess?.includes("reports");
   const activeTitle = [...navigation, ...reportNavigation].find((item) => item.key === active)?.label || "Dashboard";
   const openModal = (shipment) => setModalShipment(shipment || null);
-  const markAuthenticated = (username) => {
+  const markAuthenticated = (account) => {
     setAuthError("");
-    setAuthState({ setupRequired: false, authenticated: true, username });
+    setAuthState(typeof account === "string" ? { setupRequired: false, authenticated: true, username: account, name: account, role: "super-admin", sidebarAccess: [] } : { setupRequired: false, ...account });
     setLoading(true);
   };
 
@@ -1531,6 +1577,7 @@ export default function App() {
     }
     if (active === "companies") return <><PageTitle eyebrow="CONSIGNEES" title="Consignee reports" subtitle="A clear view of imports and clearance progress for each consignee." />{error && <div className="inline-error">{error}</div>}<ConsigneeReports analytics={analytics} shipments={shipments} consignees={consignees} onEdit={openModal} /></>;
     if (active === "consignees") return <><PageTitle eyebrow="DIRECTORY" title="Consignees" subtitle="Create and manage the consignee records assigned to your shipments." action={<button className="button primary" onClick={() => setModalConsignee(null)}><Plus size={17} /> Create consignee</button>} />{error && <div className="inline-error">{error}</div>}<ConsigneeDirectory consignees={consignees} shipments={shipments} onEdit={setModalConsignee} onAdd={() => setModalConsignee(null)} /></>;
+    if (active === "users" && authState?.role === "super-admin") return <><PageTitle eyebrow="ADMINISTRATION" title="Users" subtitle="Create user accounts and select their left sidebar access." action={<button className="button primary" onClick={() => setModalUser(true)}><Plus size={17} /> Create user</button>} /><UserDirectory users={users} onAdd={() => setModalUser(true)} /></>;
     if (active === "countries") return <><PageTitle eyebrow="DIRECTORY" title="Countries & currencies" subtitle="Manage country and currency lists separately." action={<button className="button primary" title="Create country (F1)" onClick={() => setModalCountry(null)}><Plus size={17} /> Create country</button>} />{error && <div className="inline-error">{error}</div>}<CountryDirectory countries={countries} onEdit={setModalCountry} onAdd={() => setModalCountry(null)} /><CurrencyDirectory currencies={currencies} onEdit={setModalCurrency} onAdd={() => setModalCurrency(null)} /></>;
     if (active === "documents") return <><PageTitle eyebrow="PAPERWORK" title="Documents" subtitle="Track required shipping and customs documents in one place." />{error && <div className="inline-error">{error}</div>}<DocumentsView shipments={shipments} consignees={consignees} onEdit={openModal} /></>;
     if (active === "analytics") return <><PageTitle eyebrow="PERFORMANCE" title="Reports & analytics" subtitle="Monitor shipment delays, landed costs and monthly activity." />{error && <div className="inline-error">{error}</div>}<AnalyticsView analytics={analytics} /></>;
@@ -1556,10 +1603,11 @@ export default function App() {
       <aside className="sidebar">
         <div className="brand"><div className="brand-mark"><Ship size={21} /></div><div><strong>FMJ <span>ShipTrack</span></strong><small>IMPORT MANAGEMENT</small></div><button className="mobile-close icon-button" onClick={() => setSidebarOpen(false)}><X size={18} /></button></div>
         <div className="nav-caption">WORKSPACE</div>
-        <nav>{navigation.map(({ label, icon: Icon, key }) => <button key={key} className={`nav-item ${active === key ? "active" : ""}`} onClick={() => { setActive(key); setSidebarOpen(false); }}><Icon size={18} /><span>{label}</span>{key === "tracking" && analytics?.delayed > 0 && <i className="nav-count">{analytics.delayed}</i>}</button>)}
-          <div className="reports-nav-group"><button className={`nav-item reports-nav-toggle ${active.startsWith("report-") ? "active" : ""}`} onClick={() => setReportsOpen((open) => !open)} aria-expanded={reportsOpen}><Activity size={18} /><span>Reports &amp; Analytics</span><ChevronDown size={15} className={reportsOpen ? "reports-nav-chevron open" : "reports-nav-chevron"} /></button>
+        <nav>{availableNavigation.map(({ label, icon: Icon, key }) => <button key={key} className={`nav-item ${active === key ? "active" : ""}`} onClick={() => { setActive(key); setSidebarOpen(false); }}><Icon size={18} /><span>{label}</span>{key === "tracking" && analytics?.delayed > 0 && <i className="nav-count">{analytics.delayed}</i>}</button>)}
+          {canAccessReports && <div className="reports-nav-group"><button className={`nav-item reports-nav-toggle ${active.startsWith("report-") ? "active" : ""}`} onClick={() => setReportsOpen((open) => !open)} aria-expanded={reportsOpen}><Activity size={18} /><span>Reports &amp; Analytics</span><ChevronDown size={15} className={reportsOpen ? "reports-nav-chevron open" : "reports-nav-chevron"} /></button>
             {reportsOpen && <div className="reports-nav-links">{reportNavigation.map(({ label, key }) => <button key={key} className={`reports-nav-link ${active === key ? "active" : ""}`} onClick={() => { setActive(key); setSidebarOpen(false); }}>{label}</button>)}</div>}
-          </div>
+          </div>}
+          {authState?.role === "super-admin" && <button className={`nav-item ${active === "users" ? "active" : ""}`} onClick={() => { setActive("users"); setSidebarOpen(false); }}><Users size={18} /><span>Users</span></button>}
         </nav>
         <div className="sidebar-bottom"><div className="profile"><div className="profile-avatar">FM</div><div className="profile-name"><strong>{authState.username}</strong><span>Super administrator</span></div></div></div>
       </aside>
@@ -1591,6 +1639,7 @@ export default function App() {
       {modalConsignee !== undefined && <ConsigneeModal initial={modalConsignee} onClose={() => setModalConsignee(undefined)} onSave={saveConsignee} />}
       {modalCountry !== undefined && <CountryModal initial={modalCountry} onClose={() => setModalCountry(undefined)} onSave={saveCountry} />}
       {modalCurrency !== undefined && <CurrencyModal initial={modalCurrency} onClose={() => setModalCurrency(undefined)} onSave={saveCurrency} />}
+      {modalUser && <UserModal onClose={() => setModalUser(false)} onSave={async (user) => { const created = await api.createUser(user); setUsers((current) => [...current, created]); }} />}
       {confirmSignOut && <div className="modal-backdrop signout-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setConfirmSignOut(false); }}><section className="signout-dialog" role="alertdialog" aria-modal="true" aria-labelledby="signout-title" aria-describedby="signout-description"><div className="signout-icon"><LogOut size={19} /></div><h2 id="signout-title">Sign out of ShipTrack?</h2><p id="signout-description">Are you sure you want to sign out? You’ll need to verify your email again to access your shipment workspace.</p><div className="signout-actions"><button className="button secondary" onClick={() => setConfirmSignOut(false)}>No, stay signed in</button><button className="button signout-confirm" onClick={signOut}>Yes, sign out</button></div></section></div>}
       {notice && <div className="toast"><CheckCircle2 size={17} />{notice}<button onClick={() => setNotice("")} aria-label="Dismiss"><X size={15} /></button></div>}
     </div>
