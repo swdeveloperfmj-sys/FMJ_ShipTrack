@@ -212,10 +212,10 @@ const currencyAmount = (value, currency) => `${currency || "LKR"}.${decimalAmoun
 const formatDate = (value) =>
   value
     ? new Date(`${value}T00:00:00`).toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      })
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    })
     : "";
 
 const dateLabel = (value) => formatDate(value) || "—";
@@ -237,7 +237,7 @@ function DatePickerField({ name, value, onChange, label }) {
 
 const paymentTermsLabel = (shipment) => {
   const labels = {
-    ADVANCE_TT: "100% Advance Payment by TT",
+    ADVANCE_TT: "TT",
     DA_BL: "DA - From date of BL",
     DP_SIGHT: "DP of Sight",
     OPEN_ACCOUNT: "Open account",
@@ -474,40 +474,40 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
           {displayRows.map((shipment, index) => {
             const isGroupStart = index > 0 && (shipment.company || "").trim().toUpperCase() !== (displayRows[index - 1]?.company || "").trim().toUpperCase();
             return (
-            <tr key={shipment.id} className={isGroupStart ? "consignee-group-start" : undefined}>
-              {mode === "shipments" && <>
-                <td className="consignee-row-first" style={{ "--consignee-color": consigneeColorFor(shipment.company, consignees) }}><span className="import-id">{shipment.importNo}</span><small>{shipment.description}</small></td>
-                <td><ConsigneeBadge code={shipment.company} consignees={consignees} /></td>
-                <td>{shipment.supplier}</td><td>{shipment.consignee}</td>
-                <td className="description-cell">{shipment.description}</td><td>{dateLabel(shipment.eta)}</td>
-                <td><StatusBadge>{shipment.status}</StatusBadge></td>
-              </>}
-              {mode === "tracking" && <>
-                <td className="consignee-row-first" style={{ "--consignee-color": consigneeColorFor(shipment.company, consignees) }}><span className="import-id">{shipment.importNo}</span><small><ConsigneeBadge code={shipment.company} consignees={consignees} /></small></td>
-                <td>{shipment.supplier}</td><td>{dateLabel(shipment.etd)}</td><td>{dateLabel(shipment.eta)}</td>
-                <td>{dateLabel(shipment.arrivalDate)}</td><td>{dateLabel(shipment.deliveryDate)}</td><td><StatusBadge>{shipment.status}</StatusBadge></td>
-              </>}
-              {mode === "payments" && <>
-                <td className="consignee-row-first" style={{ "--consignee-color": consigneeColorFor(shipment.company, consignees) }}><span className="import-id">{shipment.importNo}</span></td>
-                <td><ConsigneeBadge code={shipment.company} label={shipment.consignee || shipment.company || "—"} showName consignees={consignees} /></td><td>{shipment.supplier || "—"}</td>
-                <td className="description-cell">{shipment.description || "—"}</td><td>{transportLabel(shipment)}</td>
-                <td>{[shipment.incoterm, shipment.incotermLocation].filter(Boolean).join(" · ") || "—"}</td>
-                <td>{paymentTermsLabel(shipment)}</td><td>{currencyAmount(shipment.totalCost, shipment.currency)}</td>
-                <td>{dateLabel(shipment.etd)}</td><td>{dateLabel(shipment.eta)}</td>
-                <td>{decimalAmount(shipment.duty)}</td><td>{decimalAmount(shipment.doCharges)}</td>
-                <td>{shipment.clearanceStatus || "—"}</td>
-                <td className="remarks-cell">{shipment.remarks || "—"}</td>
-                {workflowAction && <td><button type="button" className="tt-sent-update-button" onClick={() => workflowAction.onClick(shipment)}>{workflowAction.label}</button></td>}
-              </>}
-              {mode === "customs" && <>
-                <td className="consignee-row-first" style={{ "--consignee-color": consigneeColorFor(shipment.company, consignees) }}><span className="import-id">{shipment.importNo}</span><small>{shipment.supplier}</small></td>
-                <td><ConsigneeBadge code={shipment.company} consignees={consignees} /></td><td>{money(shipment.duty)}</td>
-                <td>{money(shipment.doCharges)}</td><td><span className="progress-copy">{shipment.clearanceStatus}</span></td>
-                <td><StatusBadge tone={shipment.clearanceStatus === "Cleared" ? "cleared" : "under-clearing"}>{shipment.clearanceStatus}</StatusBadge></td>
-                <td><StatusBadge>{shipment.status}</StatusBadge></td>
-              </>}
-              {showActions && <td>{mode === "payments" ? <ShipmentActions shipment={shipment} onEdit={onEdit} onDelete={onDelete} /> : <button className="icon-button row-more" aria-label={`Edit ${shipment.importNo}`} title="Edit shipment" onClick={() => onEdit(shipment)}><MoreHorizontal size={18} /></button>}</td>}
-            </tr>
+              <tr key={shipment.id} className={isGroupStart ? "consignee-group-start" : undefined}>
+                {mode === "shipments" && <>
+                  <td className="consignee-row-first" style={{ "--consignee-color": consigneeColorFor(shipment.company, consignees) }}><span className="import-id">{shipment.importNo}</span><small>{shipment.description}</small></td>
+                  <td><ConsigneeBadge code={shipment.company} consignees={consignees} /></td>
+                  <td>{shipment.supplier}</td><td>{shipment.consignee}</td>
+                  <td className="description-cell">{shipment.description}</td><td>{dateLabel(shipment.eta)}</td>
+                  <td><StatusBadge>{shipment.status}</StatusBadge></td>
+                </>}
+                {mode === "tracking" && <>
+                  <td className="consignee-row-first" style={{ "--consignee-color": consigneeColorFor(shipment.company, consignees) }}><span className="import-id">{shipment.importNo}</span><small><ConsigneeBadge code={shipment.company} consignees={consignees} /></small></td>
+                  <td>{shipment.supplier}</td><td>{dateLabel(shipment.etd)}</td><td>{dateLabel(shipment.eta)}</td>
+                  <td>{dateLabel(shipment.arrivalDate)}</td><td>{dateLabel(shipment.deliveryDate)}</td><td><StatusBadge>{shipment.status}</StatusBadge></td>
+                </>}
+                {mode === "payments" && <>
+                  <td className="consignee-row-first" style={{ "--consignee-color": consigneeColorFor(shipment.company, consignees) }}><span className="import-id">{shipment.importNo}</span></td>
+                  <td><ConsigneeBadge code={shipment.company} label={shipment.consignee || shipment.company || "—"} showName consignees={consignees} /></td><td>{shipment.supplier || "—"}</td>
+                  <td className="description-cell">{shipment.description || "—"}</td><td>{transportLabel(shipment)}</td>
+                  <td>{[shipment.incoterm, shipment.incotermLocation].filter(Boolean).join(" · ") || "—"}</td>
+                  <td>{paymentTermsLabel(shipment)}</td><td>{currencyAmount(shipment.totalCost, shipment.currency)}</td>
+                  <td>{dateLabel(shipment.etd)}</td><td>{dateLabel(shipment.eta)}</td>
+                  <td>{decimalAmount(shipment.duty)}</td><td>{decimalAmount(shipment.doCharges)}</td>
+                  <td>{shipment.clearanceStatus || "—"}</td>
+                  <td className="remarks-cell">{shipment.remarks || "—"}</td>
+                  {workflowAction && <td><button type="button" className="tt-sent-update-button" onClick={() => workflowAction.onClick(shipment)}>{workflowAction.label}</button></td>}
+                </>}
+                {mode === "customs" && <>
+                  <td className="consignee-row-first" style={{ "--consignee-color": consigneeColorFor(shipment.company, consignees) }}><span className="import-id">{shipment.importNo}</span><small>{shipment.supplier}</small></td>
+                  <td><ConsigneeBadge code={shipment.company} consignees={consignees} /></td><td>{money(shipment.duty)}</td>
+                  <td>{money(shipment.doCharges)}</td><td><span className="progress-copy">{shipment.clearanceStatus}</span></td>
+                  <td><StatusBadge tone={shipment.clearanceStatus === "Cleared" ? "cleared" : "under-clearing"}>{shipment.clearanceStatus}</StatusBadge></td>
+                  <td><StatusBadge>{shipment.status}</StatusBadge></td>
+                </>}
+                {showActions && <td>{mode === "payments" ? <ShipmentActions shipment={shipment} onEdit={onEdit} onDelete={onDelete} /> : <button className="icon-button row-more" aria-label={`Edit ${shipment.importNo}`} title="Edit shipment" onClick={() => onEdit(shipment)}><MoreHorizontal size={18} /></button>}</td>}
+              </tr>
             );
           })}
         </tbody>
@@ -569,7 +569,6 @@ function ShipmentSummarySections({ shipments, consignees, onEdit, onDelete }) {
   );
   const toBeTT = filteredShipments.filter((shipment) =>
     shipment.status !== "Under Clearing"
-    && shipment.paymentMethod === "Advance TT"
     && shipment.paymentStatus === "Pending",
   );
   const sections = [
@@ -619,6 +618,11 @@ function ShipmentModal({ initial, consignees, countries, currencies, onClose, on
 
   async function submit(event) {
     event.preventDefault();
+    if (initial && form.paymentTerms !== initial.paymentTerms) {
+      const previousTerms = paymentTermsLabel(initial);
+      const nextTerms = paymentTermsLabel(form);
+      if (!window.confirm(`Change payment terms from "${previousTerms}" to "${nextTerms}"? This may move the shipment to a different payment section.`)) return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -633,7 +637,7 @@ function ShipmentModal({ initial, consignees, countries, currencies, onClose, on
 
   return (
     <div className="modal-backdrop">
-    <section className="shipment-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <section className="shipment-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
         <div className="modal-head">
           <div><div className="eyebrow">{initial ? "UPDATE SHIPMENT" : "NEW ENTRY"}</div><h2 id="modal-title">{initial ? "Edit shipment" : "Add shipment"}</h2></div>
           <button className="icon-button" onClick={onClose} aria-label="Close"><X size={20} /></button>
@@ -654,7 +658,7 @@ function ShipmentModal({ initial, consignees, countries, currencies, onClose, on
                       : paymentTerms === "DP_SIGHT" ? "DP of Sight"
                         : paymentTerms === "OPEN_ACCOUNT" ? "Open account" : "";
                 setForm((current) => ({ ...current, paymentTerms, paymentMethod, paymentTermType: "", paymentTermDays: "" }));
-              }} required><option value="">Select payment terms</option><option value="LETTER_OF_CREDIT">Letter of credit</option><option value="ADVANCE_TT">100% Advance Payment by TT</option><option value="DA_BL">DA - From date of BL</option><option value="DP_SIGHT">DP of Sight</option><option value="OPEN_ACCOUNT">Open account</option></select></label>
+              }} required><option value="">Select payment terms</option><option value="LETTER_OF_CREDIT">Letter of credit</option><option value="ADVANCE_TT">TT</option><option value="DA_BL">DA - From date of BL</option><option value="DP_SIGHT">DP of Sight</option><option value="OPEN_ACCOUNT">Open account</option></select></label>
               {form.paymentTerms === "LETTER_OF_CREDIT" && <label className="shipment-field shipment-field--conditional">Letter of Credit Type<select name="paymentTermType" value={form.paymentTermType} onChange={(event) => {
                 const paymentTermType = event.target.value;
                 setForm((current) => ({ ...current, paymentTermType, paymentMethod: paymentTermType ? `${paymentTermType} LC` : "Letter of credit", paymentTermDays: "" }));
@@ -1626,16 +1630,16 @@ export default function App() {
     if (active === "dashboard") return <Dashboard shipments={shipments} consignees={consignees} analytics={analytics} accountName={authState?.name || authState?.username} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} onImport={() => setModalShipmentImport(true)} />;
     if (active === "to-be-tt") {
       const pendingTTShipments = shipments.filter((shipment) =>
-        shipment.paymentMethod === "Advance TT" && shipment.paymentStatus === "Pending",
+        shipment.paymentStatus === "Pending",
       );
       const filteredPendingTTShipments = filterShipmentRows(pendingTTShipments, ttFilters, consignees);
       return <section className="to-be-tt-page">
-        <PageTitle eyebrow="PAYMENTS" title="To be TT" subtitle="Shipments awaiting Advance TT payment." action={<button className="button primary" onClick={() => openModal(null)}><Plus size={17} /> Add shipment</button>} />
+        <PageTitle eyebrow="PAYMENTS" title="To be TT" subtitle="Shipments with payment still pending." action={<button className="button primary" onClick={() => openModal(null)}><Plus size={17} /> Add shipment</button>} />
         {error && <div className="inline-error">{error}</div>}
         <section className="panel table-panel tt-payments-panel">
           <div className="table-toolbar"><div className="table-title"><h2>Pending TT payments</h2><span className="count-pill">{filteredPendingTTShipments.length}</span></div><ShipmentFilterControls filters={ttFilters} onChange={setTtFilters} consignees={consigneeOptions} exportAction={() => exportPendingTTToExcel(filteredPendingTTShipments)} exportDisabled={!filteredPendingTTShipments.length} /></div>
           <ShipmentTable rows={filteredPendingTTShipments} mode="payments" onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} onTTSent={setTtSentDateShipment} consignees={consignees} />
-          <div className="table-footer"><span><strong>{filteredPendingTTShipments.length}</strong> of {pendingTTShipments.length} shipments awaiting Advance TT</span><span>Data saved automatically</span></div>
+          <div className="table-footer"><span><strong>{filteredPendingTTShipments.length}</strong> of {pendingTTShipments.length} shipments awaiting payment</span><span>Data saved automatically</span></div>
         </section>
       </section>;
     }

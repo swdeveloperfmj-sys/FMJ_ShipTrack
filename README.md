@@ -103,7 +103,7 @@ cannot be deleted or have its code changed.
 
 The workspace navigation includes the dashboard, consignee reports and directory,
 country management, documents, delay/cost analytics, and **To be TT**. The To be TT page
-lists shipments with Advance TT payment method and Pending payment status; add shipments
+lists shipments with Pending payment status, regardless of the selected payment terms; add shipments
 there or use a shipment's row actions to edit or delete its record. Shipment table rows
 do not open a detail popup when clicked. The dashboard provides a
 recent-shipment overview; the former standalone shipment register, tracking, payment,
