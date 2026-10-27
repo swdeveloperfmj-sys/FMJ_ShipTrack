@@ -79,7 +79,6 @@ function consigneeColorFor(code, consignees) {
   return /^#[0-9a-f]{6}$/i.test(consignee.color || "") ? consignee.color : defaultConsigneeColor;
 }
 const shipmentStatuses = ["Pending", "Under Clearing", "Cleared"];
-const paymentStatuses = ["Pending", "Paid"];
 const documentTypes = ["PI", "CI", "Packing List", "BL/AWB", "Customs"];
 const emptyShipment = {
   importNo: "",
@@ -111,6 +110,8 @@ const emptyShipment = {
   doCharges: 0,
   clearanceStatus: "Not started",
   totalCost: 0,
+  payments: [],
+  adjustments: [],
   documents: Object.fromEntries(documentTypes.map((name) => [name, "Pending"])),
 };
 
@@ -209,6 +210,24 @@ const decimalAmount = (value) =>
 
 const currencyAmount = (value, currency) => `${currency || "LKR"}.${decimalAmount(value)}`;
 
+function paymentSummary(shipment) {
+  const payments = Array.isArray(shipment.payments) ? shipment.payments : [];
+  const adjustments = Array.isArray(shipment.adjustments) ? shipment.adjustments : [];
+  const adjustmentTotal = adjustments.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const finalPayable = Math.max(0, Number(shipment.totalCost || 0) + adjustmentTotal);
+  const hasLedger = payments.length > 0 || adjustments.length > 0;
+  const recordedPaid = payments.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const totalPaid = !hasLedger && shipment.paymentStatus === "Paid" ? finalPayable : recordedPaid;
+  const balance = finalPayable - totalPaid;
+  const status = totalPaid <= 0 ? "Unpaid" : balance > 0.005 ? "Partially Paid" : balance < -0.005 ? "Overpaid" : "Fully Paid";
+  return { adjustmentTotal, finalPayable, totalPaid, balance, status };
+}
+
+const hasOutstandingPayment = (shipment) => {
+  const summary = paymentSummary(shipment);
+  return summary.balance > 0.005 || (summary.finalPayable === 0 && shipment.paymentStatus !== "Paid");
+};
+
 const formatDate = (value) =>
   value
     ? new Date(`${value}T00:00:00`).toLocaleDateString("en-GB", {
@@ -257,7 +276,9 @@ const transportLabel = (shipment) =>
   [shipment.transportMode, shipment.fclLcl, shipment.containerSize].filter(Boolean).join(" / ") || "—";
 
 function exportPendingTTToExcel(shipments) {
-  const rows = shipments.map((shipment) => ({
+  const rows = shipments.map((shipment) => {
+    const payment = paymentSummary(shipment);
+    return ({
     "Import No.": shipment.importNo,
     Consignee: shipment.consignee || shipment.company,
     Shipper: shipment.supplier,
@@ -265,23 +286,30 @@ function exportPendingTTToExcel(shipments) {
     "FCL/LCL": transportLabel(shipment),
     "Payment Terms": paymentTermsLabel(shipment),
     Currency: shipment.currency || "LKR",
-    Value: Number(shipment.totalCost || 0),
+    "Invoice Value": Number(shipment.totalCost || 0),
+    Adjustments: payment.adjustmentTotal,
+    "Final Payable": payment.finalPayable,
+    "Total Paid": payment.totalPaid,
+    Balance: payment.balance,
+    "Payment Status": payment.status,
     ETD: shipment.etd ? new Date(`${shipment.etd}T00:00:00`) : "",
     "ETA CMB": shipment.eta ? new Date(`${shipment.eta}T00:00:00`) : "",
     "Duty (LKR)": Number(shipment.duty || 0),
     "DO (LKR)": Number(shipment.doCharges || 0),
     Remarks: shipment.remarks || "",
-  }));
+    });
+  });
   const worksheet = XLSX.utils.json_to_sheet(rows);
   const lastRow = rows.length + 1;
-  worksheet["!autofilter"] = { ref: `A1:M${lastRow}` };
+  worksheet["!autofilter"] = { ref: `A1:R${lastRow}` };
   worksheet["!cols"] = [
     { wch: 16 }, { wch: 24 }, { wch: 28 }, { wch: 28 }, { wch: 16 }, { wch: 30 },
-    { wch: 12 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 15 }, { wch: 15 }, { wch: 34 },
+    { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 18 },
+    { wch: 14 }, { wch: 14 }, { wch: 15 }, { wch: 15 }, { wch: 34 },
   ];
   for (let index = 2; index <= lastRow; index += 1) {
-    for (const column of ["H", "K", "L"]) if (worksheet[`${column}${index}`]) worksheet[`${column}${index}`].z = "0.00";
-    for (const column of ["I", "J"]) if (worksheet[`${column}${index}`]) worksheet[`${column}${index}`].z = "dd/mm/yyyy";
+    for (const column of ["H", "I", "J", "K", "L", "P", "Q"]) if (worksheet[`${column}${index}`]) worksheet[`${column}${index}`].z = "0.00";
+    for (const column of ["N", "O"]) if (worksheet[`${column}${index}`]) worksheet[`${column}${index}`].z = "dd/mm/yyyy";
   }
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Pending TT");
@@ -361,7 +389,7 @@ function EmptyState({ message = "No shipments found", description, actionLabel, 
   return <div className="empty-state"><Box size={25} /><strong>{message}</strong><span>{description || (onAdd ? "Add a shipment to start tracking your real import data." : "Try changing your filters or add a shipment.")}</span>{onAdd && <button className="button primary empty-add-button" onClick={onAdd}><Plus size={15} /> {actionLabel || "Add shipment"}</button>}</div>;
 }
 
-function ShipmentActions({ shipment, onEdit, onDelete }) {
+function ShipmentActions({ shipment, onEdit, onDelete, onPayments }) {
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -380,6 +408,7 @@ function ShipmentActions({ shipment, onEdit, onDelete }) {
     <button className="icon-button row-more" aria-label={`Actions for ${shipment.importNo}`} aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((current) => !current)}><MoreHorizontal size={18} /></button>
     {open && <div className="shipment-action-menu" role="menu">
       <button role="menuitem" onClick={() => { setOpen(false); onEdit(shipment); }}>Edit shipment</button>
+      {onPayments && <button role="menuitem" onClick={() => { setOpen(false); onPayments(shipment); }}>Payments & adjustments</button>}
       <button className="shipment-action-delete" role="menuitem" onClick={() => { setOpen(false); setConfirming(true); }}>Delete shipment</button>
     </div>}
     {confirming && <div className="delete-confirm-backdrop" role="presentation">
@@ -420,10 +449,35 @@ function sortShipmentsByConsignee(rows = [], consignees = []) {
   });
 }
 
-function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderClearing, onCleared, showActions = true, consignees = [], groupByConsignee = true }) {
+function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderClearing, onCleared, onPayments, showActions = true, consignees = [], groupByConsignee = true }) {
+  const [contextMenu, setContextMenu] = useState(null);
   const displayRows = useMemo(() => {
     return groupByConsignee ? sortShipmentsByConsignee(rows, consignees) : rows;
   }, [rows, consignees, groupByConsignee]);
+
+  useEffect(() => {
+    if (!contextMenu) return undefined;
+    const close = () => setContextMenu(null);
+    const closeOnEscape = (event) => { if (event.key === "Escape") close(); };
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [contextMenu]);
+
+  function openContextMenu(event, shipment) {
+    if (mode !== "payments" || !showActions) return;
+    event.preventDefault();
+    const menuWidth = 190;
+    const menuHeight = onPayments ? 126 : 90;
+    setContextMenu({
+      shipment,
+      x: Math.min(event.clientX, window.innerWidth - menuWidth - 8),
+      y: Math.min(event.clientY, window.innerHeight - menuHeight - 8),
+    });
+  }
 
   if (!displayRows.length) return <EmptyState message={mode === "shipments" ? "No shipment records yet" : "No shipments found"} onAdd={onAdd} />;
   if (mode === "payment-cards") return (
@@ -459,12 +513,14 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
   const headers = {
     shipments: ["Import No.", "Consignee", "Shipper", "Consignee name", "Description", "ETA", "Status", ""],
     tracking: ["Import No.", "Shipper", "ETD", "ETA", "Arrival", "Delivery", "Status", ""],
-    payments: ["Import No.", "Consignee", "Shipper", "Item description", "Transport", "Incoterm", "Payment terms", "Value", "ETD", "ETA CMB", "Duty (LKR)", "DO (LKR)", "Clearance", "Remarks", ""],
+    payments: ["Import No.", "Consignee", "Shipper", "Item description", "Transport", "Incoterm", "Payment terms", "Invoice", "Paid", "Balance", "Payment status", "ETD", "ETA CMB", "Duty (LKR)", "DO (LKR)", "Clearance", "Remarks", ""],
     customs: ["Import No.", "Consignee", "Duty", "DO charges", "Clearance progress", "Clearance status", "Shipment status", ""],
   }[mode];
   const workflowAction = onTTSent ? { label: "TT Sent", onClick: onTTSent } : onUnderClearing ? { label: "Under Clearing", onClick: onUnderClearing } : onCleared ? { label: "Cleared", onClick: onCleared } : null;
-  const visibleHeaders = workflowAction ? [...headers.slice(0, -1), workflowAction.label, ""] : headers;
-  const tableHeaders = showActions ? visibleHeaders : visibleHeaders.slice(0, -1);
+  const visibleHeaders = mode === "payments"
+    ? [headers[0], ...(workflowAction ? [workflowAction.label] : []), ...headers.slice(1, -1)]
+    : workflowAction ? [...headers.slice(0, -1), workflowAction.label, ""] : headers;
+  const tableHeaders = mode === "payments" || showActions ? visibleHeaders : visibleHeaders.slice(0, -1);
 
   return (
     <div className="table-scroll">
@@ -473,8 +529,9 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
         <tbody>
           {displayRows.map((shipment, index) => {
             const isGroupStart = index > 0 && (shipment.company || "").trim().toUpperCase() !== (displayRows[index - 1]?.company || "").trim().toUpperCase();
+            const payment = paymentSummary(shipment);
             return (
-              <tr key={shipment.id} className={isGroupStart ? "consignee-group-start" : undefined}>
+              <tr key={shipment.id} className={`${isGroupStart ? "consignee-group-start " : ""}${mode === "payments" && showActions ? "context-menu-row" : ""}`.trim() || undefined} onContextMenu={(event) => openContextMenu(event, shipment)}>
                 {mode === "shipments" && <>
                   <td className="consignee-row-first" style={{ "--consignee-color": consigneeColorFor(shipment.company, consignees) }}><span className="import-id">{shipment.importNo}</span><small>{shipment.description}</small></td>
                   <td><ConsigneeBadge code={shipment.company} consignees={consignees} /></td>
@@ -489,15 +546,16 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
                 </>}
                 {mode === "payments" && <>
                   <td className="consignee-row-first" style={{ "--consignee-color": consigneeColorFor(shipment.company, consignees) }}><span className="import-id">{shipment.importNo}</span></td>
+                  {workflowAction && <td><button type="button" className="tt-sent-update-button" onClick={() => workflowAction.onClick(shipment)}>{workflowAction.label}</button></td>}
                   <td><ConsigneeBadge code={shipment.company} label={shipment.consignee || shipment.company || "—"} showName consignees={consignees} /></td><td>{shipment.supplier || "—"}</td>
                   <td className="description-cell">{shipment.description || "—"}</td><td>{transportLabel(shipment)}</td>
                   <td>{[shipment.incoterm, shipment.incotermLocation].filter(Boolean).join(" · ") || "—"}</td>
-                  <td>{paymentTermsLabel(shipment)}</td><td>{currencyAmount(shipment.totalCost, shipment.currency)}</td>
+                  <td>{paymentTermsLabel(shipment)}</td><td>{currencyAmount(payment.finalPayable, shipment.currency)}</td>
+                  <td>{currencyAmount(payment.totalPaid, shipment.currency)}</td><td>{currencyAmount(payment.balance, shipment.currency)}</td><td><StatusBadge>{payment.status}</StatusBadge></td>
                   <td>{dateLabel(shipment.etd)}</td><td>{dateLabel(shipment.eta)}</td>
                   <td>{decimalAmount(shipment.duty)}</td><td>{decimalAmount(shipment.doCharges)}</td>
                   <td>{shipment.clearanceStatus || "—"}</td>
                   <td className="remarks-cell">{shipment.remarks || "—"}</td>
-                  {workflowAction && <td><button type="button" className="tt-sent-update-button" onClick={() => workflowAction.onClick(shipment)}>{workflowAction.label}</button></td>}
                 </>}
                 {mode === "customs" && <>
                   <td className="consignee-row-first" style={{ "--consignee-color": consigneeColorFor(shipment.company, consignees) }}><span className="import-id">{shipment.importNo}</span><small>{shipment.supplier}</small></td>
@@ -506,12 +564,17 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
                   <td><StatusBadge tone={shipment.clearanceStatus === "Cleared" ? "cleared" : "under-clearing"}>{shipment.clearanceStatus}</StatusBadge></td>
                   <td><StatusBadge>{shipment.status}</StatusBadge></td>
                 </>}
-                {showActions && <td>{mode === "payments" ? <ShipmentActions shipment={shipment} onEdit={onEdit} onDelete={onDelete} /> : <button className="icon-button row-more" aria-label={`Edit ${shipment.importNo}`} title="Edit shipment" onClick={() => onEdit(shipment)}><MoreHorizontal size={18} /></button>}</td>}
+                {showActions && mode !== "payments" && <td><button className="icon-button row-more" aria-label={`Edit ${shipment.importNo}`} title="Edit shipment" onClick={() => onEdit(shipment)}><MoreHorizontal size={18} /></button></td>}
               </tr>
             );
           })}
         </tbody>
       </table>
+      {contextMenu && <div className="shipment-action-menu shipment-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} role="menu" onPointerDown={(event) => event.stopPropagation()}>
+        <button role="menuitem" onClick={() => { onEdit(contextMenu.shipment); setContextMenu(null); }}>Edit shipment</button>
+        {onPayments && <button role="menuitem" onClick={() => { onPayments(contextMenu.shipment); setContextMenu(null); }}>Payments & adjustments</button>}
+        <button className="shipment-action-delete" role="menuitem" onClick={async () => { const shipment = contextMenu.shipment; setContextMenu(null); if (window.confirm(`Delete ${shipment.importNo}? This cannot be undone.`)) await onDelete(shipment); }}>Delete shipment</button>
+      </div>}
     </div>
   );
 }
@@ -544,20 +607,20 @@ function ShipmentFilterControls({ filters, onChange, consignees, exportAction, e
   </div>;
 }
 
-function ShipmentListPage({ eyebrow, title, subtitle, rows, mode = "shipments", consignees, onEdit, onDelete, onAdd, onTTSent, onUnderClearing, onCleared, showAdd = true, footer }) {
+function ShipmentListPage({ eyebrow, title, subtitle, rows, mode = "shipments", consignees, onEdit, onDelete, onAdd, onTTSent, onUnderClearing, onCleared, onPayments, showAdd = true, footer }) {
   const [filters, setFilters] = useState(emptyShipmentFilters);
   const filteredRows = filterShipmentRows(rows, filters, consignees);
   return <>
     <PageTitle eyebrow={eyebrow} title={title} subtitle={subtitle} action={showAdd ? <button className="button primary" onClick={onAdd}><Plus size={17} /> Add shipment</button> : undefined} />
     <section className="panel table-panel">
       <div className="table-toolbar"><div className="table-title"><h2>{title}</h2><span className="count-pill">{filteredRows.length}</span></div><ShipmentFilterControls filters={filters} onChange={setFilters} consignees={consignees} /></div>
-      <ShipmentTable rows={filteredRows} mode={mode} onEdit={onEdit} onDelete={onDelete} onAdd={showAdd ? onAdd : undefined} onTTSent={onTTSent} onUnderClearing={onUnderClearing} onCleared={onCleared} consignees={consignees} />
+      <ShipmentTable rows={filteredRows} mode={mode} onEdit={onEdit} onDelete={onDelete} onAdd={showAdd ? onAdd : undefined} onTTSent={onTTSent} onUnderClearing={onUnderClearing} onCleared={onCleared} onPayments={onPayments} consignees={consignees} />
       <div className="table-footer"><span><strong>{filteredRows.length}</strong> of {rows.length} {footer || "shipments"}</span><span>Data saved automatically</span></div>
     </section>
   </>;
 }
 
-function ShipmentSummarySections({ shipments, consignees, onEdit, onDelete }) {
+function ShipmentSummarySections({ shipments, consignees, onEdit, onDelete, onPayments }) {
   const [filters, setFilters] = useState(emptyShipmentFilters);
   const filteredShipments = filterShipmentRows(shipments, filters, consignees);
   const underClearing = filteredShipments.filter((shipment) => shipment.status === "Under Clearing");
@@ -569,7 +632,7 @@ function ShipmentSummarySections({ shipments, consignees, onEdit, onDelete }) {
   );
   const toBeTT = filteredShipments.filter((shipment) =>
     shipment.status !== "Under Clearing"
-    && shipment.paymentStatus === "Pending",
+    && hasOutstandingPayment(shipment),
   );
   const sections = [
     ["Under Clearing Shipment", underClearing],
@@ -583,7 +646,7 @@ function ShipmentSummarySections({ shipments, consignees, onEdit, onDelete }) {
     <div className="shipment-summary-sections">
       {sections.map(([title, rows]) => <section className="panel table-panel" key={title}>
         <div className="table-toolbar"><div className="table-title"><h2>{title}</h2><span className="count-pill">{rows.length}</span></div></div>
-        <ShipmentTable rows={rows} mode="payments" onEdit={onEdit} onDelete={onDelete} consignees={consignees} />
+        <ShipmentTable rows={rows} mode="payments" onEdit={onEdit} onDelete={onDelete} onPayments={onPayments} consignees={consignees} />
         <div className="table-footer"><span><strong>{rows.length}</strong> {rows.length === 1 ? "shipment" : "shipments"}</span><span>Data saved automatically</span></div>
       </section>)}
     </div>
@@ -688,7 +751,7 @@ function ShipmentModal({ initial, consignees, countries, currencies, onClose, on
               <label className="shipment-field shipment-field--amount">Duty (LKR)<input name="duty" type="number" min="0" step="0.01" value={form.duty} onChange={change} /></label>
               <label className="shipment-field shipment-field--amount">DO (LKR)<input name="doCharges" type="number" min="0" step="0.01" value={form.doCharges} onChange={change} /></label>
               {initial && <label className="shipment-field shipment-field--conditional">Shipment status<select name="status" value={form.status} onChange={change}>{shipmentStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>}
-              {initial && <label className="shipment-field shipment-field--conditional">Payment status<select name="paymentStatus" value={form.paymentStatus} onChange={change}>{paymentStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>}
+              {initial && <label className="shipment-field shipment-field--conditional">Payment status<input value={paymentSummary(form).status} readOnly title="Calculated automatically from the payment ledger" /></label>}
               <label className="form-wide">Remarks<textarea name="remarks" value={form.remarks} onChange={change} rows={3} maxLength={1000} /></label>
             </div>
           </div>
@@ -706,6 +769,89 @@ function ShipmentModal({ initial, consignees, countries, currencies, onClose, on
       </section>
     </div>
   );
+}
+
+function PaymentLedgerModal({ shipment, onClose, onSave }) {
+  const [payments, setPayments] = useState(() => [...(shipment.payments || [])]);
+  const [adjustments, setAdjustments] = useState(() => [...(shipment.adjustments || [])]);
+  const [payment, setPayment] = useState({ date: new Date().toISOString().slice(0, 10), amount: "", method: "TT", reference: "", remarks: "" });
+  const [adjustment, setAdjustment] = useState({ date: new Date().toISOString().slice(0, 10), amount: "", type: "Discount", reason: "" });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const draft = { ...shipment, payments, adjustments };
+  const summary = paymentSummary(draft);
+
+  function addPayment(event) {
+    event.preventDefault();
+    const amount = Number(payment.amount);
+    if (!(amount > 0)) return setError("Enter a payment amount greater than zero.");
+    setPayments((current) => [...current, { ...payment, id: crypto.randomUUID(), amount, createdAt: new Date().toISOString() }]);
+    setPayment((current) => ({ ...current, amount: "", reference: "", remarks: "" }));
+    setError("");
+  }
+
+  function addAdjustment(event) {
+    event.preventDefault();
+    const enteredAmount = Math.abs(Number(adjustment.amount));
+    if (!(enteredAmount > 0) || !adjustment.reason.trim()) return setError("Enter an adjustment amount and reason.");
+    const negative = adjustment.type === "Discount" || adjustment.type === "Credit Note";
+    setAdjustments((current) => [...current, { ...adjustment, id: crypto.randomUUID(), amount: negative ? -enteredAmount : enteredAmount, reason: adjustment.reason.trim(), createdAt: new Date().toISOString() }]);
+    setAdjustment((current) => ({ ...current, amount: "", reason: "" }));
+    setError("");
+  }
+
+  async function save() {
+    setSaving(true);
+    setError("");
+    try {
+      await onSave({ ...shipment, payments, adjustments });
+      onClose();
+    } catch (saveError) {
+      setError(saveError.message || "Unable to save payment ledger.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="shipment-modal payment-ledger-modal" role="dialog" aria-modal="true" aria-labelledby="payment-ledger-title">
+      <div className="modal-head"><div><div className="eyebrow">PAYMENT LEDGER · {shipment.importNo}</div><h2 id="payment-ledger-title">Payments & adjustments</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Close"><X size={20} /></button></div>
+      <div className="payment-ledger-body">
+        <div className="payment-summary-grid">
+          <div><span>Invoice value</span><strong>{currencyAmount(shipment.totalCost, shipment.currency)}</strong></div>
+          <div><span>Adjustments</span><strong>{currencyAmount(summary.adjustmentTotal, shipment.currency)}</strong></div>
+          <div><span>Final payable</span><strong>{currencyAmount(summary.finalPayable, shipment.currency)}</strong></div>
+          <div><span>Total paid</span><strong>{currencyAmount(summary.totalPaid, shipment.currency)}</strong></div>
+          <div><span>Balance</span><strong>{currencyAmount(summary.balance, shipment.currency)}</strong></div>
+          <div><span>Status</span><StatusBadge>{summary.status}</StatusBadge></div>
+        </div>
+        <div className="payment-ledger-columns">
+          <section><h3>Add payment</h3><form className="ledger-entry-form" onSubmit={addPayment}>
+            <label>Date<input type="date" value={payment.date} onChange={(event) => setPayment((current) => ({ ...current, date: event.target.value }))} required /></label>
+            <label>Amount ({shipment.currency})<input type="number" min="0.01" step="0.01" value={payment.amount} onChange={(event) => setPayment((current) => ({ ...current, amount: event.target.value }))} required /></label>
+            <label>Method<select value={payment.method} onChange={(event) => setPayment((current) => ({ ...current, method: event.target.value }))}><option>TT</option><option>LC</option><option>DP</option><option>DA</option><option>Other</option></select></label>
+            <label>Reference<input value={payment.reference} onChange={(event) => setPayment((current) => ({ ...current, reference: event.target.value }))} /></label>
+            <label className="ledger-wide">Remarks<input value={payment.remarks} onChange={(event) => setPayment((current) => ({ ...current, remarks: event.target.value }))} /></label>
+            <button className="button secondary ledger-wide" type="submit"><Plus size={14} /> Add payment</button>
+          </form></section>
+          <section><h3>Add adjustment</h3><form className="ledger-entry-form" onSubmit={addAdjustment}>
+            <label>Date<input type="date" value={adjustment.date} onChange={(event) => setAdjustment((current) => ({ ...current, date: event.target.value }))} required /></label>
+            <label>Amount ({shipment.currency})<input type="number" min="0.01" step="0.01" value={adjustment.amount} onChange={(event) => setAdjustment((current) => ({ ...current, amount: event.target.value }))} required /></label>
+            <label>Type<select value={adjustment.type} onChange={(event) => setAdjustment((current) => ({ ...current, type: event.target.value }))}>{["Discount", "Credit Note", "Additional Charge", "Bank Charge", "Other"].map((type) => <option key={type}>{type}</option>)}</select></label>
+            <label className="ledger-wide">Reason<input value={adjustment.reason} onChange={(event) => setAdjustment((current) => ({ ...current, reason: event.target.value }))} required /></label>
+            <button className="button secondary ledger-wide" type="submit"><Plus size={14} /> Add adjustment</button>
+          </form></section>
+        </div>
+        <section className="ledger-history"><h3>History</h3>
+          {!payments.length && !adjustments.length ? <p>No ledger entries yet.</p> : <div className="ledger-history-list">
+            {[...payments.map((item) => ({ ...item, kind: "Payment" })), ...adjustments.map((item) => ({ ...item, kind: "Adjustment" }))].sort((a, b) => b.date.localeCompare(a.date)).map((item) => <div key={item.id} className="ledger-history-row"><span><strong>{item.kind}</strong><small>{dateLabel(item.date)} · {item.kind === "Payment" ? item.method : item.type}{item.reference ? ` · ${item.reference}` : ""}</small></span><b>{currencyAmount(item.amount, shipment.currency)}</b><button type="button" className="ledger-remove" onClick={() => { if (!window.confirm("Remove this ledger entry?")) return; item.kind === "Payment" ? setPayments((current) => current.filter((entry) => entry.id !== item.id)) : setAdjustments((current) => current.filter((entry) => entry.id !== item.id)); }}>Remove</button></div>)}
+          </div>}
+        </section>
+        {error && <div className="form-error">{error}</div>}
+      </div>
+      <div className="modal-footer"><button type="button" className="button secondary" onClick={onClose}>Cancel</button><button type="button" className="button primary" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save ledger"}</button></div>
+    </section>
+  </div>;
 }
 
 function ShipmentImportModal({ consignees, shipments, onClose, onImport }) {
@@ -1384,6 +1530,7 @@ export default function App() {
   const [analytics, setAnalytics] = useState(null);
   const [modalShipment, setModalShipment] = useState(undefined);
   const [modalShipmentImport, setModalShipmentImport] = useState(false);
+  const [paymentLedgerShipment, setPaymentLedgerShipment] = useState(undefined);
   const [ttSentDateShipment, setTtSentDateShipment] = useState(undefined);
   const [underClearingShipment, setUnderClearingShipment] = useState(undefined);
   const [clearedShipment, setClearedShipment] = useState(undefined);
@@ -1541,7 +1688,9 @@ export default function App() {
   }
 
   async function saveTTSentDates(shipment, etd, eta, remarks) {
-    await api.updateShipment(shipment.id, { ...shipment, etd, eta, remarks, paymentStatus: "Paid" });
+    const summary = paymentSummary(shipment);
+    const payments = summary.balance > 0.005 ? [...(shipment.payments || []), { id: crypto.randomUUID(), date: new Date().toISOString().slice(0, 10), amount: summary.balance, method: "TT", reference: "", remarks: "Marked as TT Sent", createdAt: new Date().toISOString() }] : shipment.payments || [];
+    await api.updateShipment(shipment.id, { ...shipment, etd, eta, remarks, payments });
     setNotice("Shipment marked as TT Sent");
     await refresh();
   }
@@ -1630,7 +1779,7 @@ export default function App() {
     if (active === "dashboard") return <Dashboard shipments={shipments} consignees={consignees} analytics={analytics} accountName={authState?.name || authState?.username} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} onImport={() => setModalShipmentImport(true)} />;
     if (active === "to-be-tt") {
       const pendingTTShipments = shipments.filter((shipment) =>
-        shipment.paymentStatus === "Pending",
+        hasOutstandingPayment(shipment),
       );
       const filteredPendingTTShipments = filterShipmentRows(pendingTTShipments, ttFilters, consignees);
       return <section className="to-be-tt-page">
@@ -1638,14 +1787,14 @@ export default function App() {
         {error && <div className="inline-error">{error}</div>}
         <section className="panel table-panel tt-payments-panel">
           <div className="table-toolbar"><div className="table-title"><h2>Pending TT payments</h2><span className="count-pill">{filteredPendingTTShipments.length}</span></div><ShipmentFilterControls filters={ttFilters} onChange={setTtFilters} consignees={consigneeOptions} exportAction={() => exportPendingTTToExcel(filteredPendingTTShipments)} exportDisabled={!filteredPendingTTShipments.length} /></div>
-          <ShipmentTable rows={filteredPendingTTShipments} mode="payments" onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} onTTSent={setTtSentDateShipment} consignees={consignees} />
+          <ShipmentTable rows={filteredPendingTTShipments} mode="payments" onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} onTTSent={setTtSentDateShipment} onPayments={setPaymentLedgerShipment} consignees={consignees} />
           <div className="table-footer"><span><strong>{filteredPendingTTShipments.length}</strong> of {pendingTTShipments.length} shipments awaiting payment</span><span>Data saved automatically</span></div>
         </section>
       </section>;
     }
     if (active === "tt-sent") {
       const ttSentShipments = shipments.filter((shipment) => shipment.paymentMethod === "Advance TT" && shipment.paymentStatus === "Paid" && shipment.status === "Pending");
-      return <ShipmentListPage eyebrow="PAYMENTS" title="TT Sent" subtitle="Advance TT shipments whose payment has been sent." rows={ttSentShipments} mode="payments" consignees={consignees} onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} onUnderClearing={setUnderClearingShipment} showAdd={false} footer="Advance TT payments sent" />;
+      return <ShipmentListPage eyebrow="PAYMENTS" title="TT Sent" subtitle="Advance TT shipments whose payment has been sent." rows={ttSentShipments} mode="payments" consignees={consignees} onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} onUnderClearing={setUnderClearingShipment} onPayments={setPaymentLedgerShipment} showAdd={false} footer="Advance TT payments sent" />;
     }
     if (active === "under-clearing") {
       const underClearingShipments = shipments.filter((shipment) => shipment.status === "Under Clearing");
@@ -1662,7 +1811,7 @@ export default function App() {
         ? shipments.filter((shipment) => shipment.status === "Cleared")
         : report?.consigneeName ? shipments.filter((shipment) => shipment.status === "Cleared" && (shipment.company === consigneeCode || shipment.company === report.consigneeName)) : shipments;
       if (report?.key === "report-shipment") {
-        return <ShipmentSummarySections shipments={reportShipments} consignees={consignees} onEdit={openModal} onDelete={deleteShipmentFromList} />;
+        return <ShipmentSummarySections shipments={reportShipments} consignees={consignees} onEdit={openModal} onDelete={deleteShipmentFromList} onPayments={setPaymentLedgerShipment} />;
       }
       return <ShipmentListPage eyebrow="REPORTS & ANALYTICS" title={report?.label || "SHIPMENT"} subtitle={report?.key === "report-cleared" ? "Cleared shipment records." : report?.consigneeName ? `Cleared shipment records for ${report.consigneeName}.` : "All shipment records."} rows={reportShipments} mode="payments" consignees={consignees} onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} showAdd={false} footer="shipment records" />;
     }
@@ -1726,6 +1875,7 @@ export default function App() {
       </div>
       {sidebarOpen && <button className="sidebar-overlay" aria-label="Close navigation" onClick={() => setSidebarOpen(false)} />}
       {modalShipment !== undefined && <ShipmentModal initial={modalShipment} consignees={consigneeOptions} countries={countries} currencies={currencies} onClose={() => setModalShipment(undefined)} onSave={saveShipment} />}
+      {paymentLedgerShipment !== undefined && <PaymentLedgerModal shipment={paymentLedgerShipment} onClose={() => setPaymentLedgerShipment(undefined)} onSave={saveShipment} />}
       {modalShipmentImport && <ShipmentImportModal consignees={consigneeOptions} shipments={shipments} onClose={() => setModalShipmentImport(false)} onImport={importShipments} />}
       {ttSentDateShipment !== undefined && <TTSentDateModal shipment={ttSentDateShipment} onClose={() => setTtSentDateShipment(undefined)} onSave={saveTTSentDates} />}
       {underClearingShipment !== undefined && <UnderClearingModal shipment={underClearingShipment} onClose={() => setUnderClearingShipment(undefined)} onSave={saveUnderClearingShipment} />}

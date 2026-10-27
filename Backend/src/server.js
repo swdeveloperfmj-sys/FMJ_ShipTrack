@@ -20,6 +20,25 @@ const allowedOrigins = (process.env.FRONTEND_ORIGIN || "http://localhost:5173")
   .split(",")
   .map((origin) => origin.trim());
 
+const paymentEntrySchema = new mongoose.Schema({
+  id: { type: String, required: true },
+  date: { type: String, required: true },
+  amount: { type: Number, required: true, min: 0.01 },
+  method: { type: String, trim: true, default: "TT" },
+  reference: { type: String, trim: true, default: "" },
+  remarks: { type: String, trim: true, default: "" },
+  createdAt: { type: String, required: true },
+}, { _id: false });
+
+const paymentAdjustmentSchema = new mongoose.Schema({
+  id: { type: String, required: true },
+  date: { type: String, required: true },
+  amount: { type: Number, required: true },
+  type: { type: String, enum: ["Discount", "Credit Note", "Additional Charge", "Bank Charge", "Other"], required: true },
+  reason: { type: String, trim: true, required: true },
+  createdAt: { type: String, required: true },
+}, { _id: false });
+
 const shipmentSchema = new mongoose.Schema(
   {
     _id: { type: String, required: true },
@@ -56,6 +75,8 @@ const shipmentSchema = new mongoose.Schema(
     doCharges: { type: Number, default: 0 },
     clearanceStatus: { type: String, default: "Not started" },
     totalCost: { type: Number, default: 0 },
+    payments: { type: [paymentEntrySchema], default: [] },
+    adjustments: { type: [paymentAdjustmentSchema], default: [] },
     documents: { type: mongoose.Schema.Types.Mixed, default: {} },
     createdAt: { type: String, default: () => new Date().toISOString() },
     updatedAt: { type: String },
@@ -168,6 +189,8 @@ const shipmentFields = [
   "doCharges",
   "clearanceStatus",
   "totalCost",
+  "payments",
+  "adjustments",
   "documents",
 ];
 
@@ -463,7 +486,18 @@ app.post("/api/auth/logout", requireAuthenticated, (_request, response) => {
 function serializeShipment(shipment) {
   const plain = shipment.toObject ? shipment.toObject() : shipment;
   const { _id, ...fields } = plain;
-  return { ...fields, id: _id };
+  const payments = Array.isArray(fields.payments) ? fields.payments : [];
+  const adjustments = Array.isArray(fields.adjustments) ? fields.adjustments : [];
+  const hasLedger = payments.length > 0 || adjustments.length > 0;
+  const recordedPaid = payments.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const adjustmentTotal = adjustments.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const finalPayable = Math.max(0, Number(fields.totalCost || 0) + adjustmentTotal);
+  const totalPaid = !hasLedger && fields.paymentStatus === "Paid" ? finalPayable : recordedPaid;
+  const balance = finalPayable - totalPaid;
+  const calculatedPaymentStatus = totalPaid <= 0 ? "Unpaid"
+    : balance > 0.005 ? "Partially Paid"
+      : balance < -0.005 ? "Overpaid" : "Fully Paid";
+  return { ...fields, id: _id, totalPaid, adjustmentTotal, finalPayable, balance, calculatedPaymentStatus };
 }
 
 function shipmentInput(body) {
@@ -473,11 +507,38 @@ function shipmentInput(body) {
   );
 }
 
+function validateLedger(shipment) {
+  if (shipment.payments !== undefined && !Array.isArray(shipment.payments)) return "Payments must be a list.";
+  if (shipment.adjustments !== undefined && !Array.isArray(shipment.adjustments)) return "Adjustments must be a list.";
+  for (const payment of shipment.payments || []) {
+    if (!payment?.id || !/^\d{4}-\d{2}-\d{2}$/.test(payment.date || "") || !(Number(payment.amount) > 0)) {
+      return "Each payment requires an ID, payment date and an amount greater than zero.";
+    }
+  }
+  for (const adjustment of shipment.adjustments || []) {
+    if (!adjustment?.id || !/^\d{4}-\d{2}-\d{2}$/.test(adjustment.date || "") || !Number.isFinite(Number(adjustment.amount)) || Number(adjustment.amount) === 0 || !adjustment.reason?.trim()) {
+      return "Each adjustment requires an ID, date, non-zero amount and reason.";
+    }
+  }
+  return null;
+}
+
+function paymentStatusFromLedger(shipment) {
+  const payments = shipment.payments || [];
+  const adjustments = shipment.adjustments || [];
+  if (!payments.length && !adjustments.length) return shipment.paymentStatus || "Pending";
+  const paid = payments.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const payable = Math.max(0, Number(shipment.totalCost || 0) + adjustments.reduce((sum, item) => sum + Number(item.amount || 0), 0));
+  return payable - paid <= 0.005 ? "Paid" : "Pending";
+}
+
 function normalizeImportNo(value) {
   return String(value || "").trim().toUpperCase();
 }
 
 function validateShipment(shipment) {
+  const ledgerError = validateLedger(shipment);
+  if (ledgerError) return ledgerError;
   const requiredFields = ["importNo", "supplier", "consignee", "description", "company"];
   const missing = requiredFields.filter(
     (field) => typeof shipment[field] !== "string" || !shipment[field].trim(),
@@ -946,6 +1007,7 @@ app.get("/api/shipments/:id", async (request, response, next) => {
 app.post("/api/shipments", async (request, response, next) => {
   try {
     const input = shipmentInput(request.body);
+    input.paymentStatus = paymentStatusFromLedger(input);
     const validationError = validateShipment(input);
     if (validationError) return response.status(400).json({ error: validationError });
     const importNo = normalizeImportNo(input.importNo);
@@ -967,6 +1029,7 @@ app.post("/api/shipments", async (request, response, next) => {
 app.put("/api/shipments/:id", async (request, response, next) => {
   try {
     const input = shipmentInput(request.body);
+    input.paymentStatus = paymentStatusFromLedger(input);
     const validationError = validateShipment(input);
     if (validationError) return response.status(400).json({ error: validationError });
     const importNo = normalizeImportNo(input.importNo);

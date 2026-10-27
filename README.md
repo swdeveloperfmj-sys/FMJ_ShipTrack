@@ -103,8 +103,10 @@ cannot be deleted or have its code changed.
 
 The workspace navigation includes the dashboard, consignee reports and directory,
 country management, documents, delay/cost analytics, and **To be TT**. The To be TT page
-lists shipments with Pending payment status, regardless of the selected payment terms; add shipments
-there or use a shipment's row actions to edit or delete its record. Shipment table rows
+lists shipments with an outstanding payment balance, regardless of the selected payment terms; add shipments
+there or use a shipment's row actions to edit or delete its record. Each installment is recorded in a payment
+ledger. Discounts, credit notes and additional charges are stored as adjustments; paid totals, final payable
+value, balance and payment status are calculated automatically. Shipment table rows
 do not open a detail popup when clicked. The dashboard provides a
 recent-shipment overview; the former standalone shipment register, tracking, payment,
 and customs pages are not included in the navigation. The consignee selector includes
