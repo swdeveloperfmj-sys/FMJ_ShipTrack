@@ -656,14 +656,13 @@ function ShipmentFilterControls({ filters, onChange, consignees, exportAction, e
 function ShipmentListPage({ eyebrow, title, subtitle, rows, mode = "shipments", consignees, onEdit, onDelete, onAdd, onTTSent, onUnderClearing, onCleared, onPayments, onCellSave, showAdd = true, footer }) {
   const [filters, setFilters] = useState(emptyShipmentFilters);
   const filteredRows = filterShipmentRows(rows, filters, consignees);
-  return <>
-    <PageTitle eyebrow={eyebrow} title={title} subtitle={subtitle} action={showAdd ? <button className="button primary" onClick={onAdd}><Plus size={17} /> Add shipment</button> : undefined} />
+  return <section className="shipment-list-page">
     <section className="panel table-panel">
-      <div className="table-toolbar"><div className="table-title"><h2>{title}</h2><span className="count-pill">{filteredRows.length}</span></div><ShipmentFilterControls filters={filters} onChange={setFilters} consignees={consignees} /></div>
+      <div className="table-toolbar"><div className="table-title"><h2>{title}</h2><span className="count-pill">{filteredRows.length}</span></div><div className="pending-tt-toolbar-actions"><ShipmentFilterControls filters={filters} onChange={setFilters} consignees={consignees} />{showAdd && <button className="button primary" onClick={onAdd}><Plus size={15} /> Add shipment</button>}</div></div>
       <ShipmentTable rows={filteredRows} mode={mode} onEdit={onEdit} onDelete={onDelete} onAdd={showAdd ? onAdd : undefined} onTTSent={onTTSent} onUnderClearing={onUnderClearing} onCleared={onCleared} onPayments={onPayments} onCellSave={onCellSave} consignees={consignees} />
       <div className="table-footer"><span><strong>{filteredRows.length}</strong> of {rows.length} {footer || "shipments"}</span><span>Data saved automatically</span></div>
     </section>
-  </>;
+  </section>;
 }
 
 function ShipmentSummarySections({ shipments, consignees, onEdit, onDelete, onPayments, onCellSave }) {
@@ -687,7 +686,6 @@ function ShipmentSummarySections({ shipments, consignees, onEdit, onDelete, onPa
   ];
 
   return <>
-    <PageTitle eyebrow="REPORTS & ANALYTICS" title="SHIPMENT" subtitle="All shipment records, arranged in the same sections as the shipment workbook." />
     <section className="panel table-panel shipment-summary-filter"><div className="table-toolbar"><div className="table-title"><h2>Filters</h2><span className="count-pill">{filteredShipments.length}</span></div><ShipmentFilterControls filters={filters} onChange={setFilters} consignees={consignees} /></div></section>
     <div className="shipment-summary-sections">
       {sections.map(([title, rows]) => <section className="panel table-panel" key={title}>
@@ -1835,10 +1833,9 @@ export default function App() {
       );
       const filteredPendingTTShipments = filterShipmentRows(pendingTTShipments, ttFilters, consignees);
       return <section className="to-be-tt-page">
-        <PageTitle eyebrow="PAYMENTS" title="To be TT" subtitle="Shipments with payment still pending." action={<button className="button primary" onClick={() => openModal(null)}><Plus size={17} /> Add shipment</button>} />
         {error && <div className="inline-error">{error}</div>}
         <section className="panel table-panel tt-payments-panel">
-          <div className="table-toolbar"><div className="table-title"><h2>Pending TT payments</h2><span className="count-pill">{filteredPendingTTShipments.length}</span></div><ShipmentFilterControls filters={ttFilters} onChange={setTtFilters} consignees={consigneeOptions} exportAction={() => exportPendingTTToExcel(filteredPendingTTShipments)} exportDisabled={!filteredPendingTTShipments.length} /></div>
+          <div className="table-toolbar"><div className="table-title"><h2>Pending TT payments</h2><span className="count-pill">{filteredPendingTTShipments.length}</span></div><div className="pending-tt-toolbar-actions"><ShipmentFilterControls filters={ttFilters} onChange={setTtFilters} consignees={consigneeOptions} exportAction={() => exportPendingTTToExcel(filteredPendingTTShipments)} exportDisabled={!filteredPendingTTShipments.length} /><button className="button primary" onClick={() => openModal(null)}><Plus size={15} /> Add shipment</button></div></div>
           <ShipmentTable rows={filteredPendingTTShipments} mode="payments" onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} onTTSent={setTtSentDateShipment} onPayments={setPaymentLedgerShipment} onCellSave={saveShipmentCell} consignees={consignees} />
           <div className="table-footer"><span><strong>{filteredPendingTTShipments.length}</strong> of {pendingTTShipments.length} shipments awaiting payment</span><span>Data saved automatically</span></div>
         </section>
