@@ -477,7 +477,7 @@ function InlineEditCell({ shipment, field, value, children, onSave, type = "text
     }
   }
 
-  return <td className={`${className || ""} ${editing ? "inline-editing" : "inline-editable"}`.trim()} onDoubleClick={(event) => { event.stopPropagation(); setEditing(true); }} title={editing ? undefined : "Double-click to edit"}>
+  return <td className={`${className || ""} ${editing ? "inline-editing" : "inline-editable"}`.trim()} onDoubleClick={(event) => { event.stopPropagation(); setEditing(true); }} title={editing ? undefined : `${value || "Empty"} — double-click to edit`}>
     {editing ? (type === "select"
       ? <select ref={inputRef} value={draft} disabled={saving} onChange={(event) => { setDraft(event.target.value); commit(event.target.value); }} onKeyDown={(event) => { if (event.key === "Escape") setEditing(false); }} onBlur={() => { if (!saving) setEditing(false); }}>{options.map((option) => <option key={typeof option === "string" ? option : option.value} value={typeof option === "string" ? option : option.value}>{typeof option === "string" ? option : option.label}</option>)}</select>
       : <input ref={inputRef} type={type} value={draft} disabled={saving} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") commit(); if (event.key === "Escape") setEditing(false); }} onBlur={() => commit()} />)
@@ -565,7 +565,7 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
 
   return (
     <div className="table-scroll">
-      <table>
+      <table className={mode === "payments" ? "payments-table" : undefined}>
         <thead><tr>{tableHeaders.map((header, index) => <th key={`${header}-${index}`}>{header}</th>)}</tr></thead>
         <tbody>
           {displayRows.map((shipment, index) => {

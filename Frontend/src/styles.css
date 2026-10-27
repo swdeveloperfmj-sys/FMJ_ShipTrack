@@ -245,6 +245,19 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .tt-payments-panel th { padding-right: 9px; padding-left: 9px; }
 .tt-payments-panel td { padding-right: 9px; padding-left: 9px; }
 .tt-payments-panel th:first-child,.tt-payments-panel td:first-child { padding-left: 14px; }
+.payments-table { width: max(100%, 1800px); table-layout: auto; }
+.payments-table th { height: 32px; padding-right: 5px; padding-left: 5px; font-size: 8px; letter-spacing: -.1px; }
+.payments-table td { height: 38px; padding: 4px 5px; font-size: 8.5px; }
+.payments-table th:first-child,.payments-table td:first-child { padding-left: 7px; }
+.payments-table .import-id { font-size: 9px; }
+.payments-table .company-tag { min-width: 24px; min-height: 19px; padding: 0 4px; font-size: 8px; }
+.payments-table .description-cell { min-width: 70px; max-width: 105px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.payments-table th:last-child,.payments-table .remarks-cell { width: 180px; min-width: 180px; max-width: 180px; }
+.payments-table .remarks-cell { overflow: visible; text-overflow: clip; white-space: normal; line-height: 1.4; overflow-wrap: anywhere; }
+.payments-table .badge { min-height: 19px; padding: 0 5px; font-size: 8px; }
+.payments-table .tt-sent-update-button { min-height: 23px; padding: 0 5px; font-size: 8px; }
+.payments-table .inline-editing { min-width: 82px; padding: 2px; }
+.payments-table .inline-editing input,.payments-table .inline-editing select { min-width: 76px; height: 28px; padding: 0 4px; font-size: 9px; }
 .tt-sent-update-button { min-height: 27px; padding: 0 9px; border: 1px solid #b9d1f5; border-radius: 5px; background: #eff6ff; color: #2865bd; font-size: 9px; font-weight: 700; white-space: nowrap; cursor: pointer; }
 .tt-sent-update-button:hover { border-color: #6e9fe3; background: #e1eeff; }
 .tt-sent-date-modal { width: min(460px, 100%); }
