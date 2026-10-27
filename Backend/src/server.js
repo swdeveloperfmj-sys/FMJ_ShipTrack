@@ -14,7 +14,7 @@ app.set("trust proxy", 1);
 const port = Number(process.env.PORT) || 4000;
 const adminEmail = "sw.developer.fmj@gmail.com";
 const cookieName = "fmj_shiptrack_session";
-const sessionDurationMs = 8 * 60 * 60 * 1000;
+const sessionDurationMs = 7 * 24 * 60 * 60 * 1000;
 const isDeployed = process.env.NODE_ENV === "production" || process.env.VERCEL === "1";
 const allowedOrigins = (process.env.FRONTEND_ORIGIN || "http://localhost:5173")
   .split(",")
@@ -229,7 +229,7 @@ function createSessionToken(account) {
   return jwt.sign(
     { sub: account._id, username: account.username, name: account.name || account.username, role: account.role || "super-admin", sidebarAccess: account.sidebarAccess || [], fontSize: account.fontSize || 100, purpose: "shiptrack-session" },
     process.env.AUTH_TOKEN_SECRET,
-    { expiresIn: "8h" },
+    { expiresIn: "7d" },
   );
 }
 
