@@ -717,7 +717,7 @@ app.get("/api/shipments", async (request, response, next) => {
         [field]: searchRegex,
       }));
     }
-    const shipments = await Shipment.find(filter).sort({ createdAt: -1 }).lean();
+    const shipments = await Shipment.find(filter).sort({ company: 1, createdAt: -1 }).lean();
     response.json(shipments.map(serializeShipment));
   } catch (error) {
     next(error);

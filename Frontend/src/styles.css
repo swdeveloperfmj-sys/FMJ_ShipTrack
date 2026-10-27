@@ -197,6 +197,7 @@ tbody tr:hover { background: #fbfcfe; }
 .consignee-row-first,
 .consignee-row-first .import-id { color: #263348; }
 .consignee-row-first small { color: #4b5563; }
+tr.consignee-group-start td { border-top: 2px solid #cfd8e3; }
 td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font-weight: 400; }
 .company-tag { display: inline-grid; place-items: center; min-width: 29px; min-height: 21px; padding: 0 6px; border: 1px solid #e6ebf3; border-radius: 5px; background: #f9fafc; color: #60718b; font-size: 9px; font-weight: 700; }
 .consignee-color-tag { border-color: color-mix(in srgb, var(--consignee-color), white 62%); background: color-mix(in srgb, var(--consignee-color), white 84%); color: color-mix(in srgb, var(--consignee-color), #1f2937 48%); }
@@ -597,6 +598,7 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .app-shell[data-theme="dark"] .consignee-row-first,
 .app-shell[data-theme="dark"] .consignee-row-first .import-id,
 .app-shell[data-theme="dark"] .consignee-row-first small { color: #fff; }
+.app-shell[data-theme="dark"] tr.consignee-group-start td { border-top: 2px solid #36465d; }
 .app-shell[data-theme="dark"] .company-tag { color: #c0cde0; }
 .app-shell[data-theme="dark"] .company-avatar { background: #2a3a51; color: #acc6ef; }
 .app-shell[data-theme="dark"] .payment-details-list { background: #172131; }
