@@ -524,7 +524,7 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
   if (mode === "payment-cards") return (
     <div className="payment-details-list">
       {displayRows.map((shipment) => {
-        const incoterm = [shipment.incoterm, shipment.incotermLocation].filter(Boolean).join(" · ") || "—";
+        const incoterm = shipment.incoterm || "—";
         return <article className="payment-detail-card" key={shipment.id}>
           <header className="payment-detail-card-head">
             <div><span className="payment-detail-label">Import no.</span><strong>{shipment.importNo}</strong></div>
@@ -566,7 +566,7 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
   return (
     <div className="table-scroll">
       <table className={mode === "payments" ? "payments-table" : undefined}>
-        <thead><tr>{tableHeaders.map((header, index) => <th key={`${header}-${index}`}>{header}</th>)}</tr></thead>
+        <thead><tr>{tableHeaders.map((header, index) => <th key={`${header}-${index}`} className={header === "Shipper" ? "shipper-header" : header === "Item description" ? "description-header" : undefined}>{header}</th>)}</tr></thead>
         <tbody>
           {displayRows.map((shipment, index) => {
             const isGroupStart = index > 0 && (shipment.company || "").trim().toUpperCase() !== (displayRows[index - 1]?.company || "").trim().toUpperCase();
@@ -576,23 +576,23 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
                 {mode === "shipments" && <>
                   <td className="consignee-row-first" style={{ "--consignee-color": consigneeColorFor(shipment.company, consignees) }}><span className="import-id">{shipment.importNo}</span><small>{shipment.description}</small></td>
                   <td><ConsigneeBadge code={shipment.company} consignees={consignees} /></td>
-                  <td>{shipment.supplier}</td><td>{shipment.consignee}</td>
+                  <td className="shipper-cell">{shipment.supplier}</td><td>{shipment.consignee}</td>
                   <td className="description-cell">{shipment.description}</td><td>{dateLabel(shipment.eta)}</td>
                   <td><StatusBadge>{shipment.status}</StatusBadge></td>
                 </>}
                 {mode === "tracking" && <>
                   <td className="consignee-row-first" style={{ "--consignee-color": consigneeColorFor(shipment.company, consignees) }}><span className="import-id">{shipment.importNo}</span><small><ConsigneeBadge code={shipment.company} consignees={consignees} /></small></td>
-                  <td>{shipment.supplier}</td><td>{dateLabel(shipment.etd)}</td><td>{dateLabel(shipment.eta)}</td>
+                  <td className="shipper-cell">{shipment.supplier}</td><td>{dateLabel(shipment.etd)}</td><td>{dateLabel(shipment.eta)}</td>
                   <td>{dateLabel(shipment.arrivalDate)}</td><td>{dateLabel(shipment.deliveryDate)}</td><td><StatusBadge>{shipment.status}</StatusBadge></td>
                 </>}
                 {mode === "payments" && <>
                   <InlineEditCell shipment={shipment} field="importNo" value={shipment.importNo} onSave={onCellSave} className="consignee-row-first"><span className="import-id">{shipment.importNo}</span></InlineEditCell>
                   {workflowAction && <td><button type="button" className="tt-sent-update-button" onClick={() => workflowAction.onClick(shipment)}>{workflowAction.label}</button></td>}
                   <InlineEditCell shipment={shipment} field="company" value={shipment.company} onSave={onCellSave} type="select" options={consignees.map((item) => ({ value: item.code, label: item.name }))} buildPatch={(company) => ({ company, consignee: consignees.find((item) => item.code === company)?.name || shipment.consignee })}><ConsigneeBadge code={shipment.company} label={shipment.consignee || shipment.company || "—"} showName consignees={consignees} /></InlineEditCell>
-                  <InlineEditCell shipment={shipment} field="supplier" value={shipment.supplier} onSave={onCellSave}>{shipment.supplier || "—"}</InlineEditCell>
+                  <InlineEditCell shipment={shipment} field="supplier" value={shipment.supplier} onSave={onCellSave} className="shipper-cell">{shipment.supplier || "—"}</InlineEditCell>
                   <InlineEditCell shipment={shipment} field="description" value={shipment.description} onSave={onCellSave} className="description-cell">{shipment.description || "—"}</InlineEditCell>
                   <InlineEditCell shipment={shipment} field="transportMode" value={shipment.transportMode} onSave={onCellSave} type="select" options={["AIR", "SEA"]}>{transportLabel(shipment)}</InlineEditCell>
-                  <InlineEditCell shipment={shipment} field="incoterm" value={shipment.incoterm} onSave={onCellSave} type="select" options={shipment.transportMode === "AIR" ? ["CIP", "CPT", "FCA", "EXW"] : ["CIF", "CFR", "FOB", "EXW"]} buildPatch={(incoterm) => ({ incoterm, incotermLocation: ["CIP", "CPT", "CIF", "CFR"].includes(incoterm) ? "Colombo, Sri Lanka" : shipment.incotermLocation === "Colombo, Sri Lanka" ? "" : shipment.incotermLocation })}>{[shipment.incoterm, shipment.incotermLocation].filter(Boolean).join(" · ") || "—"}</InlineEditCell>
+                  <InlineEditCell shipment={shipment} field="incoterm" value={shipment.incoterm} onSave={onCellSave} type="select" options={shipment.transportMode === "AIR" ? ["CIP", "CPT", "FCA", "EXW"] : ["CIF", "CFR", "FOB", "EXW"]} buildPatch={(incoterm) => ({ incoterm, incotermLocation: ["CIP", "CPT", "CIF", "CFR"].includes(incoterm) ? "Colombo, Sri Lanka" : shipment.incotermLocation === "Colombo, Sri Lanka" ? "" : shipment.incotermLocation })}>{shipment.incoterm || "—"}</InlineEditCell>
                   <InlineEditCell shipment={shipment} field="paymentTerms" value={shipment.paymentTerms} onSave={onCellSave} type="select" options={[{ value: "ADVANCE_TT", label: "TT" }, { value: "LETTER_OF_CREDIT", label: "Letter of credit" }, { value: "DA_BL", label: "DA - From date of BL" }, { value: "DP_SIGHT", label: "DP of Sight" }, { value: "OPEN_ACCOUNT", label: "Open account" }]} buildPatch={(paymentTerms) => ({ paymentTerms, paymentMethod: paymentTerms === "ADVANCE_TT" ? "Advance TT" : paymentTerms === "LETTER_OF_CREDIT" ? "Sight LC" : paymentTerms === "DA_BL" ? "DA - From date of BL" : paymentTerms === "DP_SIGHT" ? "DP of Sight" : "Open account", paymentTermType: paymentTerms === "LETTER_OF_CREDIT" ? "Sight" : "", paymentTermDays: ["DA_BL", "OPEN_ACCOUNT"].includes(paymentTerms) ? 30 : "" })}>{paymentTermsLabel(shipment)}</InlineEditCell>
                   <InlineEditCell shipment={shipment} field="totalCost" value={shipment.totalCost} onSave={onCellSave} type="number">{currencyAmount(payment.finalPayable, shipment.currency)}</InlineEditCell>
                   <td>{currencyAmount(payment.totalPaid, shipment.currency)}</td><td>{currencyAmount(payment.balance, shipment.currency)}</td><td><StatusBadge>{payment.status}</StatusBadge></td>
