@@ -449,7 +449,43 @@ function sortShipmentsByConsignee(rows = [], consignees = []) {
   });
 }
 
-function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderClearing, onCleared, onPayments, showActions = true, consignees = [], groupByConsignee = true }) {
+function InlineEditCell({ shipment, field, value, children, onSave, type = "text", options = [], className, buildPatch }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef(null);
+  const saveInFlightRef = useRef(false);
+
+  useEffect(() => { if (!editing) setDraft(value ?? ""); }, [value, editing]);
+  useEffect(() => { if (editing) inputRef.current?.focus(); }, [editing]);
+
+  async function commit(nextValue = draft) {
+    if (saveInFlightRef.current) return;
+    const normalized = type === "number" ? Number(nextValue || 0) : nextValue;
+    if (String(normalized) === String(value ?? "")) { setEditing(false); return; }
+    saveInFlightRef.current = true;
+    setSaving(true);
+    try {
+      await onSave(shipment, buildPatch ? buildPatch(normalized) : { [field]: normalized });
+      setEditing(false);
+    } catch (error) {
+      window.alert(error.message || "Unable to save this cell.");
+      inputRef.current?.focus();
+    } finally {
+      saveInFlightRef.current = false;
+      setSaving(false);
+    }
+  }
+
+  return <td className={`${className || ""} ${editing ? "inline-editing" : "inline-editable"}`.trim()} onDoubleClick={(event) => { event.stopPropagation(); setEditing(true); }} title={editing ? undefined : "Double-click to edit"}>
+    {editing ? (type === "select"
+      ? <select ref={inputRef} value={draft} disabled={saving} onChange={(event) => { setDraft(event.target.value); commit(event.target.value); }} onKeyDown={(event) => { if (event.key === "Escape") setEditing(false); }} onBlur={() => { if (!saving) setEditing(false); }}>{options.map((option) => <option key={typeof option === "string" ? option : option.value} value={typeof option === "string" ? option : option.value}>{typeof option === "string" ? option : option.label}</option>)}</select>
+      : <input ref={inputRef} type={type} value={draft} disabled={saving} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") commit(); if (event.key === "Escape") setEditing(false); }} onBlur={() => commit()} />)
+      : children}
+  </td>;
+}
+
+function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderClearing, onCleared, onPayments, onCellSave, showActions = true, consignees = [], groupByConsignee = true }) {
   const [contextMenu, setContextMenu] = useState(null);
   const displayRows = useMemo(() => {
     return groupByConsignee ? sortShipmentsByConsignee(rows, consignees) : rows;
@@ -477,6 +513,11 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
       x: Math.min(event.clientX, window.innerWidth - menuWidth - 8),
       y: Math.min(event.clientY, window.innerHeight - menuHeight - 8),
     });
+  }
+
+  function openCellEditor(event, shipment) {
+    if (mode === "payments" || !onEdit || event.target.closest("button, a, input, select, textarea")) return;
+    onEdit(shipment);
   }
 
   if (!displayRows.length) return <EmptyState message={mode === "shipments" ? "No shipment records yet" : "No shipments found"} onAdd={onAdd} />;
@@ -531,7 +572,7 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
             const isGroupStart = index > 0 && (shipment.company || "").trim().toUpperCase() !== (displayRows[index - 1]?.company || "").trim().toUpperCase();
             const payment = paymentSummary(shipment);
             return (
-              <tr key={shipment.id} className={`${isGroupStart ? "consignee-group-start " : ""}${mode === "payments" && showActions ? "context-menu-row" : ""}`.trim() || undefined} onContextMenu={(event) => openContextMenu(event, shipment)}>
+              <tr key={shipment.id} className={`${isGroupStart ? "consignee-group-start " : ""}${mode === "payments" && showActions ? "context-menu-row editable-data-row" : "editable-data-row"}`.trim() || undefined} onContextMenu={(event) => openContextMenu(event, shipment)} onDoubleClick={(event) => openCellEditor(event, shipment)} title="Double-click a cell to edit this shipment">
                 {mode === "shipments" && <>
                   <td className="consignee-row-first" style={{ "--consignee-color": consigneeColorFor(shipment.company, consignees) }}><span className="import-id">{shipment.importNo}</span><small>{shipment.description}</small></td>
                   <td><ConsigneeBadge code={shipment.company} consignees={consignees} /></td>
@@ -545,17 +586,22 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
                   <td>{dateLabel(shipment.arrivalDate)}</td><td>{dateLabel(shipment.deliveryDate)}</td><td><StatusBadge>{shipment.status}</StatusBadge></td>
                 </>}
                 {mode === "payments" && <>
-                  <td className="consignee-row-first" style={{ "--consignee-color": consigneeColorFor(shipment.company, consignees) }}><span className="import-id">{shipment.importNo}</span></td>
+                  <InlineEditCell shipment={shipment} field="importNo" value={shipment.importNo} onSave={onCellSave} className="consignee-row-first"><span className="import-id">{shipment.importNo}</span></InlineEditCell>
                   {workflowAction && <td><button type="button" className="tt-sent-update-button" onClick={() => workflowAction.onClick(shipment)}>{workflowAction.label}</button></td>}
-                  <td><ConsigneeBadge code={shipment.company} label={shipment.consignee || shipment.company || "—"} showName consignees={consignees} /></td><td>{shipment.supplier || "—"}</td>
-                  <td className="description-cell">{shipment.description || "—"}</td><td>{transportLabel(shipment)}</td>
-                  <td>{[shipment.incoterm, shipment.incotermLocation].filter(Boolean).join(" · ") || "—"}</td>
-                  <td>{paymentTermsLabel(shipment)}</td><td>{currencyAmount(payment.finalPayable, shipment.currency)}</td>
+                  <InlineEditCell shipment={shipment} field="company" value={shipment.company} onSave={onCellSave} type="select" options={consignees.map((item) => ({ value: item.code, label: item.name }))} buildPatch={(company) => ({ company, consignee: consignees.find((item) => item.code === company)?.name || shipment.consignee })}><ConsigneeBadge code={shipment.company} label={shipment.consignee || shipment.company || "—"} showName consignees={consignees} /></InlineEditCell>
+                  <InlineEditCell shipment={shipment} field="supplier" value={shipment.supplier} onSave={onCellSave}>{shipment.supplier || "—"}</InlineEditCell>
+                  <InlineEditCell shipment={shipment} field="description" value={shipment.description} onSave={onCellSave} className="description-cell">{shipment.description || "—"}</InlineEditCell>
+                  <InlineEditCell shipment={shipment} field="transportMode" value={shipment.transportMode} onSave={onCellSave} type="select" options={["AIR", "SEA"]}>{transportLabel(shipment)}</InlineEditCell>
+                  <InlineEditCell shipment={shipment} field="incoterm" value={shipment.incoterm} onSave={onCellSave} type="select" options={shipment.transportMode === "AIR" ? ["CIP", "CPT", "FCA", "EXW"] : ["CIF", "CFR", "FOB", "EXW"]} buildPatch={(incoterm) => ({ incoterm, incotermLocation: ["CIP", "CPT", "CIF", "CFR"].includes(incoterm) ? "Colombo, Sri Lanka" : shipment.incotermLocation === "Colombo, Sri Lanka" ? "" : shipment.incotermLocation })}>{[shipment.incoterm, shipment.incotermLocation].filter(Boolean).join(" · ") || "—"}</InlineEditCell>
+                  <InlineEditCell shipment={shipment} field="paymentTerms" value={shipment.paymentTerms} onSave={onCellSave} type="select" options={[{ value: "ADVANCE_TT", label: "TT" }, { value: "LETTER_OF_CREDIT", label: "Letter of credit" }, { value: "DA_BL", label: "DA - From date of BL" }, { value: "DP_SIGHT", label: "DP of Sight" }, { value: "OPEN_ACCOUNT", label: "Open account" }]} buildPatch={(paymentTerms) => ({ paymentTerms, paymentMethod: paymentTerms === "ADVANCE_TT" ? "Advance TT" : paymentTerms === "LETTER_OF_CREDIT" ? "Sight LC" : paymentTerms === "DA_BL" ? "DA - From date of BL" : paymentTerms === "DP_SIGHT" ? "DP of Sight" : "Open account", paymentTermType: paymentTerms === "LETTER_OF_CREDIT" ? "Sight" : "", paymentTermDays: ["DA_BL", "OPEN_ACCOUNT"].includes(paymentTerms) ? 30 : "" })}>{paymentTermsLabel(shipment)}</InlineEditCell>
+                  <InlineEditCell shipment={shipment} field="totalCost" value={shipment.totalCost} onSave={onCellSave} type="number">{currencyAmount(payment.finalPayable, shipment.currency)}</InlineEditCell>
                   <td>{currencyAmount(payment.totalPaid, shipment.currency)}</td><td>{currencyAmount(payment.balance, shipment.currency)}</td><td><StatusBadge>{payment.status}</StatusBadge></td>
-                  <td>{dateLabel(shipment.etd)}</td><td>{dateLabel(shipment.eta)}</td>
-                  <td>{decimalAmount(shipment.duty)}</td><td>{decimalAmount(shipment.doCharges)}</td>
-                  <td>{shipment.clearanceStatus || "—"}</td>
-                  <td className="remarks-cell">{shipment.remarks || "—"}</td>
+                  <InlineEditCell shipment={shipment} field="etd" value={shipment.etd} onSave={onCellSave} type="date">{dateLabel(shipment.etd)}</InlineEditCell>
+                  <InlineEditCell shipment={shipment} field="eta" value={shipment.eta} onSave={onCellSave} type="date">{dateLabel(shipment.eta)}</InlineEditCell>
+                  <InlineEditCell shipment={shipment} field="duty" value={shipment.duty} onSave={onCellSave} type="number">{decimalAmount(shipment.duty)}</InlineEditCell>
+                  <InlineEditCell shipment={shipment} field="doCharges" value={shipment.doCharges} onSave={onCellSave} type="number">{decimalAmount(shipment.doCharges)}</InlineEditCell>
+                  <InlineEditCell shipment={shipment} field="clearanceStatus" value={shipment.clearanceStatus} onSave={onCellSave}>{shipment.clearanceStatus || "—"}</InlineEditCell>
+                  <InlineEditCell shipment={shipment} field="remarks" value={shipment.remarks} onSave={onCellSave} className="remarks-cell">{shipment.remarks || "—"}</InlineEditCell>
                 </>}
                 {mode === "customs" && <>
                   <td className="consignee-row-first" style={{ "--consignee-color": consigneeColorFor(shipment.company, consignees) }}><span className="import-id">{shipment.importNo}</span><small>{shipment.supplier}</small></td>
@@ -607,20 +653,20 @@ function ShipmentFilterControls({ filters, onChange, consignees, exportAction, e
   </div>;
 }
 
-function ShipmentListPage({ eyebrow, title, subtitle, rows, mode = "shipments", consignees, onEdit, onDelete, onAdd, onTTSent, onUnderClearing, onCleared, onPayments, showAdd = true, footer }) {
+function ShipmentListPage({ eyebrow, title, subtitle, rows, mode = "shipments", consignees, onEdit, onDelete, onAdd, onTTSent, onUnderClearing, onCleared, onPayments, onCellSave, showAdd = true, footer }) {
   const [filters, setFilters] = useState(emptyShipmentFilters);
   const filteredRows = filterShipmentRows(rows, filters, consignees);
   return <>
     <PageTitle eyebrow={eyebrow} title={title} subtitle={subtitle} action={showAdd ? <button className="button primary" onClick={onAdd}><Plus size={17} /> Add shipment</button> : undefined} />
     <section className="panel table-panel">
       <div className="table-toolbar"><div className="table-title"><h2>{title}</h2><span className="count-pill">{filteredRows.length}</span></div><ShipmentFilterControls filters={filters} onChange={setFilters} consignees={consignees} /></div>
-      <ShipmentTable rows={filteredRows} mode={mode} onEdit={onEdit} onDelete={onDelete} onAdd={showAdd ? onAdd : undefined} onTTSent={onTTSent} onUnderClearing={onUnderClearing} onCleared={onCleared} onPayments={onPayments} consignees={consignees} />
+      <ShipmentTable rows={filteredRows} mode={mode} onEdit={onEdit} onDelete={onDelete} onAdd={showAdd ? onAdd : undefined} onTTSent={onTTSent} onUnderClearing={onUnderClearing} onCleared={onCleared} onPayments={onPayments} onCellSave={onCellSave} consignees={consignees} />
       <div className="table-footer"><span><strong>{filteredRows.length}</strong> of {rows.length} {footer || "shipments"}</span><span>Data saved automatically</span></div>
     </section>
   </>;
 }
 
-function ShipmentSummarySections({ shipments, consignees, onEdit, onDelete, onPayments }) {
+function ShipmentSummarySections({ shipments, consignees, onEdit, onDelete, onPayments, onCellSave }) {
   const [filters, setFilters] = useState(emptyShipmentFilters);
   const filteredShipments = filterShipmentRows(shipments, filters, consignees);
   const underClearing = filteredShipments.filter((shipment) => shipment.status === "Under Clearing");
@@ -646,7 +692,7 @@ function ShipmentSummarySections({ shipments, consignees, onEdit, onDelete, onPa
     <div className="shipment-summary-sections">
       {sections.map(([title, rows]) => <section className="panel table-panel" key={title}>
         <div className="table-toolbar"><div className="table-title"><h2>{title}</h2><span className="count-pill">{rows.length}</span></div></div>
-        <ShipmentTable rows={rows} mode="payments" onEdit={onEdit} onDelete={onDelete} onPayments={onPayments} consignees={consignees} />
+        <ShipmentTable rows={rows} mode="payments" onEdit={onEdit} onDelete={onDelete} onPayments={onPayments} onCellSave={onCellSave} consignees={consignees} />
         <div className="table-footer"><span><strong>{rows.length}</strong> {rows.length === 1 ? "shipment" : "shipments"}</span><span>Data saved automatically</span></div>
       </section>)}
     </div>
@@ -1665,6 +1711,12 @@ export default function App() {
     await refresh();
   }
 
+  async function saveShipmentCell(shipment, patch) {
+    await api.updateShipment(shipment.id, { ...shipment, ...patch });
+    setNotice(`${shipment.importNo} updated`);
+    await refresh();
+  }
+
   async function importShipments(items) {
     const failures = [];
     for (const shipment of items) {
@@ -1787,22 +1839,22 @@ export default function App() {
         {error && <div className="inline-error">{error}</div>}
         <section className="panel table-panel tt-payments-panel">
           <div className="table-toolbar"><div className="table-title"><h2>Pending TT payments</h2><span className="count-pill">{filteredPendingTTShipments.length}</span></div><ShipmentFilterControls filters={ttFilters} onChange={setTtFilters} consignees={consigneeOptions} exportAction={() => exportPendingTTToExcel(filteredPendingTTShipments)} exportDisabled={!filteredPendingTTShipments.length} /></div>
-          <ShipmentTable rows={filteredPendingTTShipments} mode="payments" onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} onTTSent={setTtSentDateShipment} onPayments={setPaymentLedgerShipment} consignees={consignees} />
+          <ShipmentTable rows={filteredPendingTTShipments} mode="payments" onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} onTTSent={setTtSentDateShipment} onPayments={setPaymentLedgerShipment} onCellSave={saveShipmentCell} consignees={consignees} />
           <div className="table-footer"><span><strong>{filteredPendingTTShipments.length}</strong> of {pendingTTShipments.length} shipments awaiting payment</span><span>Data saved automatically</span></div>
         </section>
       </section>;
     }
     if (active === "tt-sent") {
       const ttSentShipments = shipments.filter((shipment) => shipment.paymentMethod === "Advance TT" && shipment.paymentStatus === "Paid" && shipment.status === "Pending");
-      return <ShipmentListPage eyebrow="PAYMENTS" title="TT Sent" subtitle="Advance TT shipments whose payment has been sent." rows={ttSentShipments} mode="payments" consignees={consignees} onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} onUnderClearing={setUnderClearingShipment} onPayments={setPaymentLedgerShipment} showAdd={false} footer="Advance TT payments sent" />;
+      return <ShipmentListPage eyebrow="PAYMENTS" title="TT Sent" subtitle="Advance TT shipments whose payment has been sent." rows={ttSentShipments} mode="payments" consignees={consignees} onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} onUnderClearing={setUnderClearingShipment} onPayments={setPaymentLedgerShipment} onCellSave={saveShipmentCell} showAdd={false} footer="Advance TT payments sent" />;
     }
     if (active === "under-clearing") {
       const underClearingShipments = shipments.filter((shipment) => shipment.status === "Under Clearing");
-      return <ShipmentListPage eyebrow="CLEARANCE" title="Under Clearing Shipments" subtitle="Shipments currently progressing through customs clearance." rows={underClearingShipments} mode="payments" consignees={consignees} onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} onCleared={setClearedShipment} showAdd={false} footer="shipments under clearing" />;
+      return <ShipmentListPage eyebrow="CLEARANCE" title="Under Clearing Shipments" subtitle="Shipments currently progressing through customs clearance." rows={underClearingShipments} mode="payments" consignees={consignees} onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} onCleared={setClearedShipment} onPayments={setPaymentLedgerShipment} onCellSave={saveShipmentCell} showAdd={false} footer="shipments under clearing" />;
     }
     if (active === "cleared-shipments") {
       const clearedShipments = shipments.filter((shipment) => shipment.status === "Cleared");
-      return <ShipmentListPage eyebrow="CLEARANCE" title="Cleared Shipments" subtitle="Shipments that have completed customs clearance." rows={clearedShipments} mode="payments" consignees={consignees} onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} showAdd={false} footer="cleared shipments" />;
+      return <ShipmentListPage eyebrow="CLEARANCE" title="Cleared Shipments" subtitle="Shipments that have completed customs clearance." rows={clearedShipments} mode="payments" consignees={consignees} onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} onPayments={setPaymentLedgerShipment} onCellSave={saveShipmentCell} showAdd={false} footer="cleared shipments" />;
     }
     if (active.startsWith("report-")) {
       const report = reportNavigation.find((item) => item.key === active);
@@ -1811,9 +1863,9 @@ export default function App() {
         ? shipments.filter((shipment) => shipment.status === "Cleared")
         : report?.consigneeName ? shipments.filter((shipment) => shipment.status === "Cleared" && (shipment.company === consigneeCode || shipment.company === report.consigneeName)) : shipments;
       if (report?.key === "report-shipment") {
-        return <ShipmentSummarySections shipments={reportShipments} consignees={consignees} onEdit={openModal} onDelete={deleteShipmentFromList} onPayments={setPaymentLedgerShipment} />;
+        return <ShipmentSummarySections shipments={reportShipments} consignees={consignees} onEdit={openModal} onDelete={deleteShipmentFromList} onPayments={setPaymentLedgerShipment} onCellSave={saveShipmentCell} />;
       }
-      return <ShipmentListPage eyebrow="REPORTS & ANALYTICS" title={report?.label || "SHIPMENT"} subtitle={report?.key === "report-cleared" ? "Cleared shipment records." : report?.consigneeName ? `Cleared shipment records for ${report.consigneeName}.` : "All shipment records."} rows={reportShipments} mode="payments" consignees={consignees} onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} showAdd={false} footer="shipment records" />;
+      return <ShipmentListPage eyebrow="REPORTS & ANALYTICS" title={report?.label || "SHIPMENT"} subtitle={report?.key === "report-cleared" ? "Cleared shipment records." : report?.consigneeName ? `Cleared shipment records for ${report.consigneeName}.` : "All shipment records."} rows={reportShipments} mode="payments" consignees={consignees} onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} onPayments={setPaymentLedgerShipment} onCellSave={saveShipmentCell} showAdd={false} footer="shipment records" />;
     }
     if (active === "companies") return <><PageTitle eyebrow="CONSIGNEES" title="Consignee reports" subtitle="A clear view of imports and clearance progress for each consignee." />{error && <div className="inline-error">{error}</div>}<ConsigneeReports analytics={analytics} shipments={shipments} consignees={consignees} onEdit={openModal} /></>;
     if (active === "consignees") return <><PageTitle eyebrow="DIRECTORY" title="Consignees" subtitle="Create and manage the consignee records assigned to your shipments." action={<button className="button primary" onClick={() => setModalConsignee(null)}><Plus size={17} /> Create consignee</button>} />{error && <div className="inline-error">{error}</div>}<ConsigneeDirectory consignees={consignees} shipments={shipments} onEdit={setModalConsignee} onAdd={() => setModalConsignee(null)} /></>;

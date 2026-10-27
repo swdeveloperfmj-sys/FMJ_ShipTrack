@@ -188,7 +188,7 @@ button { cursor: pointer; }
 .table-scroll { width: 100%; overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; text-align: left; }
 th { height: 36px; padding: 0 12px; background: #fafbfc; color: #97a0ad; font-size: 9px; font-weight: 600; white-space: nowrap; }
-td { height: 53px; padding: 8px 12px; border-top: 1px solid #f1f3f5; color: #5f6b7b; font-size: 10px; white-space: nowrap; }
+td { height: 42px; padding: 5px 12px; border-top: 1px solid #f1f3f5; color: #5f6b7b; font-size: 10px; white-space: nowrap; }
 th:first-child,td:first-child { padding-left: 18px; }
 tbody tr:hover { background: #fbfcfe; }
 .clickable-row { cursor: pointer; }
@@ -227,6 +227,10 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .shipment-action-menu .shipment-action-delete:hover { background: #fff1ef; color: #a8413b; }
 .shipment-context-menu { position: fixed; z-index: 80; top: auto; right: auto; width: 190px; }
 .context-menu-row { cursor: context-menu; }
+.inline-editable { cursor: cell; }
+.inline-editable:hover { box-shadow: inset 0 0 0 1px #91afe0; }
+.inline-editing { padding: 3px 5px; background: #edf4ff; box-shadow: inset 0 0 0 2px #4c83dc; }
+.inline-editing input,.inline-editing select { width: 100%; min-width: 92px; height: 32px; padding: 0 7px; border: 0; outline: 0; background: #fff; color: #26364d; font-size: 10px; }
 .delete-confirm-backdrop { position: fixed; z-index: 50; inset: 0; display: grid; place-items: center; padding: 20px; background: #11182780; }
 .delete-confirm-dialog { width: min(390px, 100%); padding: 24px; border: 1px solid #e2e7ee; border-radius: 10px; background: #fff; box-shadow: 0 18px 48px #17243a38; }
 .delete-confirm-dialog h2 { margin: 0; color: #293548; font: 700 17px Manrope, sans-serif; }
@@ -719,6 +723,10 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .app-shell[data-theme="dark"] .shipment-action-menu button:hover { background: #2a374a; color: #a9c5fb; }
 .app-shell[data-theme="dark"] .shipment-action-menu .shipment-action-delete { color: #f19b96; }
 .app-shell[data-theme="dark"] .shipment-action-menu .shipment-action-delete:hover { background: #3c2b30; color: #ffb3ae; }
+.app-shell[data-theme="dark"] .inline-editable:hover { box-shadow: inset 0 0 0 1px #668cc8; }
+.app-shell[data-theme="dark"] .inline-editing { background: #243b5f; box-shadow: inset 0 0 0 2px #7da9f2; }
+.app-shell[data-theme="dark"] .inline-editing input,
+.app-shell[data-theme="dark"] .inline-editing select { background: #142033; color: #f2f6fb; }
 .app-shell[data-theme="dark"] .delete-confirm-dialog h2,
 .app-shell[data-theme="dark"] .delete-confirm-dialog p strong { color: #e4eaf2; }
 .app-shell[data-theme="dark"] .delete-confirm-dialog p { color: #a2afc0; }
