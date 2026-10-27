@@ -395,11 +395,40 @@ function ShipmentActions({ shipment, onEdit, onDelete }) {
   </div>;
 }
 
-function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderClearing, onCleared, showActions = true, consignees = [] }) {
-  if (!rows.length) return <EmptyState message={mode === "shipments" ? "No shipment records yet" : "No shipments found"} onAdd={onAdd} />;
+function sortShipmentsByConsignee(rows = [], consignees = []) {
+  if (!Array.isArray(rows) || !rows.length) return [];
+  const consigneeOrder = new Map(
+    consignees.map((c, index) => [(c.code || "").trim().toUpperCase(), index]),
+  );
+  return [...rows].sort((a, b) => {
+    const compA = (a.company || "").trim().toUpperCase();
+    const compB = (b.company || "").trim().toUpperCase();
+    if (compA !== compB) {
+      if (!compA) return 1;
+      if (!compB) return -1;
+      const orderA = consigneeOrder.has(compA) ? consigneeOrder.get(compA) : 999999;
+      const orderB = consigneeOrder.has(compB) ? consigneeOrder.get(compB) : 999999;
+      if (orderA !== orderB) return orderA - orderB;
+      return compA.localeCompare(compB, undefined, { numeric: true });
+    }
+    const createdA = a.createdAt || "";
+    const createdB = b.createdAt || "";
+    if (createdA && createdB) {
+      return createdB.localeCompare(createdA);
+    }
+    return (a.importNo || "").localeCompare(b.importNo || "", undefined, { numeric: true });
+  });
+}
+
+function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderClearing, onCleared, showActions = true, consignees = [], groupByConsignee = true }) {
+  const displayRows = useMemo(() => {
+    return groupByConsignee ? sortShipmentsByConsignee(rows, consignees) : rows;
+  }, [rows, consignees, groupByConsignee]);
+
+  if (!displayRows.length) return <EmptyState message={mode === "shipments" ? "No shipment records yet" : "No shipments found"} onAdd={onAdd} />;
   if (mode === "payment-cards") return (
     <div className="payment-details-list">
-      {rows.map((shipment) => {
+      {displayRows.map((shipment) => {
         const incoterm = [shipment.incoterm, shipment.incotermLocation].filter(Boolean).join(" · ") || "—";
         return <article className="payment-detail-card" key={shipment.id}>
           <header className="payment-detail-card-head">
@@ -442,8 +471,10 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
       <table>
         <thead><tr>{tableHeaders.map((header, index) => <th key={`${header}-${index}`}>{header}</th>)}</tr></thead>
         <tbody>
-          {rows.map((shipment) => (
-            <tr key={shipment.id}>
+          {displayRows.map((shipment, index) => {
+            const isGroupStart = index > 0 && (shipment.company || "").trim().toUpperCase() !== (displayRows[index - 1]?.company || "").trim().toUpperCase();
+            return (
+            <tr key={shipment.id} className={isGroupStart ? "consignee-group-start" : undefined}>
               {mode === "shipments" && <>
                 <td className="consignee-row-first" style={{ "--consignee-color": consigneeColorFor(shipment.company, consignees) }}><span className="import-id">{shipment.importNo}</span><small>{shipment.description}</small></td>
                 <td><ConsigneeBadge code={shipment.company} consignees={consignees} /></td>
@@ -477,7 +508,8 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
               </>}
               {showActions && <td>{mode === "payments" ? <ShipmentActions shipment={shipment} onEdit={onEdit} onDelete={onDelete} /> : <button className="icon-button row-more" aria-label={`Edit ${shipment.importNo}`} title="Edit shipment" onClick={() => onEdit(shipment)}><MoreHorizontal size={18} /></button>}</td>}
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -486,9 +518,9 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
 
 const emptyShipmentFilters = { search: "", consignee: "", transportMode: "", fclLcl: "" };
 
-function filterShipmentRows(rows, filters) {
+function filterShipmentRows(rows, filters, consignees = []) {
   const search = filters.search.trim().toLowerCase();
-  return rows.filter((shipment) => {
+  const filtered = rows.filter((shipment) => {
     const searchable = [shipment.importNo, shipment.consignee, shipment.company, shipment.supplier, shipment.description, shipment.remarks]
       .filter(Boolean).join(" ").toLowerCase();
     return (!search || searchable.includes(search))
@@ -496,6 +528,7 @@ function filterShipmentRows(rows, filters) {
       && (!filters.transportMode || shipment.transportMode === filters.transportMode)
       && (!filters.fclLcl || shipment.fclLcl === filters.fclLcl);
   });
+  return sortShipmentsByConsignee(filtered, consignees);
 }
 
 function ShipmentFilterControls({ filters, onChange, consignees, exportAction, exportDisabled }) {
@@ -513,7 +546,7 @@ function ShipmentFilterControls({ filters, onChange, consignees, exportAction, e
 
 function ShipmentListPage({ eyebrow, title, subtitle, rows, mode = "shipments", consignees, onEdit, onDelete, onAdd, onTTSent, onUnderClearing, onCleared, showAdd = true, footer }) {
   const [filters, setFilters] = useState(emptyShipmentFilters);
-  const filteredRows = filterShipmentRows(rows, filters);
+  const filteredRows = filterShipmentRows(rows, filters, consignees);
   return <>
     <PageTitle eyebrow={eyebrow} title={title} subtitle={subtitle} action={showAdd ? <button className="button primary" onClick={onAdd}><Plus size={17} /> Add shipment</button> : undefined} />
     <section className="panel table-panel">
@@ -526,7 +559,7 @@ function ShipmentListPage({ eyebrow, title, subtitle, rows, mode = "shipments", 
 
 function ShipmentSummarySections({ shipments, consignees, onEdit, onDelete }) {
   const [filters, setFilters] = useState(emptyShipmentFilters);
-  const filteredShipments = filterShipmentRows(shipments, filters);
+  const filteredShipments = filterShipmentRows(shipments, filters, consignees);
   const underClearing = filteredShipments.filter((shipment) => shipment.status === "Under Clearing");
   const ttSent = filteredShipments.filter((shipment) =>
     shipment.status !== "Under Clearing"
@@ -889,7 +922,7 @@ function Dashboard({ shipments, consignees, analytics, accountName, onNavigate, 
         </section>
         <section className="panel recent-panel">
           <div className="panel-heading"><div><h2>Recent shipments</h2><p>Latest updates across your imports</p></div></div>
-          <ShipmentTable rows={shipments.slice(0, 5)} mode="shipments" onEdit={onEdit} onAdd={onAdd} showActions={false} consignees={consignees} />
+          <ShipmentTable rows={[...shipments].sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "")).slice(0, 5)} mode="shipments" onEdit={onEdit} onAdd={onAdd} showActions={false} consignees={consignees} groupByConsignee={false} />
         </section>
         <section className="panel company-panel">
           <div className="panel-heading"><div><h2>Consignee overview</h2><p>Shipments by consignee</p></div><button className="icon-button"><MoreHorizontal size={20} /></button></div>
@@ -902,7 +935,7 @@ function Dashboard({ shipments, consignees, analytics, accountName, onNavigate, 
 }
 
 function DocumentsView({ shipments, consignees, onEdit }) {
-  const rows = shipments.flatMap((shipment) => documentTypes.map((document) => ({
+  const rows = sortShipmentsByConsignee(shipments, consignees).flatMap((shipment) => documentTypes.map((document) => ({
     id: `${shipment.id}-${document}`,
     importNo: shipment.importNo,
     company: shipment.company,
@@ -1374,7 +1407,7 @@ export default function App() {
         api.getCountries(),
         api.getCurrencies(),
       ]);
-      setShipments(shipmentData);
+      setShipments(sortShipmentsByConsignee(shipmentData, consigneeData));
       setAnalytics(analyticsData);
       setConsignees(consigneeData);
       setCountries(countryData);
@@ -1595,7 +1628,7 @@ export default function App() {
       const pendingTTShipments = shipments.filter((shipment) =>
         shipment.paymentMethod === "Advance TT" && shipment.paymentStatus === "Pending",
       );
-      const filteredPendingTTShipments = filterShipmentRows(pendingTTShipments, ttFilters);
+      const filteredPendingTTShipments = filterShipmentRows(pendingTTShipments, ttFilters, consignees);
       return <section className="to-be-tt-page">
         <PageTitle eyebrow="PAYMENTS" title="To be TT" subtitle="Shipments awaiting Advance TT payment." action={<button className="button primary" onClick={() => openModal(null)}><Plus size={17} /> Add shipment</button>} />
         {error && <div className="inline-error">{error}</div>}
