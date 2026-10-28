@@ -45,6 +45,7 @@ const shipmentSchema = new mongoose.Schema(
     importNo: { type: String, required: true, trim: true, unique: true },
     company: { type: String, required: true, trim: true },
     supplier: { type: String, required: true, trim: true },
+    country: { type: String, trim: true, default: "" },
     consignee: { type: String, required: true, trim: true },
     description: { type: String, required: true, trim: true },
     transportMode: { type: String, enum: ["AIR", "SEA", ""], default: "" },
@@ -144,28 +145,15 @@ const materialSchema = new mongoose.Schema(
   { versionKey: false },
 );
 const Material = mongoose.model("Material", materialSchema);
-const costingIngredientSchema = new mongoose.Schema({
-  materialId: { type: String, default: "" },
-  name: { type: String, required: true, trim: true },
-  quantity: { type: Number, required: true, min: 0 },
-  unit: { type: String, trim: true, default: "kg" },
-  unitPrice: { type: Number, required: true, min: 0 },
-}, { _id: false });
-const productCostingSchema = new mongoose.Schema({
+const postCostingSchema = new mongoose.Schema({
   _id: { type: String, required: true },
-  name: { type: String, required: true, trim: true },
-  batchQuantity: { type: Number, required: true, min: 0.000001 },
-  outputUnit: { type: String, trim: true, default: "unit" },
-  ingredients: { type: [costingIngredientSchema], default: [] },
-  labourCost: { type: Number, min: 0, default: 0 },
-  packagingCost: { type: Number, min: 0, default: 0 },
-  transportCost: { type: Number, min: 0, default: 0 },
-  overheadCost: { type: Number, min: 0, default: 0 },
-  otherCost: { type: Number, min: 0, default: 0 },
+  fileNo: { type: String, required: true, trim: true },
+  material: { type: String, required: true, trim: true },
+  data: { type: mongoose.Schema.Types.Mixed, required: true },
   createdAt: { type: String, default: () => new Date().toISOString() },
   updatedAt: { type: String },
 }, { versionKey: false });
-const ProductCosting = mongoose.model("ProductCosting", productCostingSchema);
+const PostCosting = mongoose.model("PostCosting", postCostingSchema);
 const superAdminSchema = new mongoose.Schema(
   {
     _id: { type: String, default: "super-admin" },
@@ -205,6 +193,7 @@ const shipmentFields = [
   "importNo",
   "company",
   "supplier",
+  "country",
   "consignee",
   "description",
   "transportMode",
@@ -722,7 +711,7 @@ app.get("/api/health", (_request, response) => {
 
 app.use("/api", requireAuthenticated);
 
-const sidebarAccessKeys = ["dashboard", "materials", "costing", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", "companies", "consignees", "countries", "reports", "settings"];
+const sidebarAccessKeys = ["dashboard", "materials", "post-costing", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", "companies", "consignees", "countries", "reports", "settings"];
 const serializeUser = (user) => ({ id: user._id, name: user.name, username: user.username, sidebarAccess: user.sidebarAccess || [], fontSize: user.fontSize || 100, createdAt: user.createdAt });
 
 app.put("/api/settings/font-size", async (request, response, next) => {
@@ -887,45 +876,28 @@ app.post("/api/materials/import", async (request, response, next) => {
   }
 });
 
-const serializeCosting = (costing) => ({
-  id: costing._id, name: costing.name, batchQuantity: Number(costing.batchQuantity), outputUnit: costing.outputUnit || "unit",
-  ingredients: (costing.ingredients || []).map((item) => ({ materialId: item.materialId || "", name: item.name, quantity: Number(item.quantity), unit: item.unit || "kg", unitPrice: Number(item.unitPrice) })),
-  labourCost: Number(costing.labourCost || 0), packagingCost: Number(costing.packagingCost || 0), transportCost: Number(costing.transportCost || 0), overheadCost: Number(costing.overheadCost || 0), otherCost: Number(costing.otherCost || 0), updatedAt: costing.updatedAt,
-});
-
-function normalizeCosting(body) {
-  const name = typeof body?.name === "string" ? body.name.trim() : "";
-  const batchQuantity = Number(body?.batchQuantity);
-  if (!name || name.length > 160) throw new Error("Enter a valid product name.");
-  if (!Number.isFinite(batchQuantity) || batchQuantity <= 0) throw new Error("Batch quantity must be greater than zero.");
-  const ingredients = (Array.isArray(body?.ingredients) ? body.ingredients : []).map((item) => {
-    const ingredientName = typeof item?.name === "string" ? item.name.trim() : "";
-    const quantity = Number(item?.quantity);
-    const unitPrice = Number(item?.unitPrice);
-    if (!ingredientName || !Number.isFinite(quantity) || quantity < 0 || !Number.isFinite(unitPrice) || unitPrice < 0) throw new Error("Every material needs a valid name, quantity and unit price.");
-    return { materialId: String(item.materialId || ""), name: ingredientName, quantity, unit: String(item.unit || "kg").trim().slice(0, 20), unitPrice };
-  });
-  const costs = {};
-  for (const field of ["labourCost", "packagingCost", "transportCost", "overheadCost", "otherCost"]) {
-    const value = Number(body?.[field] || 0);
-    if (!Number.isFinite(value) || value < 0) throw new Error("Additional costs must be zero or more.");
-    costs[field] = value;
-  }
-  return { name, batchQuantity, outputUnit: String(body?.outputUnit || "unit").trim().slice(0, 30), ingredients, ...costs, updatedAt: new Date().toISOString() };
+const serializePostCosting = (item) => ({ id: item._id, fileNo: item.fileNo, material: item.material, ...item.data, createdAt: item.createdAt, updatedAt: item.updatedAt });
+function normalizePostCosting(body) {
+  const fileNo = String(body?.fileNo || "").trim();
+  const material = String(body?.material || "").trim();
+  if (!fileNo || fileNo.length > 80) throw new Error("Enter a valid file number.");
+  if (!material || material.length > 200) throw new Error("Enter a valid material name.");
+  const data = { ...body };
+  delete data.id; delete data.fileNo; delete data.material; delete data.createdAt; delete data.updatedAt;
+  if (JSON.stringify(data).length > 100000) throw new Error("Post costing data is too large.");
+  return { fileNo, material, data, updatedAt: new Date().toISOString() };
 }
-
-const costingValidationError = (error) => error.message?.startsWith("Enter") || error.message?.includes("must") || error.message?.startsWith("Every");
-app.get("/api/product-costings", async (_request, response, next) => {
-  try { response.json((await ProductCosting.find().sort({ name: 1 }).lean()).map(serializeCosting)); } catch (error) { next(error); }
+app.get("/api/post-costings", async (_request, response, next) => {
+  try { response.json((await PostCosting.find().sort({ updatedAt: -1 }).lean()).map(serializePostCosting)); } catch (error) { next(error); }
 });
-app.post("/api/product-costings", async (request, response, next) => {
-  try { response.status(201).json(serializeCosting(await ProductCosting.create({ _id: randomUUID(), ...normalizeCosting(request.body) }))); } catch (error) { if (costingValidationError(error)) return response.status(400).json({ error: error.message }); next(error); }
+app.post("/api/post-costings", async (request, response, next) => {
+  try { response.status(201).json(serializePostCosting(await PostCosting.create({ _id: randomUUID(), ...normalizePostCosting(request.body) }))); } catch (error) { if (error.message?.startsWith("Enter") || error.message?.includes("too large")) return response.status(400).json({ error: error.message }); next(error); }
 });
-app.put("/api/product-costings/:id", async (request, response, next) => {
-  try { const item = await ProductCosting.findByIdAndUpdate(request.params.id, normalizeCosting(request.body), { new: true, runValidators: true }); if (!item) return response.status(404).json({ error: "Product costing not found." }); response.json(serializeCosting(item)); } catch (error) { if (costingValidationError(error)) return response.status(400).json({ error: error.message }); next(error); }
+app.put("/api/post-costings/:id", async (request, response, next) => {
+  try { const item = await PostCosting.findByIdAndUpdate(request.params.id, normalizePostCosting(request.body), { new: true, runValidators: true }); if (!item) return response.status(404).json({ error: "Post costing not found." }); response.json(serializePostCosting(item)); } catch (error) { if (error.message?.startsWith("Enter") || error.message?.includes("too large")) return response.status(400).json({ error: error.message }); next(error); }
 });
-app.delete("/api/product-costings/:id", async (request, response, next) => {
-  try { const item = await ProductCosting.findByIdAndDelete(request.params.id); if (!item) return response.status(404).json({ error: "Product costing not found." }); response.status(204).end(); } catch (error) { next(error); }
+app.delete("/api/post-costings/:id", async (request, response, next) => {
+  try { const item = await PostCosting.findByIdAndDelete(request.params.id); if (!item) return response.status(404).json({ error: "Post costing not found." }); response.status(204).end(); } catch (error) { next(error); }
 });
 
 app.get("/api/shipments", async (request, response, next) => {

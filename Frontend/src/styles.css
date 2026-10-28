@@ -930,6 +930,56 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .app-shell[data-theme="dark"] .costing-summary .unit strong { color: #83ddb5; }
 @media (max-width: 900px) { .costing-layout { grid-template-columns: 1fr; } .costing-fields,.extra-costs,.costing-summary { grid-template-columns: 1fr 1fr; } }
 
+.post-costing-layout { display: grid; grid-template-columns: 235px minmax(0,1fr); gap: 18px; align-items: start; }
+.post-costing-form { padding: 20px; }
+.post-shipment-picker { display: grid; grid-template-columns: 1fr minmax(300px,1.5fr); gap: 20px; align-items: end; margin-bottom: 24px; padding: 16px; border: 1px solid #d9e6f8; border-radius: 10px; background: #f3f7fe; }
+.post-shipment-picker span { color: #5d82bb; font-size: 8px; font-weight: 800; letter-spacing: .12em; }
+.post-shipment-picker h2 { margin: 3px 0; color: #344155; font-size: 13px; }
+.post-shipment-picker p { margin: 0; color: #8290a2; font-size: 8.5px; }
+.post-shipment-picker label { color: #69778a; font-size: 9px; font-weight: 650; }
+.post-shipment-picker select { width: 100%; height: 38px; margin-top: 6px; padding: 0 10px; border: 1px solid #d4dfec; border-radius: 7px; outline: none; background: #fff; color: #344155; font-size: 9.5px; }
+.post-fields { display: grid; grid-template-columns: repeat(4,minmax(130px,1fr)); gap: 11px; }
+.post-fields.six { grid-template-columns: repeat(4,minmax(120px,1fr)); }
+.post-fields label,.clearing-charge-grid label { color: #69778a; font-size: 8.5px; font-weight: 650; }
+.post-fields input,.clearing-charge-grid input { width: 100%; height: 35px; margin-top: 5px; padding: 0 9px; border: 1px solid #dfe6ee; border-radius: 7px; outline: none; background: #fafbfd; color: #344155; font-size: 9.5px; }
+.post-fields input:focus,.clearing-charge-grid input:focus { border-color: #79a0e3; box-shadow: 0 0 0 3px #edf3ff; }
+.post-calculation-table { overflow: hidden; border: 1px solid #d8dee7; border-radius: 9px; background: #f5f6f8; }
+.post-calculation-table > div,.post-calculation-table > label { display: grid; grid-template-columns: minmax(220px,1fr) minmax(180px,260px); align-items: center; min-height: 43px; margin: 0; padding: 5px 12px; border-bottom: 1px solid #d8dee7; color: #344155; font-size: 9.5px; font-weight: 650; }
+.post-calculation-table > :last-child { border-bottom: 0; }
+.post-calculation-table input { width: 100%; height: 32px; padding: 0 9px; border: 1px solid #d7dee8; border-radius: 6px; outline: none; background: #fff; color: #c33b34; text-align: right; font-size: 10px; font-weight: 650; }
+.post-calculation-table strong { color: #c33b34; text-align: right; font-size: 10.5px; }
+.post-calculation-table .calculated { background: #eef2f7; }
+.post-calculation-table .total span,.post-calculation-table .bank-rate { font-weight: 800; }
+.section-gap { margin-top: 27px; }
+.post-result-strip,.post-duty-grid,.post-final-summary { display: grid; grid-template-columns: repeat(4,1fr); gap: 9px; margin-top: 15px; }
+.post-result-strip > div,.post-duty-grid > div,.post-final-summary > div { padding: 12px; border: 1px solid #e4eaf1; border-radius: 8px; background: #f8fafc; }
+.post-result-strip span,.post-duty-grid span,.post-final-summary span { display: block; margin-bottom: 6px; color: #8895a5; font-size: 8px; text-transform: uppercase; }
+.post-result-strip strong,.post-duty-grid strong,.post-final-summary strong { color: #344155; font-size: 11px; }
+.post-duty-grid { grid-template-columns: repeat(7,1fr); }
+.post-duty-grid .highlight { border-color: #d9e5fa; background: #eef4ff; }
+.post-duty-grid .highlight strong { color: #2865db; }
+.clearing-charge-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 9px 12px; }
+.post-subtotal { display: flex; justify-content: flex-end; align-items: center; gap: 20px; margin-top: 13px; padding: 12px 15px; border-radius: 8px; background: #eef4ff; color: #66768c; font-size: 9px; }
+.post-subtotal strong { color: #2865db; font-size: 13px; }
+.post-final-summary { grid-template-columns: repeat(7,1fr); }
+.post-final-summary .primary { border-color: #cfe9dc; background: #edf9f3; }
+.post-final-summary .primary strong { color: #16845b; font-size: 13px; }
+.app-shell[data-theme="dark"] .post-fields input,.app-shell[data-theme="dark"] .clearing-charge-grid input { border-color: #35465d; background: #142030; color: #e8eef7; }
+.app-shell[data-theme="dark"] .post-calculation-table { border-color: #3b4a5d; background: #202b3a; }
+.app-shell[data-theme="dark"] .post-calculation-table > div,.app-shell[data-theme="dark"] .post-calculation-table > label { border-color: #3b4a5d; color: #d7e1ee; }
+.app-shell[data-theme="dark"] .post-calculation-table input { border-color: #43556d; background: #142030; color: #ff9890; }
+.app-shell[data-theme="dark"] .post-calculation-table strong { color: #ff9890; }
+.app-shell[data-theme="dark"] .post-calculation-table .calculated { background: #243246; }
+.app-shell[data-theme="dark"] .post-shipment-picker { border-color: #304966; background: #1b2b40; }
+.app-shell[data-theme="dark"] .post-shipment-picker h2 { color: #dce6f3; }
+.app-shell[data-theme="dark"] .post-shipment-picker select { border-color: #40546d; background: #142030; color: #e8eef7; }
+.app-shell[data-theme="dark"] .post-result-strip > div,.app-shell[data-theme="dark"] .post-duty-grid > div,.app-shell[data-theme="dark"] .post-final-summary > div { border-color: #34445a; background: #1e2d40; }
+.app-shell[data-theme="dark"] .post-result-strip strong,.app-shell[data-theme="dark"] .post-duty-grid strong,.app-shell[data-theme="dark"] .post-final-summary strong { color: #e5edf7; }
+.app-shell[data-theme="dark"] .post-duty-grid .highlight,.app-shell[data-theme="dark"] .post-subtotal { background: #203754; }
+.app-shell[data-theme="dark"] .post-final-summary .primary { background: #193c33; }
+@media (max-width: 1100px) { .post-costing-layout { grid-template-columns: 1fr; } .post-fields,.post-fields.six { grid-template-columns: repeat(3,1fr); } .post-duty-grid,.post-final-summary { grid-template-columns: repeat(4,1fr); } }
+@media (max-width: 700px) { .post-fields,.post-fields.six,.clearing-charge-grid,.post-result-strip,.post-duty-grid,.post-final-summary { grid-template-columns: 1fr 1fr; } }
+
 .app-shell[data-theme="dark"] .material-analysis-page { --material-surface: #1b2737; --material-soft: #172231; --material-border: #2c3a4e; }
 .app-shell[data-theme="dark"] .material-method-note { border-color: #2d4668; background: linear-gradient(90deg, #1b2b43, #1a2739); color: #9fadc0; }
 .app-shell[data-theme="dark"] .material-method-icon { background: #243957; color: #8cb4fa; box-shadow: none; }

@@ -8,7 +8,6 @@ import {
   Bell,
   Box,
   Building2,
-  Calculator,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -50,7 +49,7 @@ const navigation = [
   { label: "Consignees", icon: ContactRound, key: "consignees" },
   { label: "Countries", icon: Globe2, key: "countries" },
   { label: "Material analysis", icon: Box, key: "materials" },
-  { label: "Product costing", icon: Calculator, key: "costing" },
+  { label: "Post costing", icon: FileText, key: "post-costing" },
 ];
 const reportNavigation = [
   { label: "SHIPMENT", key: "report-shipment" },
@@ -87,6 +86,7 @@ const emptyShipment = {
   importNo: "",
   company: "",
   supplier: "",
+  country: "",
   consignee: "",
   description: "",
   transportMode: "",
@@ -818,6 +818,7 @@ function ShipmentModal({ initial, consignees, countries, currencies, onClose, on
               <label className="shipment-field shipment-field--import">Imp No.<input name="importNo" value={form.importNo} onChange={change} required placeholder="FMJ-2026-003" /></label>
               <label className="shipment-field shipment-field--consignee">Consignee<select name="company" value={form.company} onChange={(event) => { const code = event.target.value; setForm((current) => ({ ...current, company: code, consignee: consignees.find((item) => item.code === code)?.name || current.consignee })); }} required><option value="" disabled>Select a consignee</option>{consignees.map((consignee) => <option key={consignee.id} value={consignee.code}>{consignee.name}</option>)}</select></label>
               <label className="shipment-field shipment-field--shipper">Shipper<input name="supplier" value={form.supplier} onChange={change} required /></label>
+              <label className="shipment-field shipment-field--conditional">Country<select name="country" value={form.country || ""} onChange={change}><option value="">Select a country</option>{form.country && !countries.some((country) => country.name === form.country) && <option value={form.country}>{form.country} (existing)</option>}{countries.map((country) => <option key={country.id} value={country.name}>{country.name}</option>)}</select></label>
               <label className="shipment-field shipment-field--description">Item Description<input name="description" value={form.description} onChange={change} required /></label>
               <label className="shipment-field shipment-field--payment-terms">Payment Terms<select name="paymentTerms" value={form.paymentTerms} onChange={(event) => {
                 const paymentTerms = event.target.value;
@@ -1126,53 +1127,108 @@ function ClearedShipmentModal({ shipment, onClose, onSave }) {
   </div>;
 }
 
-const emptyCosting = { name: "", batchQuantity: 1, outputUnit: "unit", ingredients: [], labourCost: 0, packagingCost: 0, transportCost: 0, overheadCost: 0, otherCost: 0 };
+const clearingChargeNames = ["Handling / Documentation", "Additional Handling / Documentation", "Agency Fee", "Transport Charges", "Weighing Charges", "RCT Expenses", "Grayline Charges", "RCT Charges", "SLPA Charges", "CICT Rent", "Transport Detention / Charges", "Shipping Line Charges", "Valuation Charges", "Grayline Expenses", "Yard OT / Container Yard OT", "Detail Examination", "D/O Charges", "D/O Extension Charges", "SAGT Charges", "Other Charges / Out Pass", "Rank Container Terminal Charges", "Customs OT", "Additional Container", "Customs Examination RCT", "Container Scan", "Scan Out", "CICT OT", "Liner Detention Charges", "Grayline Examination", "Labour Charges", "Port Charges", "E Unit Entry Pass", "Amendment Charges", "Demurrage", "RCT Examination", "Computer Charges", "Without Examination", "Red Channel Examination", "VAT and SSCL"];
+const makeEmptyPostCosting = () => ({ sourceShipmentId: "", company: "", material: "", supplier: "", country: "", paymentType: "T.T", fileNo: "", lcNo: "", lcOpenedDate: "", bank: "", blDate: "", etd: "", eta: "", clearingDate: "", maturityDate: "", settlementDate: "", priceFob: 0, priceCfr: 0, priceCif: 0, unitPriceMt: 0, quantityMt: 0, location: "", foreignCurrency: "USD", foreignValue: 0, conversionRate: 0, gainLoss: 0, bankRate: 0, insuranceLkr: 0, freightLkr: 0, customsRate: 0, customsInsurance: 0, customsFreight: 0, cidRate: 0, palRate: 10, xidPerKg: 12, ssclRate: 2.5, vatRate: 18, otherDuty: 0, clearingCharges: clearingChargeNames.map((name) => ({ name, amount: 0 })), extraInsurance: 0, unloading: 0, bankCommissionRate: 3, bankDocumentCharges: 0, remittance: 0 });
 
-function ProductCosting({ materials, costings, onSave, onDelete }) {
-  const [draft, setDraft] = useState(emptyCosting);
+function PostCosting({ shipments, consignees, countries, records, onSave, onDelete }) {
+  const [draft, setDraft] = useState(makeEmptyPostCosting);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
-  const materialCost = draft.ingredients.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unitPrice || 0), 0);
-  const extraCost = ["labourCost", "packagingCost", "transportCost", "overheadCost", "otherCost"].reduce((sum, field) => sum + Number(draft[field] || 0), 0);
-  const totalCost = materialCost + extraCost;
-  const unitCost = Number(draft.batchQuantity) > 0 ? totalCost / Number(draft.batchQuantity) : 0;
-  const update = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
-  const updateIngredient = (index, patch) => setDraft((current) => ({ ...current, ingredients: current.ingredients.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item) }));
+  const n = (value) => Number(value || 0);
+  const quantityKg = n(draft.quantityMt) * 1000;
+  const billValue = n(draft.priceCif) || n(draft.quantityMt) * n(draft.unitPriceMt) || n(draft.priceCfr) || n(draft.priceFob) || n(draft.foreignValue);
+  const exchangeRate = n(draft.conversionRate) || n(draft.bankRate);
+  const billValueLkr = billValue * exchangeRate;
+  const cifLkr = billValueLkr + n(draft.insuranceLkr) + n(draft.freightLkr);
+  const customsCif = (billValue + n(draft.customsInsurance) + n(draft.customsFreight)) * n(draft.customsRate);
+  const cid = customsCif * n(draft.cidRate) / 100;
+  const pal = customsCif * n(draft.palRate) / 100;
+  const xid = quantityKg * n(draft.xidPerKg);
+  const sscl = (customsCif * 1.1 + cid + pal + xid) * n(draft.ssclRate) / 100;
+  const vat = (customsCif * 1.1 + cid + pal + xid) * n(draft.vatRate) / 100;
+  const totalDuty = cid + pal + xid + sscl + vat + n(draft.otherDuty);
+  const costAndDuty = cifLkr + totalDuty;
+  const clearingTotal = (draft.clearingCharges || []).reduce((sum, item) => sum + n(item.amount), 0);
+  const landedBeforeBank = costAndDuty + clearingTotal + n(draft.extraInsurance);
+  const bankCommission = billValueLkr * n(draft.bankCommissionRate) / 100;
+  const totalCost = landedBeforeBank + n(draft.unloading) + bankCommission + n(draft.bankDocumentCharges) + n(draft.remittance);
+  const costPerKg = quantityKg ? totalCost / quantityKg : 0;
+  const vatPerKg = quantityKg ? vat / quantityKg : 0;
+  const ssclPerKg = quantityKg ? sscl / quantityKg : 0;
+  const set = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
+  const setCharge = (index, value) => setDraft((current) => ({ ...current, clearingCharges: current.clearingCharges.map((item, itemIndex) => itemIndex === index ? { ...item, amount: value } : item) }));
+  const clearedShipments = shipments.filter((shipment) => shipment.status === "Cleared");
 
-  function addIngredient() {
-    const first = materials[0];
-    setDraft((current) => ({ ...current, ingredients: [...current.ingredients, { materialId: first?.id || "", name: first?.name || "", quantity: 0, unit: first?.unit || "kg", unitPrice: 0 }] }));
+  function selectClearedShipment(shipmentId) {
+    const shipment = clearedShipments.find((item) => item.id === shipmentId);
+    if (!shipment) { set("sourceShipmentId", ""); return; }
+    const companyName = consignees.find((consignee) => consignee.code === shipment.company)?.name || shipment.consignee || shipment.company || "";
+    const countryName = shipment.country || countries.find((country) => country.name === shipment.incotermLocation)?.name || "";
+    setDraft((current) => ({
+      ...current,
+      sourceShipmentId: shipment.id,
+      company: companyName,
+      material: shipment.description || "",
+      supplier: shipment.supplier || "",
+      country: countryName,
+      paymentType: shipment.paymentMethod || current.paymentType,
+      fileNo: shipment.importNo || "",
+      etd: shipment.etd || "",
+      eta: shipment.eta || "",
+      clearingDate: shipment.deliveryDate || shipment.arrivalDate || "",
+      foreignCurrency: shipment.currency || "USD",
+      foreignValue: Number(shipment.totalCost || 0),
+      priceFob: shipment.incoterm === "FOB" ? Number(shipment.totalCost || 0) : current.priceFob,
+      priceCfr: shipment.incoterm === "CFR" ? Number(shipment.totalCost || 0) : current.priceCfr,
+      priceCif: shipment.incoterm === "CIF" ? Number(shipment.totalCost || 0) : current.priceCif,
+      cidRate: 0,
+      palRate: 0,
+      xidPerKg: 0,
+      ssclRate: 0,
+      vatRate: 0,
+      otherDuty: Number(shipment.duty || 0),
+      clearingCharges: current.clearingCharges.map((charge) => charge.name === "D/O Charges" ? { ...charge, amount: Number(shipment.doCharges || 0) } : charge),
+    }));
   }
 
   async function submit(event) {
-    event.preventDefault();
-    setSaving(true); setFormError("");
-    try { const saved = await onSave(draft); setDraft({ ...saved, ingredients: saved.ingredients || [] }); }
-    catch (error) { setFormError(error.message || "Unable to save product costing."); }
+    event.preventDefault(); setSaving(true); setFormError("");
+    try { const saved = await onSave(draft); setDraft({ ...makeEmptyPostCosting(), ...saved, clearingCharges: saved.clearingCharges || makeEmptyPostCosting().clearingCharges }); }
+    catch (error) { setFormError(error.message || "Unable to save post costing."); }
     finally { setSaving(false); }
   }
+  async function remove() { if (!draft.id || !window.confirm(`Delete post costing ${draft.fileNo}?`)) return; await onDelete(draft.id); setDraft(makeEmptyPostCosting()); }
+  const input = (field, label, type = "text") => <label>{label}<input type={type} min={type === "number" ? "0" : undefined} step={type === "number" ? "any" : undefined} value={draft[field]} onChange={(event) => set(field, event.target.value)} /></label>;
 
-  async function removeCurrent() {
-    if (!draft.id || !window.confirm(`Delete the costing for ${draft.name}?`)) return;
-    await onDelete(draft.id); setDraft(emptyCosting);
-  }
-
-  return <section className="costing-page">
-    <PageTitle eyebrow="COST CONTROL" title="Product costing" subtitle="Build a product recipe and calculate its batch and per-unit cost." action={<button className="button primary" onClick={() => setDraft(emptyCosting)}><Plus size={16} /> New costing</button>} />
-    <div className="costing-layout">
-      <aside className="panel costing-list"><div className="costing-list-head"><strong>Saved products</strong><span>{costings.length}</span></div>{costings.length ? costings.map((item) => { const itemMaterialCost = (item.ingredients || []).reduce((sum, ingredient) => sum + ingredient.quantity * ingredient.unitPrice, 0); const itemTotal = itemMaterialCost + item.labourCost + item.packagingCost + item.transportCost + item.overheadCost + item.otherCost; return <button key={item.id} className={draft.id === item.id ? "active" : ""} onClick={() => { setDraft({ ...item, ingredients: item.ingredients || [] }); setFormError(""); }}><strong>{item.name}</strong><span>{money(itemTotal / item.batchQuantity)} / {item.outputUnit}</span></button>; }) : <div className="costing-empty">No saved product costings yet.</div>}</aside>
-      <form className="panel costing-form" onSubmit={submit}>
-        <div className="costing-section-title"><div><span>PRODUCT &amp; OUTPUT</span><h2>Recipe details</h2></div>{draft.id && <button type="button" className="button secondary compact danger-text" onClick={removeCurrent}>Delete</button>}</div>
-        {formError && <div className="inline-error">{formError}</div>}
-        <div className="costing-fields"><label>Product name<input required value={draft.name} onChange={(event) => update("name", event.target.value)} placeholder="e.g. Finished product A" /></label><label>Batch output<input required type="number" min="0.000001" step="any" value={draft.batchQuantity} onChange={(event) => update("batchQuantity", event.target.value)} /></label><label>Output unit<input required value={draft.outputUnit} onChange={(event) => update("outputUnit", event.target.value)} placeholder="unit / kg / bottle" /></label></div>
-        <div className="costing-section-title ingredients-title"><div><span>BILL OF MATERIALS</span><h2>Raw materials</h2></div><button type="button" className="button secondary compact" onClick={addIngredient}><Plus size={14} /> Add material</button></div>
-        <div className="costing-ingredients"><div className="costing-ingredient header"><span>Material</span><span>Quantity</span><span>Unit</span><span>Unit price (LKR)</span><span>Cost</span><span /></div>{draft.ingredients.map((item, index) => <div className="costing-ingredient" key={`${item.materialId}-${index}`}><div className="costing-material-picker"><select value={item.materialId} onChange={(event) => { const selected = materials.find((material) => material.id === event.target.value); updateIngredient(index, { materialId: event.target.value, name: selected?.name || "", unit: selected?.unit || item.unit }); }}><option value="">Custom material</option>{materials.map((material) => <option key={material.id} value={material.id}>{material.name}</option>)}</select>{!item.materialId && <input required value={item.name} onChange={(event) => updateIngredient(index, { name: event.target.value })} placeholder="Material name" />}</div><input type="number" min="0" step="any" value={item.quantity} onChange={(event) => updateIngredient(index, { quantity: event.target.value })} /><input value={item.unit} onChange={(event) => updateIngredient(index, { unit: event.target.value })} /><input type="number" min="0" step="0.01" value={item.unitPrice} onChange={(event) => updateIngredient(index, { unitPrice: event.target.value })} /><strong>{money(Number(item.quantity || 0) * Number(item.unitPrice || 0))}</strong><button type="button" className="icon-button" aria-label="Remove material" onClick={() => setDraft((current) => ({ ...current, ingredients: current.ingredients.filter((_, itemIndex) => itemIndex !== index) }))}><X size={15} /></button></div>)}</div>
-        <div className="costing-section-title"><div><span>ADDITIONAL COSTS</span><h2>Production expenses</h2></div></div>
-        <div className="costing-fields extra-costs">{[["labourCost", "Labour"], ["packagingCost", "Packaging"], ["transportCost", "Transport"], ["overheadCost", "Overheads"], ["otherCost", "Other"]].map(([field, label]) => <label key={field}>{label} (LKR)<input type="number" min="0" step="0.01" value={draft[field]} onChange={(event) => update(field, event.target.value)} /></label>)}</div>
-        <div className="costing-summary"><div><span>Material cost</span><strong>{money(materialCost)}</strong></div><div><span>Additional costs</span><strong>{money(extraCost)}</strong></div><div className="total"><span>Total batch cost</span><strong>{money(totalCost)}</strong></div><div className="unit"><span>Cost per {draft.outputUnit || "unit"}</span><strong>{money(unitCost)}</strong></div></div>
-        <div className="costing-actions"><button className="button primary" disabled={saving}>{saving ? "Saving…" : draft.id ? "Update costing" : "Save costing"}</button></div>
-      </form>
-    </div>
+  return <section className="post-costing-page">
+    <PageTitle eyebrow="LANDED COST" title="Post costing" subtitle="Record and save shipment price details for each imported material." action={<button className="button primary" onClick={() => setDraft(makeEmptyPostCosting())}><Plus size={16} /> New post costing</button>} />
+    <div className="post-costing-layout"><aside className="panel costing-list"><div className="costing-list-head"><strong>Saved costings</strong><span>{records.length}</span></div>{records.length ? records.map((item) => <button type="button" key={item.id} className={draft.id === item.id ? "active" : ""} onClick={() => { setDraft({ ...makeEmptyPostCosting(), ...item, clearingCharges: item.clearingCharges || makeEmptyPostCosting().clearingCharges }); setFormError(""); }}><strong>File {item.fileNo}</strong><span>{item.material}</span></button>) : <div className="costing-empty">No post costings saved yet.</div>}</aside>
+      <form className="panel post-costing-form" onSubmit={submit}>{formError && <div className="inline-error">{formError}</div>}
+        <div className="post-shipment-picker"><div><span>AUTO-FILL</span><h2>Select cleared shipment</h2><p>Shipment, material and price details will be loaded automatically.</p></div><label>Cleared shipment number<select value={draft.sourceShipmentId || ""} onChange={(event) => selectClearedShipment(event.target.value)}><option value="">Select shipment</option>{clearedShipments.map((shipment) => <option key={shipment.id} value={shipment.id}>{shipment.importNo} · {shipment.description}</option>)}</select></label></div>
+        <div className="costing-section-title"><div><span>IMPORT DETAILS</span><h2>Shipment and material</h2></div>{draft.id && <button type="button" className="button secondary compact danger-text" onClick={remove}>Delete</button>}</div>
+        <div className="post-fields">{input("company", "Company")}{input("material", "Material")}{input("supplier", "Supplier")}{input("country", "Country")}{input("paymentType", "Payment type")}{input("fileNo", "File no.")}{input("lcNo", "LC no.")}{input("lcOpenedDate", "Date of LC Opened", "date")}{input("bank", "Bank")}{input("blDate", "BL date", "date")}{input("etd", "ETD", "date")}{input("eta", "ETA", "date")}{input("clearingDate", "Clearing date", "date")}{input("maturityDate", "Maturity date", "date")}{input("settlementDate", "Settlement date", "date")}</div>
+        <div className="costing-section-title section-gap"><div><span>PRICE DETAILS</span><h2>Shipment price and quantity</h2></div></div>
+        <div className="post-fields">{input("priceFob", "PRICE-FOB", "number")}{input("priceCfr", "CFR", "number")}{input("priceCif", "CIF", "number")}{input("unitPriceMt", "UNIT PRICE/MT", "number")}{input("quantityMt", "QUANTITY-MT", "number")}{input("location", "Location")}</div>
+        <div className="costing-section-title section-gap"><div><span>COSTING</span><h2>Invoice conversion</h2></div></div>
+        <div className="post-calculation-table">
+          <div><span>Bill Value - {draft.foreignCurrency}</span><strong>{decimalAmount(billValue)}</strong></div>
+          <div><span>Invoiced Qty - Kgs.</span><strong>{decimalAmount(quantityKg)}</strong></div>
+          <label>Sri Lankan Rupees Rate ({draft.foreignCurrency}/SLR)<input type="number" min="0" step="any" value={draft.conversionRate} onChange={(event) => set("conversionRate", event.target.value)} /></label>
+          <label>GAIN / LOSS<input type="number" step="any" value={draft.gainLoss} onChange={(event) => set("gainLoss", event.target.value)} /></label>
+          <div className="calculated"><span>Bill Value SLR</span><strong>{money(billValueLkr)}</strong></div>
+          <label>Insurance<input type="number" min="0" step="any" value={draft.insuranceLkr} onChange={(event) => set("insuranceLkr", event.target.value)} /></label>
+          <label>Freight<input type="number" min="0" step="any" value={draft.freightLkr} onChange={(event) => set("freightLkr", event.target.value)} /></label>
+          <div className="calculated total"><span>CIF - SLR</span><strong>{money(cifLkr)}</strong></div>
+          <label className="bank-rate">Bank rate for TT<input type="number" min="0" step="any" value={draft.bankRate} onChange={(event) => set("bankRate", event.target.value)} /></label>
+        </div>
+        <div className="costing-section-title section-gap"><div><span>CUSTOMS</span><h2>Customs conversion</h2></div></div>
+        <div className="post-calculation-table customs-table">
+          <label>Customs Exchange Rate<input type="number" min="0" step="any" value={draft.customsRate} onChange={(event) => set("customsRate", event.target.value)} /></label>
+          <label>Insurance<input type="number" min="0" step="any" value={draft.customsInsurance} onChange={(event) => set("customsInsurance", event.target.value)} /></label>
+          <label>Freight<input type="number" min="0" step="any" value={draft.customsFreight} onChange={(event) => set("customsFreight", event.target.value)} /></label>
+        </div>
+        <div className="costing-actions"><button className="button primary" disabled={saving}>{saving ? "Saving…" : draft.id ? "Update post costing" : "Save post costing"}</button></div>
+      </form></div>
   </section>;
 }
 
@@ -1804,7 +1860,7 @@ export default function App() {
   const [users, setUsers] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [materials, setMaterials] = useState([]);
-  const [productCostings, setProductCostings] = useState([]);
+  const [postCostings, setPostCostings] = useState([]);
   const [modalShipment, setModalShipment] = useState(undefined);
   const [modalShipmentImport, setModalShipmentImport] = useState(false);
   const [paymentLedgerShipment, setPaymentLedgerShipment] = useState(undefined);
@@ -1828,14 +1884,14 @@ export default function App() {
   const refresh = useCallback(async () => {
     setError("");
     try {
-      const [shipmentData, analyticsData, consigneeData, countryData, currencyData, materialData, costingData] = await Promise.all([
+      const [shipmentData, analyticsData, consigneeData, countryData, currencyData, materialData, postCostingData] = await Promise.all([
         api.getShipments(),
         api.getAnalytics(),
         api.getConsignees(),
         api.getCountries(),
         api.getCurrencies(),
         api.getMaterials(),
-        api.getProductCostings(),
+        api.getPostCostings(),
       ]);
       setShipments(sortShipmentsByConsignee(shipmentData, consigneeData));
       setAnalytics(analyticsData);
@@ -1843,7 +1899,7 @@ export default function App() {
       setCountries(countryData);
       setCurrencies(currencyData);
       setMaterials(materialData);
-      setProductCostings(costingData);
+      setPostCostings(postCostingData);
     } catch (loadError) {
       setError(loadError.message);
     } finally {
@@ -1882,7 +1938,7 @@ export default function App() {
       setCountries([]);
       setCurrencies([]);
       setMaterials([]);
-      setProductCostings([]);
+      setPostCostings([]);
     };
     window.addEventListener("fmj-session-expired", expireSession);
     return () => window.removeEventListener("fmj-session-expired", expireSession);
@@ -2051,17 +2107,17 @@ export default function App() {
     setNotice(`${updated.name} stock settings updated`);
   }
 
-  async function saveProductCosting(costing) {
-    const saved = costing.id ? await api.updateProductCosting(costing.id, costing) : await api.createProductCosting(costing);
-    setProductCostings((current) => [...current.filter((item) => item.id !== saved.id), saved].sort((a, b) => a.name.localeCompare(b.name)));
-    setNotice(`${saved.name} costing saved`);
+  async function savePostCosting(costing) {
+    const saved = costing.id ? await api.updatePostCosting(costing.id, costing) : await api.createPostCosting(costing);
+    setPostCostings((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
+    setNotice(`Post costing ${saved.fileNo} saved`);
     return saved;
   }
 
-  async function deleteProductCosting(id) {
-    await api.deleteProductCosting(id);
-    setProductCostings((current) => current.filter((item) => item.id !== id));
-    setNotice("Product costing deleted");
+  async function deletePostCosting(id) {
+    await api.deletePostCosting(id);
+    setPostCostings((current) => current.filter((item) => item.id !== id));
+    setNotice("Post costing deleted");
   }
 
   async function signOut() {
@@ -2092,7 +2148,7 @@ export default function App() {
     if (error && !shipments.length) return <div className="error-state"><strong>Unable to load shipments</strong><span>{error}</span><button className="button secondary" onClick={refresh}>Try again</button></div>;
     if (active === "dashboard") return <Dashboard shipments={shipments} consignees={consignees} analytics={analytics} accountName={authState?.name || authState?.username} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} onImport={() => setModalShipmentImport(true)} />;
     if (active === "materials") return <MaterialAnalysis materials={materials} onImport={importMaterials} onSave={saveMaterial} />;
-    if (active === "costing") return <ProductCosting materials={materials} costings={productCostings} onSave={saveProductCosting} onDelete={deleteProductCosting} />;
+    if (active === "post-costing") return <PostCosting shipments={shipments} consignees={consignees} countries={countries} records={postCostings} onSave={savePostCosting} onDelete={deletePostCosting} />;
     if (active === "to-be-tt") {
       const pendingTTShipments = shipments.filter((shipment) =>
         hasOutstandingPayment(shipment),
@@ -2183,7 +2239,7 @@ export default function App() {
             </div>
           </div>
         </header>
-        <main className={`content ${["materials", "costing", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", ...reportNavigation.map((item) => item.key)].includes(active) ? "content-wide" : ""}`}>
+        <main className={`content ${["materials", "post-costing", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", ...reportNavigation.map((item) => item.key)].includes(active) ? "content-wide" : ""}`}>
           {renderContent()}
           <footer className="app-footer"><span>© 2026 FMJ ShipTrack</span><span>Shipment management, made simpler.</span></footer>
         </main>
