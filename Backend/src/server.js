@@ -124,6 +124,48 @@ const currencySchema = new mongoose.Schema(
 );
 currencySchema.index({ code: 1 }, { unique: true });
 const Currency = mongoose.model("Currency", currencySchema);
+const materialMonthSchema = new mongoose.Schema({
+  month: { type: String, required: true, match: /^\d{4}-\d{2}$/ },
+  quantity: { type: Number, required: true, min: 0 },
+}, { _id: false });
+const materialSchema = new mongoose.Schema(
+  {
+    _id: { type: String, required: true },
+    name: { type: String, required: true, trim: true, unique: true },
+    unit: { type: String, trim: true, default: "MT" },
+    currentStock: { type: Number, min: 0, default: 0 },
+    onOrder: { type: Number, min: 0, default: 0 },
+    leadTimeDays: { type: Number, min: 1, max: 365, default: 30 },
+    safetyStockMonths: { type: Number, min: 0, max: 12, default: 0.5 },
+    monthlyPurchases: { type: [materialMonthSchema], default: [] },
+    createdAt: { type: String, default: () => new Date().toISOString() },
+    updatedAt: { type: String },
+  },
+  { versionKey: false },
+);
+const Material = mongoose.model("Material", materialSchema);
+const costingIngredientSchema = new mongoose.Schema({
+  materialId: { type: String, default: "" },
+  name: { type: String, required: true, trim: true },
+  quantity: { type: Number, required: true, min: 0 },
+  unit: { type: String, trim: true, default: "kg" },
+  unitPrice: { type: Number, required: true, min: 0 },
+}, { _id: false });
+const productCostingSchema = new mongoose.Schema({
+  _id: { type: String, required: true },
+  name: { type: String, required: true, trim: true },
+  batchQuantity: { type: Number, required: true, min: 0.000001 },
+  outputUnit: { type: String, trim: true, default: "unit" },
+  ingredients: { type: [costingIngredientSchema], default: [] },
+  labourCost: { type: Number, min: 0, default: 0 },
+  packagingCost: { type: Number, min: 0, default: 0 },
+  transportCost: { type: Number, min: 0, default: 0 },
+  overheadCost: { type: Number, min: 0, default: 0 },
+  otherCost: { type: Number, min: 0, default: 0 },
+  createdAt: { type: String, default: () => new Date().toISOString() },
+  updatedAt: { type: String },
+}, { versionKey: false });
+const ProductCosting = mongoose.model("ProductCosting", productCostingSchema);
 const superAdminSchema = new mongoose.Schema(
   {
     _id: { type: String, default: "super-admin" },
@@ -680,7 +722,7 @@ app.get("/api/health", (_request, response) => {
 
 app.use("/api", requireAuthenticated);
 
-const sidebarAccessKeys = ["dashboard", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", "companies", "consignees", "countries", "reports", "settings"];
+const sidebarAccessKeys = ["dashboard", "materials", "costing", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", "companies", "consignees", "countries", "reports", "settings"];
 const serializeUser = (user) => ({ id: user._id, name: user.name, username: user.username, sidebarAccess: user.sidebarAccess || [], fontSize: user.fontSize || 100, createdAt: user.createdAt });
 
 app.put("/api/settings/font-size", async (request, response, next) => {
@@ -763,6 +805,127 @@ app.delete("/api/users/:id", requireSuperAdmin, async (request, response, next) 
   } catch (error) {
     next(error);
   }
+});
+
+const serializeMaterial = (material) => ({
+  id: material._id,
+  name: material.name,
+  unit: material.unit || "MT",
+  currentStock: Number(material.currentStock || 0),
+  onOrder: Number(material.onOrder || 0),
+  leadTimeDays: Number(material.leadTimeDays || 30),
+  safetyStockMonths: Number(material.safetyStockMonths ?? 0.5),
+  monthlyPurchases: [...(material.monthlyPurchases || [])]
+    .map((entry) => ({ month: entry.month, quantity: Number(entry.quantity || 0) }))
+    .sort((a, b) => a.month.localeCompare(b.month)),
+  updatedAt: material.updatedAt,
+});
+
+app.get("/api/materials", async (_request, response, next) => {
+  try {
+    response.json((await Material.find().sort({ name: 1 }).lean()).map(serializeMaterial));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/materials/:id", async (request, response, next) => {
+  try {
+    const numericFields = ["currentStock", "onOrder", "leadTimeDays", "safetyStockMonths"];
+    const updates = { updatedAt: new Date().toISOString() };
+    for (const field of numericFields) {
+      const value = Number(request.body?.[field]);
+      if (!Number.isFinite(value) || value < 0) return response.status(400).json({ error: `${field} must be a positive number or zero.` });
+      updates[field] = value;
+    }
+    if (updates.leadTimeDays < 1 || updates.leadTimeDays > 365) return response.status(400).json({ error: "Lead time must be between 1 and 365 days." });
+    if (updates.safetyStockMonths > 12) return response.status(400).json({ error: "Safety stock must be 12 months or less." });
+    if (request.body?.monthlyPurchases !== undefined) {
+      if (!Array.isArray(request.body.monthlyPurchases)) return response.status(400).json({ error: "Monthly purchases must be a list." });
+      const monthTotals = new Map();
+      for (const entry of request.body.monthlyPurchases) {
+        if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(entry?.month || "")) return response.status(400).json({ error: "Every monthly purchase needs a valid month." });
+        const quantity = Number(entry.quantity);
+        if (!Number.isFinite(quantity) || quantity < 0) return response.status(400).json({ error: `Invalid quantity for ${entry.month}.` });
+        monthTotals.set(entry.month, (monthTotals.get(entry.month) || 0) + quantity);
+      }
+      updates.monthlyPurchases = [...monthTotals].map(([month, quantity]) => ({ month, quantity }));
+    }
+    const material = await Material.findByIdAndUpdate(request.params.id, updates, { new: true, runValidators: true });
+    if (!material) return response.status(404).json({ error: "Material not found." });
+    response.json(serializeMaterial(material));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/materials/import", async (request, response, next) => {
+  try {
+    const records = Array.isArray(request.body?.materials) ? request.body.materials : [];
+    if (!records.length || records.length > 500) return response.status(400).json({ error: "Import must contain between 1 and 500 materials." });
+    const imported = [];
+    for (const record of records) {
+      const name = typeof record?.name === "string" ? record.name.trim().replace(/\s+/g, " ") : "";
+      if (!name || name.length > 160) return response.status(400).json({ error: "Every material needs a valid name." });
+      const monthTotals = new Map();
+      for (const entry of Array.isArray(record.monthlyPurchases) ? record.monthlyPurchases : []) {
+        if (!/^\d{4}-\d{2}$/.test(entry?.month || "")) continue;
+        const quantity = Number(entry.quantity);
+        if (!Number.isFinite(quantity) || quantity < 0) return response.status(400).json({ error: `Invalid quantity for ${name}.` });
+        monthTotals.set(entry.month, (monthTotals.get(entry.month) || 0) + quantity);
+      }
+      const monthlyPurchases = [...monthTotals].map(([month, quantity]) => ({ month, quantity }));
+      const existing = await Material.findOne({ name: new RegExp(`^${escapeRegex(name)}$`, "i") });
+      const material = existing
+        ? await Material.findByIdAndUpdate(existing._id, { name, unit: record.unit || "MT", monthlyPurchases, updatedAt: new Date().toISOString() }, { new: true, runValidators: true })
+        : await Material.create({ _id: randomUUID(), name, unit: record.unit || "MT", monthlyPurchases });
+      imported.push(serializeMaterial(material));
+    }
+    response.json({ count: imported.length, materials: imported });
+  } catch (error) {
+    next(error);
+  }
+});
+
+const serializeCosting = (costing) => ({
+  id: costing._id, name: costing.name, batchQuantity: Number(costing.batchQuantity), outputUnit: costing.outputUnit || "unit",
+  ingredients: (costing.ingredients || []).map((item) => ({ materialId: item.materialId || "", name: item.name, quantity: Number(item.quantity), unit: item.unit || "kg", unitPrice: Number(item.unitPrice) })),
+  labourCost: Number(costing.labourCost || 0), packagingCost: Number(costing.packagingCost || 0), transportCost: Number(costing.transportCost || 0), overheadCost: Number(costing.overheadCost || 0), otherCost: Number(costing.otherCost || 0), updatedAt: costing.updatedAt,
+});
+
+function normalizeCosting(body) {
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  const batchQuantity = Number(body?.batchQuantity);
+  if (!name || name.length > 160) throw new Error("Enter a valid product name.");
+  if (!Number.isFinite(batchQuantity) || batchQuantity <= 0) throw new Error("Batch quantity must be greater than zero.");
+  const ingredients = (Array.isArray(body?.ingredients) ? body.ingredients : []).map((item) => {
+    const ingredientName = typeof item?.name === "string" ? item.name.trim() : "";
+    const quantity = Number(item?.quantity);
+    const unitPrice = Number(item?.unitPrice);
+    if (!ingredientName || !Number.isFinite(quantity) || quantity < 0 || !Number.isFinite(unitPrice) || unitPrice < 0) throw new Error("Every material needs a valid name, quantity and unit price.");
+    return { materialId: String(item.materialId || ""), name: ingredientName, quantity, unit: String(item.unit || "kg").trim().slice(0, 20), unitPrice };
+  });
+  const costs = {};
+  for (const field of ["labourCost", "packagingCost", "transportCost", "overheadCost", "otherCost"]) {
+    const value = Number(body?.[field] || 0);
+    if (!Number.isFinite(value) || value < 0) throw new Error("Additional costs must be zero or more.");
+    costs[field] = value;
+  }
+  return { name, batchQuantity, outputUnit: String(body?.outputUnit || "unit").trim().slice(0, 30), ingredients, ...costs, updatedAt: new Date().toISOString() };
+}
+
+const costingValidationError = (error) => error.message?.startsWith("Enter") || error.message?.includes("must") || error.message?.startsWith("Every");
+app.get("/api/product-costings", async (_request, response, next) => {
+  try { response.json((await ProductCosting.find().sort({ name: 1 }).lean()).map(serializeCosting)); } catch (error) { next(error); }
+});
+app.post("/api/product-costings", async (request, response, next) => {
+  try { response.status(201).json(serializeCosting(await ProductCosting.create({ _id: randomUUID(), ...normalizeCosting(request.body) }))); } catch (error) { if (costingValidationError(error)) return response.status(400).json({ error: error.message }); next(error); }
+});
+app.put("/api/product-costings/:id", async (request, response, next) => {
+  try { const item = await ProductCosting.findByIdAndUpdate(request.params.id, normalizeCosting(request.body), { new: true, runValidators: true }); if (!item) return response.status(404).json({ error: "Product costing not found." }); response.json(serializeCosting(item)); } catch (error) { if (costingValidationError(error)) return response.status(400).json({ error: error.message }); next(error); }
+});
+app.delete("/api/product-costings/:id", async (request, response, next) => {
+  try { const item = await ProductCosting.findByIdAndDelete(request.params.id); if (!item) return response.status(404).json({ error: "Product costing not found." }); response.status(204).end(); } catch (error) { next(error); }
 });
 
 app.get("/api/shipments", async (request, response, next) => {
@@ -1100,6 +1263,7 @@ async function start() {
   await mongoose.connect(process.env.MONGODB_URI);
   await Shipment.init();
   await Consignee.init();
+  await Material.init();
   await SuperAdmin.init();
   await LoginChallenge.init();
   const shipmentCount = await Shipment.countDocuments();

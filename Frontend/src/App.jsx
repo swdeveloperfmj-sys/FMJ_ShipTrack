@@ -8,6 +8,7 @@ import {
   Bell,
   Box,
   Building2,
+  Calculator,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -48,6 +49,8 @@ const navigation = [
   { label: "Consignee Reports", icon: Building2, key: "companies" },
   { label: "Consignees", icon: ContactRound, key: "consignees" },
   { label: "Countries", icon: Globe2, key: "countries" },
+  { label: "Material analysis", icon: Box, key: "materials" },
+  { label: "Product costing", icon: Calculator, key: "costing" },
 ];
 const reportNavigation = [
   { label: "SHIPMENT", key: "report-shipment" },
@@ -192,6 +195,65 @@ function parseShipmentWorkbook(file, consignees, existingShipments) {
     const workflow = importSection === "cleared" ? { status: "Cleared", clearanceStatus: "Cleared", paymentStatus: "Paid" } : importSection === "under-clearing" ? { status: "Under Clearing", paymentStatus: "Paid" } : importSection === "tt-sent" ? { status: "Pending", paymentStatus: "Paid" } : { status: "Pending", paymentStatus: "Pending" };
     return { row: headerIndex + index + 2, errors, shipment: { ...emptyShipment, importNo, company: consignee?.code || "", consignee: consignee?.name || consigneeName, supplier: importText(values.supplier), description: importText(values.description), transportMode, fclLcl, incoterm, incotermLocation, currency, totalCost, etd: importDate(values.etd), eta: importDate(values.eta), duty: importAmount(values.duty), doCharges: importAmount(values.doCharges), remarks, paymentMethod: "Advance TT", paymentTerms: "ADVANCE_TT", ...workflow } };
   }).filter(Boolean);
+}
+
+const materialMonthNumbers = { JAN: 1, JANUARY: 1, FEB: 2, FEBRUARY: 2, MAR: 3, MARCH: 3, APR: 4, APRIL: 4, MAY: 5, JUN: 6, JUNE: 6, JUL: 7, JULY: 7, AUG: 8, AUGUST: 8, SEP: 9, SEPT: 9, SEPTEMBER: 9, OCT: 10, OCTOBER: 10, NOV: 11, NOVEMBER: 11, DEC: 12, DECEMBER: 12 };
+
+function parseMaterialWorkbook(file) {
+  const workbook = XLSX.read(file, { type: "array", cellDates: true });
+  const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1, defval: "", raw: true });
+  const yearCell = rows.flat().find((value) => /^20\d{2}$/.test(String(value).trim()));
+  const year = Number(yearCell) || new Date().getFullYear();
+  const totals = new Map();
+  for (let companyRowIndex = 1; companyRowIndex < rows.length; companyRowIndex += 1) {
+    const companyRow = rows[companyRowIndex];
+    const companyColumns = companyRow.map((value, column) => ({ column, value: String(value || "").trim().toUpperCase() })).filter(({ value }) => /^(FMJ|AOP|RLA?|JD|UB)$/.test(value));
+    if (companyColumns.length < 2) continue;
+    const materialRow = rows[companyRowIndex - 1] || [];
+    for (let rowIndex = companyRowIndex + 1; rowIndex < rows.length; rowIndex += 1) {
+      const row = rows[rowIndex];
+      const monthNumber = materialMonthNumbers[String(row?.[0] || "").trim().toUpperCase()];
+      if (!monthNumber) {
+        if (rowIndex > companyRowIndex + 1 && row?.some((value) => materialMonthNumbers[String(value || "").trim().toUpperCase()])) break;
+        continue;
+      }
+      const month = `${year}-${String(monthNumber).padStart(2, "0")}`;
+      for (const { column } of companyColumns) {
+        const quantity = Number(row[column]);
+        if (!Number.isFinite(quantity) || quantity < 0) continue;
+        let materialName = "";
+        for (let materialColumn = column; materialColumn >= 0; materialColumn -= 1) {
+          const candidate = String(materialRow[materialColumn] || "").trim();
+          if (candidate && candidate !== String(year)) { materialName = candidate.replace(/\s+/g, " "); break; }
+        }
+        if (!materialName) continue;
+        if (!totals.has(materialName)) totals.set(materialName, new Map());
+        const materialMonths = totals.get(materialName);
+        materialMonths.set(month, (materialMonths.get(month) || 0) + quantity);
+      }
+    }
+  }
+  const materials = [...totals].map(([name, months]) => ({
+    name,
+    unit: "MT",
+    monthlyPurchases: [...months].map(([month, quantity]) => ({ month, quantity })).sort((a, b) => a.month.localeCompare(b.month)),
+  }));
+  if (!materials.length) throw new Error("No monthly material purchase rows were found in this workbook.");
+  return materials;
+}
+
+function materialForecast(material) {
+  const activeMonths = [...(material.monthlyPurchases || [])].filter((entry) => Number(entry.quantity) > 0).sort((a, b) => a.month.localeCompare(b.month)).slice(-3).reverse();
+  const baseWeights = [0.5, 0.3, 0.2].slice(0, activeMonths.length);
+  const weightTotal = baseWeights.reduce((sum, weight) => sum + weight, 0) || 1;
+  const forecast = activeMonths.reduce((sum, entry, index) => sum + Number(entry.quantity) * baseWeights[index], 0) / weightTotal;
+  const available = Number(material.currentStock || 0) + Number(material.onOrder || 0);
+  const target = forecast * (Number(material.leadTimeDays || 30) / 30 + Number(material.safetyStockMonths ?? 0.5));
+  const recommended = Math.max(0, target - available);
+  const coverage = forecast > 0 ? available / forecast : null;
+  const leadDemand = forecast * Number(material.leadTimeDays || 30) / 30;
+  const status = !forecast ? "No history" : available < leadDemand ? "Critical" : recommended > 0 ? "Reorder" : "Healthy";
+  return { forecast, recommended, coverage, status };
 }
 
 const money = (value) =>
@@ -1064,6 +1126,175 @@ function ClearedShipmentModal({ shipment, onClose, onSave }) {
   </div>;
 }
 
+const emptyCosting = { name: "", batchQuantity: 1, outputUnit: "unit", ingredients: [], labourCost: 0, packagingCost: 0, transportCost: 0, overheadCost: 0, otherCost: 0 };
+
+function ProductCosting({ materials, costings, onSave, onDelete }) {
+  const [draft, setDraft] = useState(emptyCosting);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
+  const materialCost = draft.ingredients.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unitPrice || 0), 0);
+  const extraCost = ["labourCost", "packagingCost", "transportCost", "overheadCost", "otherCost"].reduce((sum, field) => sum + Number(draft[field] || 0), 0);
+  const totalCost = materialCost + extraCost;
+  const unitCost = Number(draft.batchQuantity) > 0 ? totalCost / Number(draft.batchQuantity) : 0;
+  const update = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
+  const updateIngredient = (index, patch) => setDraft((current) => ({ ...current, ingredients: current.ingredients.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item) }));
+
+  function addIngredient() {
+    const first = materials[0];
+    setDraft((current) => ({ ...current, ingredients: [...current.ingredients, { materialId: first?.id || "", name: first?.name || "", quantity: 0, unit: first?.unit || "kg", unitPrice: 0 }] }));
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    setSaving(true); setFormError("");
+    try { const saved = await onSave(draft); setDraft({ ...saved, ingredients: saved.ingredients || [] }); }
+    catch (error) { setFormError(error.message || "Unable to save product costing."); }
+    finally { setSaving(false); }
+  }
+
+  async function removeCurrent() {
+    if (!draft.id || !window.confirm(`Delete the costing for ${draft.name}?`)) return;
+    await onDelete(draft.id); setDraft(emptyCosting);
+  }
+
+  return <section className="costing-page">
+    <PageTitle eyebrow="COST CONTROL" title="Product costing" subtitle="Build a product recipe and calculate its batch and per-unit cost." action={<button className="button primary" onClick={() => setDraft(emptyCosting)}><Plus size={16} /> New costing</button>} />
+    <div className="costing-layout">
+      <aside className="panel costing-list"><div className="costing-list-head"><strong>Saved products</strong><span>{costings.length}</span></div>{costings.length ? costings.map((item) => { const itemMaterialCost = (item.ingredients || []).reduce((sum, ingredient) => sum + ingredient.quantity * ingredient.unitPrice, 0); const itemTotal = itemMaterialCost + item.labourCost + item.packagingCost + item.transportCost + item.overheadCost + item.otherCost; return <button key={item.id} className={draft.id === item.id ? "active" : ""} onClick={() => { setDraft({ ...item, ingredients: item.ingredients || [] }); setFormError(""); }}><strong>{item.name}</strong><span>{money(itemTotal / item.batchQuantity)} / {item.outputUnit}</span></button>; }) : <div className="costing-empty">No saved product costings yet.</div>}</aside>
+      <form className="panel costing-form" onSubmit={submit}>
+        <div className="costing-section-title"><div><span>PRODUCT &amp; OUTPUT</span><h2>Recipe details</h2></div>{draft.id && <button type="button" className="button secondary compact danger-text" onClick={removeCurrent}>Delete</button>}</div>
+        {formError && <div className="inline-error">{formError}</div>}
+        <div className="costing-fields"><label>Product name<input required value={draft.name} onChange={(event) => update("name", event.target.value)} placeholder="e.g. Finished product A" /></label><label>Batch output<input required type="number" min="0.000001" step="any" value={draft.batchQuantity} onChange={(event) => update("batchQuantity", event.target.value)} /></label><label>Output unit<input required value={draft.outputUnit} onChange={(event) => update("outputUnit", event.target.value)} placeholder="unit / kg / bottle" /></label></div>
+        <div className="costing-section-title ingredients-title"><div><span>BILL OF MATERIALS</span><h2>Raw materials</h2></div><button type="button" className="button secondary compact" onClick={addIngredient}><Plus size={14} /> Add material</button></div>
+        <div className="costing-ingredients"><div className="costing-ingredient header"><span>Material</span><span>Quantity</span><span>Unit</span><span>Unit price (LKR)</span><span>Cost</span><span /></div>{draft.ingredients.map((item, index) => <div className="costing-ingredient" key={`${item.materialId}-${index}`}><div className="costing-material-picker"><select value={item.materialId} onChange={(event) => { const selected = materials.find((material) => material.id === event.target.value); updateIngredient(index, { materialId: event.target.value, name: selected?.name || "", unit: selected?.unit || item.unit }); }}><option value="">Custom material</option>{materials.map((material) => <option key={material.id} value={material.id}>{material.name}</option>)}</select>{!item.materialId && <input required value={item.name} onChange={(event) => updateIngredient(index, { name: event.target.value })} placeholder="Material name" />}</div><input type="number" min="0" step="any" value={item.quantity} onChange={(event) => updateIngredient(index, { quantity: event.target.value })} /><input value={item.unit} onChange={(event) => updateIngredient(index, { unit: event.target.value })} /><input type="number" min="0" step="0.01" value={item.unitPrice} onChange={(event) => updateIngredient(index, { unitPrice: event.target.value })} /><strong>{money(Number(item.quantity || 0) * Number(item.unitPrice || 0))}</strong><button type="button" className="icon-button" aria-label="Remove material" onClick={() => setDraft((current) => ({ ...current, ingredients: current.ingredients.filter((_, itemIndex) => itemIndex !== index) }))}><X size={15} /></button></div>)}</div>
+        <div className="costing-section-title"><div><span>ADDITIONAL COSTS</span><h2>Production expenses</h2></div></div>
+        <div className="costing-fields extra-costs">{[["labourCost", "Labour"], ["packagingCost", "Packaging"], ["transportCost", "Transport"], ["overheadCost", "Overheads"], ["otherCost", "Other"]].map(([field, label]) => <label key={field}>{label} (LKR)<input type="number" min="0" step="0.01" value={draft[field]} onChange={(event) => update(field, event.target.value)} /></label>)}</div>
+        <div className="costing-summary"><div><span>Material cost</span><strong>{money(materialCost)}</strong></div><div><span>Additional costs</span><strong>{money(extraCost)}</strong></div><div className="total"><span>Total batch cost</span><strong>{money(totalCost)}</strong></div><div className="unit"><span>Cost per {draft.outputUnit || "unit"}</span><strong>{money(unitCost)}</strong></div></div>
+        <div className="costing-actions"><button className="button primary" disabled={saving}>{saving ? "Saving…" : draft.id ? "Update costing" : "Save costing"}</button></div>
+      </form>
+    </div>
+  </section>;
+}
+
+function MaterialAnalysis({ materials, onImport, onSave }) {
+  const [query, setQuery] = useState("");
+  const [tableView, setTableView] = useState("monthly");
+  const [selectedYear, setSelectedYear] = useState("");
+  const [drafts, setDrafts] = useState({});
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
+  const [editingPurchase, setEditingPurchase] = useState(null);
+  const [savingPurchase, setSavingPurchase] = useState("");
+  const [purchaseError, setPurchaseError] = useState("");
+  const fileRef = useRef(null);
+  const availableYears = useMemo(() => [...new Set(materials.flatMap((material) => (material.monthlyPurchases || []).map((entry) => entry.month.slice(0, 4))))].filter(Boolean).sort().reverse(), [materials]);
+  const activeYear = selectedYear && availableYears.includes(selectedYear) ? selectedYear : availableYears[0] || String(new Date().getFullYear());
+  const rows = useMemo(() => materials
+    .map((material) => ({ ...material, analysis: materialForecast(material) }))
+    .filter((material) => material.name.toLowerCase().includes(query.trim().toLowerCase()))
+    .sort((a, b) => tableView === "monthly"
+      ? a.name.localeCompare(b.name)
+      : b.analysis.recommended - a.analysis.recommended || a.name.localeCompare(b.name)), [materials, query, tableView]);
+  const totals = useMemo(() => rows.reduce((summary, material) => ({
+    stock: summary.stock + Number(material.currentStock || 0),
+    forecast: summary.forecast + material.analysis.forecast,
+    recommended: summary.recommended + material.analysis.recommended,
+    alerts: summary.alerts + (material.analysis.recommended > 0 ? 1 : 0),
+  }), { stock: 0, forecast: 0, recommended: 0, alerts: 0 }), [rows]);
+  const valueFor = (material, field) => drafts[material.id]?.[field] ?? material[field];
+  const setDraft = (material, field, value) => setDrafts((current) => ({ ...current, [material.id]: { ...(current[material.id] || {}), [field]: value } }));
+
+  async function importWorkbook(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setImportError("");
+    try {
+      await onImport(parseMaterialWorkbook(await file.arrayBuffer()));
+    } catch (error) {
+      setImportError(error.message || "Unable to import this workbook.");
+    } finally {
+      setImporting(false);
+      event.target.value = "";
+    }
+  }
+
+  async function saveRow(material) {
+    const draft = drafts[material.id] || {};
+    await onSave(material.id, {
+      currentStock: Number(draft.currentStock ?? material.currentStock),
+      onOrder: Number(draft.onOrder ?? material.onOrder),
+      leadTimeDays: Number(draft.leadTimeDays ?? material.leadTimeDays),
+      safetyStockMonths: Number(draft.safetyStockMonths ?? material.safetyStockMonths),
+    });
+    setDrafts((current) => { const next = { ...current }; delete next[material.id]; return next; });
+  }
+
+  function editPurchase(material, month, quantity) {
+    if (savingPurchase) return;
+    setPurchaseError("");
+    setEditingPurchase({ materialId: material.id, month, value: String(quantity || "") });
+  }
+
+  async function savePurchase(material, month) {
+    if (!editingPurchase || editingPurchase.materialId !== material.id || editingPurchase.month !== month) return;
+    const quantity = Number(editingPurchase.value);
+    if (editingPurchase.value.trim() === "" || !Number.isFinite(quantity) || quantity < 0) {
+      setEditingPurchase(null);
+      return;
+    }
+    const cellKey = `${material.id}:${month}`;
+    const monthlyPurchases = (material.monthlyPurchases || []).filter((entry) => entry.month !== month);
+    monthlyPurchases.push({ month, quantity });
+    setSavingPurchase(cellKey);
+    setPurchaseError("");
+    try {
+      await onSave(material.id, {
+        currentStock: Number(material.currentStock || 0),
+        onOrder: Number(material.onOrder || 0),
+        leadTimeDays: Number(material.leadTimeDays || 30),
+        safetyStockMonths: Number(material.safetyStockMonths ?? 0.5),
+        monthlyPurchases,
+      });
+      setEditingPurchase(null);
+    } catch (error) {
+      setPurchaseError(error.message || "Unable to update the monthly purchase.");
+    } finally {
+      setSavingPurchase("");
+    }
+  }
+
+  return <section className="material-analysis-page">
+    <PageTitle eyebrow="INVENTORY PLANNING" title="Material analysis" subtitle="Review purchase history, current stock and purchase-based demand forecasts." action={<><input ref={fileRef} className="visually-hidden" type="file" accept=".xlsx,.xls" onChange={importWorkbook} /><button className="button primary" disabled={importing} onClick={() => fileRef.current?.click()}><Upload size={16} /> {importing ? "Importing…" : "Import purchase workbook"}</button></>} />
+    {(importError || purchaseError) && <div className="inline-error">{importError || purchaseError}</div>}
+    <div className="material-method-note"><span className="material-method-icon"><TrendingUp size={17} /></span><div><strong>Purchase forecast</strong><span>Latest three active purchase months are weighted 50%, 30% and 20%. The order suggestion includes lead time and safety stock, then deducts stock already available or on order.</span></div></div>
+    <section className="material-kpis">
+      <article className="material-kpi stock"><span className="material-kpi-icon"><Box size={17} /></span><div><span>Current stock</span><strong>{decimalAmount(totals.stock)} <small>MT</small></strong><em>Available inventory</em></div></article>
+      <article className="material-kpi forecast"><span className="material-kpi-icon"><TrendingUp size={17} /></span><div><span>Next-period forecast</span><strong>{decimalAmount(totals.forecast)} <small>MT</small></strong><em>Purchase-based estimate</em></div></article>
+      <article className="material-kpi purchase"><span className="material-kpi-icon"><ArrowUpRight size={17} /></span><div><span>Recommended purchase</span><strong>{decimalAmount(totals.recommended)} <small>MT</small></strong><em>Suggested order quantity</em></div></article>
+      <article className="material-kpi review"><span className="material-kpi-icon"><Clock3 size={17} /></span><div><span>Materials to review</span><strong>{totals.alerts}</strong><em>Need purchasing attention</em></div></article>
+    </section>
+    <section className="panel material-table-panel">
+      <div className="material-view-bar"><div className="material-view-tabs"><button className={tableView === "monthly" ? "active" : ""} onClick={() => setTableView("monthly")}>Monthly purchases</button><button className={tableView === "stock" ? "active" : ""} onClick={() => setTableView("stock")}>Stock plan</button></div><div className="material-view-controls">{tableView === "monthly" && availableYears.length > 0 && <label>Year<select value={activeYear} onChange={(event) => setSelectedYear(event.target.value)}>{availableYears.map((year) => <option key={year}>{year}</option>)}</select></label>}<label className="material-search"><span>Search</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Material name" /></label></div></div>
+      <div className="table-toolbar"><div className="table-title"><h2>{tableView === "monthly" ? `Monthly purchase history · ${activeYear}` : "Material stock plan"}</h2><span className="count-pill">{rows.length}</span></div><span className="material-table-hint">{tableView === "monthly" ? "Quantities shown in MT · Double-click a value to edit" : "Update stock inputs and save each changed row"}</span></div>
+      {!materials.length ? <div className="empty-state"><Box size={34} /><strong>No material history imported</strong><span>Import the Jan–Dec raw material purchase workbook to create the analysis.</span><button className="button primary" onClick={() => fileRef.current?.click()}><Upload size={16} /> Import workbook</button></div> : tableView === "monthly" ? <div className="table-scroll"><table className="data-table material-table monthly-material-table"><thead><tr><th>Material</th>{["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((month) => <th key={month}>{month}</th>)}<th>Total</th><th>Avg / active mo.</th></tr></thead><tbody>{rows.map((material) => {
+        const monthValues = Array.from({ length: 12 }, (_, index) => Number(material.monthlyPurchases?.find((entry) => entry.month === `${activeYear}-${String(index + 1).padStart(2, "0")}`)?.quantity || 0));
+        const annualTotal = monthValues.reduce((sum, value) => sum + value, 0);
+        const activeMonths = monthValues.filter((value) => value > 0).length;
+        return <tr key={material.id}><td><strong>{material.name}</strong><span className="cell-subtext">{material.unit || "MT"}</span></td>{monthValues.map((value, index) => {
+          const month = `${activeYear}-${String(index + 1).padStart(2, "0")}`;
+          const cellKey = `${material.id}:${month}`;
+          const isEditing = editingPurchase?.materialId === material.id && editingPurchase?.month === month;
+          return <td key={month} className={`${value > 0 ? "monthly-value has-value" : "monthly-value"}${isEditing ? " editing" : ""}${savingPurchase === cellKey ? " saving" : ""}`} onDoubleClick={() => editPurchase(material, month, value)} title="Double-click to edit">{isEditing ? <input className="monthly-value-input" type="number" min="0" step="0.01" autoFocus value={editingPurchase.value} disabled={savingPurchase === cellKey} onChange={(event) => setEditingPurchase((current) => ({ ...current, value: event.target.value }))} onFocus={(event) => event.target.select()} onBlur={() => savePurchase(material, month)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") setEditingPurchase(null); }} aria-label={`${material.name} ${month} purchase quantity`} /> : value > 0 ? decimalAmount(value) : "—"}</td>;
+        })}<td className="monthly-total">{decimalAmount(annualTotal)}</td><td className="monthly-average">{activeMonths ? decimalAmount(annualTotal / activeMonths) : "—"}</td></tr>;
+      })}</tbody><tfoot><tr><th>Monthly total</th>{Array.from({ length: 12 }, (_, index) => { const monthKey = `${activeYear}-${String(index + 1).padStart(2, "0")}`; const total = rows.reduce((sum, material) => sum + Number(material.monthlyPurchases?.find((entry) => entry.month === monthKey)?.quantity || 0), 0); return <th key={monthKey}>{total > 0 ? decimalAmount(total) : "—"}</th>; })}<th>{decimalAmount(rows.reduce((sum, material) => sum + (material.monthlyPurchases || []).filter((entry) => entry.month.startsWith(activeYear)).reduce((monthSum, entry) => monthSum + Number(entry.quantity || 0), 0), 0))}</th><th /></tr></tfoot></table></div> : <div className="table-scroll"><table className="data-table material-table"><thead><tr><th>Material</th><th>Recent purchases</th><th>Forecast</th><th>Current stock</th><th>On order</th><th>Lead days</th><th>Safety months</th><th>Coverage</th><th>Recommended</th><th>Status</th><th /></tr></thead><tbody>{rows.map((material) => {
+        const recent = [...(material.monthlyPurchases || [])].filter((entry) => Number(entry.quantity) > 0).slice(-4);
+        return <tr key={material.id}><td><strong>{material.name}</strong><span className="cell-subtext">{material.unit || "MT"}</span></td><td><div className="purchase-history">{recent.length ? recent.map((entry) => <span key={entry.month}><small>{entry.month.slice(5)}</small>{decimalAmount(entry.quantity)}</span>) : <em>No purchases</em>}</div></td><td><strong>{decimalAmount(material.analysis.forecast)}</strong><span className="cell-subtext">MT / period</span></td>{["currentStock", "onOrder", "leadTimeDays", "safetyStockMonths"].map((field) => <td key={field}><input className="material-number-input" type="number" min="0" step={field === "leadTimeDays" ? "1" : "0.01"} value={valueFor(material, field)} onChange={(event) => setDraft(material, field, event.target.value)} aria-label={`${material.name} ${field}`} /></td>)}<td>{material.analysis.coverage === null ? "—" : `${material.analysis.coverage.toFixed(1)} mo`}</td><td className="recommended-quantity">{decimalAmount(material.analysis.recommended)} MT</td><td><span className={`stock-status ${material.analysis.status.toLowerCase().replace(" ", "-")}`}>{material.analysis.status}</span></td><td><button className="button secondary compact" disabled={!drafts[material.id]} onClick={() => saveRow(material)}>Save</button></td></tr>;
+      })}</tbody></table></div>}
+    </section>
+  </section>;
+}
+
 function Dashboard({ shipments, consignees, analytics, accountName, onNavigate, onEdit, onAdd, onImport }) {
   const [currentTime, setCurrentTime] = useState(() => new Date());
   useEffect(() => {
@@ -1572,6 +1803,8 @@ export default function App() {
   const [currencies, setCurrencies] = useState([]);
   const [users, setUsers] = useState([]);
   const [analytics, setAnalytics] = useState(null);
+  const [materials, setMaterials] = useState([]);
+  const [productCostings, setProductCostings] = useState([]);
   const [modalShipment, setModalShipment] = useState(undefined);
   const [modalShipmentImport, setModalShipmentImport] = useState(false);
   const [paymentLedgerShipment, setPaymentLedgerShipment] = useState(undefined);
@@ -1595,18 +1828,22 @@ export default function App() {
   const refresh = useCallback(async () => {
     setError("");
     try {
-      const [shipmentData, analyticsData, consigneeData, countryData, currencyData] = await Promise.all([
+      const [shipmentData, analyticsData, consigneeData, countryData, currencyData, materialData, costingData] = await Promise.all([
         api.getShipments(),
         api.getAnalytics(),
         api.getConsignees(),
         api.getCountries(),
         api.getCurrencies(),
+        api.getMaterials(),
+        api.getProductCostings(),
       ]);
       setShipments(sortShipmentsByConsignee(shipmentData, consigneeData));
       setAnalytics(analyticsData);
       setConsignees(consigneeData);
       setCountries(countryData);
       setCurrencies(currencyData);
+      setMaterials(materialData);
+      setProductCostings(costingData);
     } catch (loadError) {
       setError(loadError.message);
     } finally {
@@ -1644,6 +1881,8 @@ export default function App() {
       setConsignees([]);
       setCountries([]);
       setCurrencies([]);
+      setMaterials([]);
+      setProductCostings([]);
     };
     window.addEventListener("fmj-session-expired", expireSession);
     return () => window.removeEventListener("fmj-session-expired", expireSession);
@@ -1800,6 +2039,31 @@ export default function App() {
     await refresh();
   }
 
+  async function importMaterials(materialRecords) {
+    const result = await api.importMaterials(materialRecords);
+    setNotice(`${result.count} material${result.count === 1 ? "" : "s"} imported successfully`);
+    await refresh();
+  }
+
+  async function saveMaterial(id, material) {
+    const updated = await api.updateMaterial(id, material);
+    setMaterials((current) => current.map((item) => item.id === id ? updated : item));
+    setNotice(`${updated.name} stock settings updated`);
+  }
+
+  async function saveProductCosting(costing) {
+    const saved = costing.id ? await api.updateProductCosting(costing.id, costing) : await api.createProductCosting(costing);
+    setProductCostings((current) => [...current.filter((item) => item.id !== saved.id), saved].sort((a, b) => a.name.localeCompare(b.name)));
+    setNotice(`${saved.name} costing saved`);
+    return saved;
+  }
+
+  async function deleteProductCosting(id) {
+    await api.deleteProductCosting(id);
+    setProductCostings((current) => current.filter((item) => item.id !== id));
+    setNotice("Product costing deleted");
+  }
+
   async function signOut() {
     try {
       await api.logout();
@@ -1827,6 +2091,8 @@ export default function App() {
     if (loading) return <div className="loading-state"><span className="loader" />Loading shipment workspace…</div>;
     if (error && !shipments.length) return <div className="error-state"><strong>Unable to load shipments</strong><span>{error}</span><button className="button secondary" onClick={refresh}>Try again</button></div>;
     if (active === "dashboard") return <Dashboard shipments={shipments} consignees={consignees} analytics={analytics} accountName={authState?.name || authState?.username} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} onImport={() => setModalShipmentImport(true)} />;
+    if (active === "materials") return <MaterialAnalysis materials={materials} onImport={importMaterials} onSave={saveMaterial} />;
+    if (active === "costing") return <ProductCosting materials={materials} costings={productCostings} onSave={saveProductCosting} onDelete={deleteProductCosting} />;
     if (active === "to-be-tt") {
       const pendingTTShipments = shipments.filter((shipment) =>
         hasOutstandingPayment(shipment),
@@ -1917,7 +2183,7 @@ export default function App() {
             </div>
           </div>
         </header>
-        <main className={`content ${["to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", ...reportNavigation.map((item) => item.key)].includes(active) ? "content-wide" : ""}`}>
+        <main className={`content ${["materials", "costing", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", ...reportNavigation.map((item) => item.key)].includes(active) ? "content-wide" : ""}`}>
           {renderContent()}
           <footer className="app-footer"><span>© 2026 FMJ ShipTrack</span><span>Shipment management, made simpler.</span></footer>
         </main>
