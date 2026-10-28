@@ -1227,6 +1227,39 @@ function PostCosting({ shipments, consignees, countries, records, onSave, onDele
           <label>Insurance<input type="number" min="0" step="any" value={draft.customsInsurance} onChange={(event) => set("customsInsurance", event.target.value)} /></label>
           <label>Freight<input type="number" min="0" step="any" value={draft.customsFreight} onChange={(event) => set("customsFreight", event.target.value)} /></label>
         </div>
+        <div className="costing-section-title section-gap"><div><span>DUTY</span><h2>Customs duty calculation</h2></div></div>
+        <div className="post-duty-table">
+          <div className="calculated"><span className="rate">Duty</span><span>CIF - SLR</span><strong>{money(customsCif)}</strong></div>
+          <div><label><input type="number" min="0" step="any" value={draft.cidRate} onChange={(event) => set("cidRate", event.target.value)} />%</label><span>CID</span><strong>{money(cid)}</strong></div>
+          <div><label><input type="number" min="0" step="any" value={draft.palRate} onChange={(event) => set("palRate", event.target.value)} />%</label><span>PAL</span><strong>{money(pal)}</strong></div>
+          <div><label>Rs <input type="number" min="0" step="any" value={draft.xidPerKg} onChange={(event) => set("xidPerKg", event.target.value)} /> × 1KG</label><span>XID</span><strong>{money(xid)}</strong></div>
+          <div><label><input type="number" min="0" step="any" value={draft.ssclRate} onChange={(event) => set("ssclRate", event.target.value)} />%</label><span>NBT / SSCL</span><strong>{money(sscl)}</strong></div>
+          <div><label><input type="number" min="0" step="any" value={draft.vatRate} onChange={(event) => set("vatRate", event.target.value)} />%</label><span>VAT</span><strong>{money(vat)}</strong></div>
+          <div><span className="rate" /><span>Other</span><label className="amount"><input type="number" min="0" step="any" value={draft.otherDuty} onChange={(event) => set("otherDuty", event.target.value)} /></label></div>
+          <div className="total"><span className="rate" /><span>Total Duty</span><strong>{money(totalDuty)}</strong></div>
+          <div className="spacer" />
+          <div className="calculated"><span className="rate" /><span>Cost + duty</span><strong>{money(costAndDuty)}</strong></div>
+          <div><span className="rate" /><span>EXTRA PAYMENT (if any) Insurance premium</span><label className="amount"><input type="number" min="0" step="any" value={draft.extraInsurance} onChange={(event) => set("extraInsurance", event.target.value)} /></label></div>
+        </div>
+        <div className="costing-section-title section-gap"><div><span>CLEARING BILL</span><h2>Clearing and port charges</h2></div></div>
+        <div className="post-clearing-table">
+          {(draft.clearingCharges || []).map((item, index) => <label key={item.name}><span>{index === 0 ? "Clearing Bill" : ""}</span><em>{item.name}</em><input type="number" min="0" step="0.01" value={Number(item.amount) === 0 ? "" : item.amount} placeholder="0.00" onFocus={(event) => event.target.select()} onChange={(event) => setCharge(index, event.target.value)} aria-label={`${item.name} amount`} /></label>)}
+          <div className="clearing-total"><span /><strong>Total Clearing bill</strong><b>{money(clearingTotal)}</b></div>
+        </div>
+        <div className="post-final-cost-table">
+          <div><span /><strong>Total - cost + duty + clearing bill</strong><b>{money(landedBeforeBank)}</b></div>
+          <label><span /><strong>Unloading charges</strong><input type="number" min="0" step="any" value={draft.unloading} onChange={(event) => set("unloading", event.target.value)} /></label>
+          <div className="bank-heading"><span>Bank Charges</span><strong /><b /></div>
+          <label><span /><strong>LC / TT / DC Commission <input className="inline-rate" type="number" min="0" step="any" value={draft.bankCommissionRate} onChange={(event) => set("bankCommissionRate", event.target.value)} />%</strong><b>{money(bankCommission)}</b></label>
+          <label><span /><strong>Bank Document Charges</strong><input type="number" min="0" step="any" value={draft.bankDocumentCharges} onChange={(event) => set("bankDocumentCharges", event.target.value)} /></label>
+          <div className="bank-total"><span /><strong>Total</strong><b>{money(landedBeforeBank + n(draft.unloading) + bankCommission + n(draft.bankDocumentCharges))}</b></div>
+          <label className="remittance"><span /><strong>D/Remittance (L)</strong><input type="number" min="0" step="any" value={draft.remittance} onChange={(event) => set("remittance", event.target.value)} /></label>
+          <div className="grand-total"><span /><strong>Total cost</strong><b>{money(totalCost)}</b></div>
+          <div><span /><strong>Cost per Kg - incl SSCL + VAT</strong><b>{money(costPerKg)}</b></div>
+          <div><span /><strong>SSCL</strong><b>{money(ssclPerKg)}</b></div>
+          <div><span /><strong>LESS VAT</strong><b>{money(vatPerKg)}</b></div>
+          <div className="cost-ex-vat"><span /><strong>Cost per Kg - Excl VAT</strong><b>{money(costPerKg - vatPerKg)}</b></div>
+        </div>
         <div className="costing-actions"><button className="button primary" disabled={saving}>{saving ? "Saving…" : draft.id ? "Update post costing" : "Save post costing"}</button></div>
       </form></div>
   </section>;

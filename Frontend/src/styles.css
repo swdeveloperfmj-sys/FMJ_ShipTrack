@@ -950,6 +950,40 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .post-calculation-table strong { color: #c33b34; text-align: right; font-size: 10.5px; }
 .post-calculation-table .calculated { background: #eef2f7; }
 .post-calculation-table .total span,.post-calculation-table .bank-rate { font-weight: 800; }
+.post-duty-table { overflow: hidden; border: 1px solid #bdc4cc; border-radius: 9px; background: #f2f3f4; }
+.post-duty-table > div:not(.spacer) { display: grid; grid-template-columns: 118px minmax(220px,1fr) minmax(180px,260px); align-items: center; min-height: 39px; border-bottom: 1px solid #bdc4cc; color: #202a36; font-size: 9.5px; }
+.post-duty-table > div > * { min-height: 39px; display: flex; align-items: center; padding: 5px 10px; border-right: 1px solid #bdc4cc; }
+.post-duty-table > div > :last-child { justify-content: flex-end; border-right: 0; }
+.post-duty-table label { gap: 4px; margin: 0; font-weight: 650; white-space: nowrap; }
+.post-duty-table input { width: 58px; height: 29px; padding: 0 6px; border: 1px solid #d1d7de; border-radius: 5px; outline: none; background: #fff; color: #344155; text-align: right; font-size: 9px; }
+.post-duty-table strong { color: #202a36; font-size: 10px; }
+.post-duty-table .amount input { width: 100%; }
+.post-duty-table .total { border-top: 1px dashed #8f98a3; }
+.post-duty-table .total span { justify-content: flex-end; font-weight: 800; }
+.post-duty-table .total strong { color: #d1322d; font-size: 11px; }
+.post-duty-table .spacer { height: 16px; border-bottom: 1px dashed #8f98a3; background: #e9ebed; }
+.post-duty-table > div:last-child { border-bottom: 0; }
+.post-clearing-table,.post-final-cost-table { overflow: hidden; border: 1px solid #b8bec5; border-radius: 8px; }
+.post-clearing-table > label,.post-clearing-table > div,.post-final-cost-table > label,.post-final-cost-table > div { display: grid; grid-template-columns: 118px minmax(260px,1fr) minmax(180px,260px); align-items: stretch; min-height: 35px; margin: 0; border-bottom: 1px solid #b8bec5; background: #f3f3f2; color: #202a36; font-size: 9px; font-style: normal; }
+.post-clearing-table > :last-child,.post-final-cost-table > :last-child { border-bottom: 0; }
+.post-clearing-table span,.post-clearing-table em,.post-clearing-table strong,.post-clearing-table b,.post-final-cost-table span,.post-final-cost-table strong,.post-final-cost-table b { display: flex; align-items: center; min-width: 0; padding: 5px 9px; border-right: 1px solid #b8bec5; font-style: normal; font-weight: 500; }
+.post-clearing-table b,.post-final-cost-table b { justify-content: flex-end; border-right: 0; font-weight: 750; }
+.post-clearing-table input,.post-final-cost-table > label > input { width: 100%; min-height: 34px; padding: 0 9px; border: 0; border-left: 1px solid #b8bec5; outline: none; background: #fff; color: #202a36; text-align: right; font-size: 9.5px; font-weight: 700; }
+.post-clearing-table .clearing-total strong,.post-final-cost-table strong { font-weight: 700; }
+.post-clearing-table .clearing-total b { font-size: 10.5px; }
+.post-final-cost-table { margin-top: 14px; border-color: #b8bec5; }
+.post-final-cost-table > label,.post-final-cost-table > div { border-color: #b8bec5; background: #f3f3f2; }
+.post-final-cost-table span,.post-final-cost-table strong,.post-final-cost-table b { border-color: #b8bec5; }
+.post-final-cost-table > label > input { border-color: #b8bec5; background: #fff; }
+.post-final-cost-table .bank-heading { border-top: 1px dashed #87909a; border-bottom-style: dashed; }
+.post-final-cost-table .bank-total strong { justify-content: flex-end; }
+.post-final-cost-table .bank-total b { color: #d32f2b; font-size: 10.5px; }
+.post-final-cost-table .remittance strong { color: #d32f2b; }
+.post-final-cost-table .grand-total strong { justify-content: flex-end; }
+.post-final-cost-table .grand-total b { font-size: 12px; }
+.post-final-cost-table .inline-rate { width: 50px; height: 26px; margin: 0 3px; padding: 0 4px; border: 1px solid #c3c9cf; border-radius: 4px; text-align: right; }
+.post-final-cost-table .cost-ex-vat { background: #e5e9ee; }
+.post-final-cost-table .cost-ex-vat strong,.post-final-cost-table .cost-ex-vat b { font-size: 11px; font-weight: 850; }
 .section-gap { margin-top: 27px; }
 .post-result-strip,.post-duty-grid,.post-final-summary { display: grid; grid-template-columns: repeat(4,1fr); gap: 9px; margin-top: 15px; }
 .post-result-strip > div,.post-duty-grid > div,.post-final-summary > div { padding: 12px; border: 1px solid #e4eaf1; border-radius: 8px; background: #f8fafc; }
@@ -965,13 +999,28 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .post-final-summary .primary { border-color: #cfe9dc; background: #edf9f3; }
 .post-final-summary .primary strong { color: #16845b; font-size: 13px; }
 .app-shell[data-theme="dark"] .post-fields input,.app-shell[data-theme="dark"] .clearing-charge-grid input { border-color: #35465d; background: #142030; color: #e8eef7; }
+.app-shell[data-theme="dark"] .post-fields label,.app-shell[data-theme="dark"] .clearing-charge-grid label { color: #c6d2e2; }
+.app-shell[data-theme="dark"] .post-costing-form .costing-section-title span { color: #aebed2; }
+.app-shell[data-theme="dark"] .post-costing-form .costing-section-title h2 { color: #f0f4fa; }
 .app-shell[data-theme="dark"] .post-calculation-table { border-color: #3b4a5d; background: #202b3a; }
 .app-shell[data-theme="dark"] .post-calculation-table > div,.app-shell[data-theme="dark"] .post-calculation-table > label { border-color: #3b4a5d; color: #d7e1ee; }
 .app-shell[data-theme="dark"] .post-calculation-table input { border-color: #43556d; background: #142030; color: #ff9890; }
 .app-shell[data-theme="dark"] .post-calculation-table strong { color: #ff9890; }
 .app-shell[data-theme="dark"] .post-calculation-table .calculated { background: #243246; }
+.app-shell[data-theme="dark"] .post-duty-table { border-color: #465568; background: #202b3a; }
+.app-shell[data-theme="dark"] .post-duty-table > div:not(.spacer),.app-shell[data-theme="dark"] .post-duty-table > div > * { border-color: #465568; color: #d7e1ee; }
+.app-shell[data-theme="dark"] .post-duty-table input { border-color: #4a5d74; background: #142030; color: #e8eef7; }
+.app-shell[data-theme="dark"] .post-duty-table strong { color: #e8eef7; }
+.app-shell[data-theme="dark"] .post-duty-table .total strong { color: #ff7770; }
+.app-shell[data-theme="dark"] .post-duty-table .spacer { background: #192535; }
+.app-shell[data-theme="dark"] .post-clearing-table > label,.app-shell[data-theme="dark"] .post-clearing-table > div { border-color: #465568; background: #202b3a; color: #d7e1ee; }
+.app-shell[data-theme="dark"] .post-clearing-table span,.app-shell[data-theme="dark"] .post-clearing-table em,.app-shell[data-theme="dark"] .post-clearing-table strong,.app-shell[data-theme="dark"] .post-clearing-table b,.app-shell[data-theme="dark"] .post-clearing-table input { border-color: #465568; background: #202b3a; color: #e8eef7; }
+.app-shell[data-theme="dark"] .post-final-cost-table > label,.app-shell[data-theme="dark"] .post-final-cost-table > div { border-color: #465568; background: #202b3a; color: #d7e1ee; }
+.app-shell[data-theme="dark"] .post-final-cost-table span,.app-shell[data-theme="dark"] .post-final-cost-table strong,.app-shell[data-theme="dark"] .post-final-cost-table b,.app-shell[data-theme="dark"] .post-final-cost-table > label > input { border-color: #465568; background: #202b3a; color: #e8eef7; }
+.app-shell[data-theme="dark"] .post-final-cost-table .cost-ex-vat { background: #2a3749; }
 .app-shell[data-theme="dark"] .post-shipment-picker { border-color: #304966; background: #1b2b40; }
 .app-shell[data-theme="dark"] .post-shipment-picker h2 { color: #dce6f3; }
+.app-shell[data-theme="dark"] .post-shipment-picker label { color: #c6d2e2; }
 .app-shell[data-theme="dark"] .post-shipment-picker select { border-color: #40546d; background: #142030; color: #e8eef7; }
 .app-shell[data-theme="dark"] .post-result-strip > div,.app-shell[data-theme="dark"] .post-duty-grid > div,.app-shell[data-theme="dark"] .post-final-summary > div { border-color: #34445a; background: #1e2d40; }
 .app-shell[data-theme="dark"] .post-result-strip strong,.app-shell[data-theme="dark"] .post-duty-grid strong,.app-shell[data-theme="dark"] .post-final-summary strong { color: #e5edf7; }
