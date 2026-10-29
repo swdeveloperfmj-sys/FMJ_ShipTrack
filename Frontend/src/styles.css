@@ -29,7 +29,10 @@
 .pre-sheet-paper .pre-sheet .sheet-material { background: #f8cbad; text-align: center; font-weight: bold; }
 .pre-sheet-paper .sheet-hs label { display: flex; align-items: center; white-space: nowrap; font-weight: bold; text-align: left; }
 .pre-sheet-paper .sheet-assumptions td:nth-child(4) input { color: red; text-align: center; }
-.pre-sheet-paper .pre-sheet .sheet-column-headings th { height: 60px; text-align: center; font-weight: bold; line-height: 1.7; }
+.pre-sheet-paper .pre-sheet .sheet-column-headings th { position: relative; height: 60px; padding-right: 8px; text-align: center; font-weight: bold; line-height: 1.7; overflow-wrap: anywhere; }
+.pre-sheet-paper .sheet-column-resizer { position: absolute; top: 0; right: -1px; z-index: 1; width: 8px; height: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; cursor: col-resize; touch-action: none; }
+.pre-sheet-paper .sheet-column-resizer:hover,.pre-sheet-paper .sheet-column-resizer:focus-visible { background: #2865db55; outline: 2px solid #2865db; outline-offset: -2px; }
+.pre-sheet-resizing,.pre-sheet-resizing * { cursor: col-resize; user-select: none; }
 .pre-sheet-paper .pre-sheet tbody td:first-child,.pre-sheet-paper .pre-sheet tfoot td:first-child { text-align: left; }
 .pre-sheet-paper .pre-sheet .sheet-highlight { background: #ff0; }
 .pre-sheet-paper .pre-sheet tfoot td { border-bottom: 3px double #000; }
@@ -38,7 +41,7 @@
 .sheet-breakdown > div { background: #fff; padding: 0 2px; }
 .sheet-breakdown > div:nth-child(3n+2) { text-align: right; }
 .sheet-breakdown-total { padding: 0 3px; border-top: 1px solid #000; border-bottom: 3px double #000; background: #fff; text-align: right; font-weight: bold; }
-.pre-row-actions { display: flex; align-items: center; gap: 8px; padding: 12px; }
+.pre-row-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px; }
 .pre-row-actions > span { margin-left: auto; color: var(--muted); font-size: 11px; }
 .pre-costing-form .pre-actions { padding: 0 12px 14px; }
 .pre-costing-page .costing-list { max-height: 240px; overflow: auto; }

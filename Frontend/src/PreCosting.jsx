@@ -94,7 +94,12 @@ export default function PreCosting() {
         {error && <div className="inline-error" role="alert">{error}</div>}{notice && <p className="pre-notice" role="status">{notice}</p>}
         <fieldset disabled={busy}>
           <PreCostingSheet draft={draft} result={result} change={change} changeItem={changeItem} />
-          <div className="pre-row-actions"><button type="button" className="button secondary" disabled={draft.items.length >= 100} onClick={() => change("items", [...draft.items, { description: "", quantity: "", usdValue: "" }])}><Plus size={14} /> Add item</button><button type="button" className="button secondary" disabled={draft.items.length === 1} onClick={() => change("items", draft.items.slice(0, -1))}>Remove last item</button><span>{dirty ? "Unsaved changes" : draft.id ? "Saved" : "New estimate"}</span></div>
+          <div className="pre-row-actions">
+            <button type="button" className="button secondary" disabled={draft.items.length >= 100} onClick={() => change("items", [...draft.items, { description: "", quantity: "", usdValue: "" }])}><Plus size={14} /> Add item</button>
+            <button type="button" className="button secondary" disabled={draft.items.length >= 100} onClick={() => change("items", [...draft.items, ...Array.from({ length: Math.min(5, 100 - draft.items.length) }, () => ({ description: "", quantity: "", usdValue: "" }))])}><Plus size={14} /> Add 5 rows</button>
+            <button type="button" className="button secondary" disabled={draft.items.length === 1} onClick={() => change("items", draft.items.slice(0, -1))}>Remove last item</button>
+            <span>{dirty ? "Unsaved changes" : draft.id ? "Saved" : "New estimate"}</span>
+          </div>
           <div className="pre-actions">{draft.id && <button type="button" className="button secondary" onClick={remove}><Trash2 size={14} /> Delete</button>}<button type="button" className="button secondary" disabled={!result} onClick={() => { const issue = validatePreCosting(draft); if (issue) { setError(issue); return; } try { downloadPdf(draft, result); } catch (err) { setError(err.message); } }}><Download size={14} /> Download PDF</button><button className="button primary" type="submit"><Save size={14} />{busy ? "Saving…" : "Save pre costing"}</button></div>
         </fieldset>
       </form>
