@@ -37,6 +37,7 @@ import {
   X,
 } from "lucide-react";
 import * as XLSX from "xlsx";
+import { jsPDF } from "jspdf";
 import { api } from "./api.js";
 
 const navigation = [
@@ -542,7 +543,7 @@ function InlineEditCell({ shipment, field, value, children, onSave, type = "text
   return <td className={`${className || ""} ${editing ? "inline-editing" : "inline-editable"}`.trim()} onDoubleClick={(event) => { event.stopPropagation(); setEditing(true); }} title={editing ? undefined : `${value || "Empty"} — double-click to edit`}>
     {editing ? (type === "select"
       ? <select ref={inputRef} value={draft} disabled={saving} onChange={(event) => { setDraft(event.target.value); commit(event.target.value); }} onKeyDown={(event) => { if (event.key === "Escape") setEditing(false); }} onBlur={() => { if (!saving) setEditing(false); }}>{options.map((option) => <option key={typeof option === "string" ? option : option.value} value={typeof option === "string" ? option : option.value}>{typeof option === "string" ? option : option.label}</option>)}</select>
-      : <input ref={inputRef} type={type} value={draft} disabled={saving} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") commit(); if (event.key === "Escape") setEditing(false); }} onBlur={() => commit()} />)
+      : <input ref={inputRef} type={type} value={draft} disabled={saving} onClick={type === "date" ? openDatePicker : undefined} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") commit(); if (event.key === "Escape") setEditing(false); }} onBlur={() => commit()} />)
       : children}
   </td>;
 }
@@ -934,7 +935,7 @@ function PaymentLedgerModal({ shipment, onClose, onSave }) {
         </div>
         <div className="payment-ledger-columns">
           <section><h3>Add payment</h3><form className="ledger-entry-form" onSubmit={addPayment}>
-            <label>Date<input type="date" value={payment.date} onChange={(event) => setPayment((current) => ({ ...current, date: event.target.value }))} required /></label>
+            <label>Date<input type="date" value={payment.date} onClick={openDatePicker} onChange={(event) => setPayment((current) => ({ ...current, date: event.target.value }))} required /></label>
             <label>Amount ({shipment.currency})<input type="number" min="0.01" step="0.01" value={payment.amount} onChange={(event) => setPayment((current) => ({ ...current, amount: event.target.value }))} required /></label>
             <label>Method<select value={payment.method} onChange={(event) => setPayment((current) => ({ ...current, method: event.target.value }))}><option>TT</option><option>LC</option><option>DP</option><option>DA</option><option>Other</option></select></label>
             <label>Reference<input value={payment.reference} onChange={(event) => setPayment((current) => ({ ...current, reference: event.target.value }))} /></label>
@@ -942,7 +943,7 @@ function PaymentLedgerModal({ shipment, onClose, onSave }) {
             <button className="button secondary ledger-wide" type="submit"><Plus size={14} /> Add payment</button>
           </form></section>
           <section><h3>Add adjustment</h3><form className="ledger-entry-form" onSubmit={addAdjustment}>
-            <label>Date<input type="date" value={adjustment.date} onChange={(event) => setAdjustment((current) => ({ ...current, date: event.target.value }))} required /></label>
+            <label>Date<input type="date" value={adjustment.date} onClick={openDatePicker} onChange={(event) => setAdjustment((current) => ({ ...current, date: event.target.value }))} required /></label>
             <label>Amount ({shipment.currency})<input type="number" min="0.01" step="0.01" value={adjustment.amount} onChange={(event) => setAdjustment((current) => ({ ...current, amount: event.target.value }))} required /></label>
             <label>Type<select value={adjustment.type} onChange={(event) => setAdjustment((current) => ({ ...current, type: event.target.value }))}>{["Discount", "Credit Note", "Additional Charge", "Bank Charge", "Other"].map((type) => <option key={type}>{type}</option>)}</select></label>
             <label className="ledger-wide">Reason<input value={adjustment.reason} onChange={(event) => setAdjustment((current) => ({ ...current, reason: event.target.value }))} required /></label>
@@ -1130,6 +1131,90 @@ function ClearedShipmentModal({ shipment, onClose, onSave }) {
 const clearingChargeNames = ["Handling / Documentation", "Additional Handling / Documentation", "Agency Fee", "Transport Charges", "Weighing Charges", "RCT Expenses", "Grayline Charges", "RCT Charges", "SLPA Charges", "CICT Rent", "Transport Detention / Charges", "Shipping Line Charges", "Valuation Charges", "Grayline Expenses", "Yard OT / Container Yard OT", "Detail Examination", "D/O Charges", "D/O Extension Charges", "SAGT Charges", "Other Charges / Out Pass", "Rank Container Terminal Charges", "Customs OT", "Additional Container", "Customs Examination RCT", "Container Scan", "Scan Out", "CICT OT", "Liner Detention Charges", "Grayline Examination", "Labour Charges", "Port Charges", "E Unit Entry Pass", "Amendment Charges", "Demurrage", "RCT Examination", "Computer Charges", "Without Examination", "Red Channel Examination", "VAT and SSCL"];
 const makeEmptyPostCosting = () => ({ sourceShipmentId: "", company: "", material: "", supplier: "", country: "", paymentType: "T.T", fileNo: "", lcNo: "", lcOpenedDate: "", bank: "", blDate: "", etd: "", eta: "", clearingDate: "", maturityDate: "", settlementDate: "", priceFob: 0, priceCfr: 0, priceCif: 0, unitPriceMt: 0, quantityMt: 0, location: "", foreignCurrency: "USD", foreignValue: 0, conversionRate: 0, gainLoss: 0, bankRate: 0, insuranceLkr: 0, freightLkr: 0, customsRate: 0, customsInsurance: 0, customsFreight: 0, cidRate: 0, palRate: 10, xidPerKg: 12, ssclRate: 2.5, vatRate: 18, otherDuty: 0, clearingCharges: clearingChargeNames.map((name) => ({ name, amount: 0 })), extraInsurance: 0, unloading: 0, bankCommissionRate: 3, bankDocumentCharges: 0, remittance: 0 });
 
+function openPostCostingPdf(costing) {
+  const pdfTab = window.open("", "_blank");
+  if (!pdfTab) throw new Error("Please allow pop-ups to open the costing PDF.");
+  pdfTab.document.write("<title>Preparing costing PDF...</title><p style='font-family:Arial;padding:24px'>Preparing PDF...</p>");
+
+  try {
+    const n = (value) => Number(value || 0);
+    const quantityKg = n(costing.quantityMt) * 1000;
+    const billValue = n(costing.priceCif) || n(costing.quantityMt) * n(costing.unitPriceMt) || n(costing.priceCfr) || n(costing.priceFob) || n(costing.foreignValue);
+    const bankRate = n(costing.bankRate);
+    const billValueLkr = billValue * bankRate;
+    const cifLkr = billValueLkr + n(costing.insuranceLkr) + n(costing.freightLkr);
+    const customsCif = (billValue + n(costing.customsInsurance) + n(costing.customsFreight)) * n(costing.customsRate);
+    const cid = customsCif * n(costing.cidRate) / 100;
+    const pal = customsCif * n(costing.palRate) / 100;
+    const xid = quantityKg * n(costing.xidPerKg);
+    const sscl = (customsCif * 1.1 + cid + pal + xid) * n(costing.ssclRate) / 100;
+    const vat = (customsCif * 1.1 + cid + pal + xid) * n(costing.vatRate) / 100;
+    const totalDuty = cid + pal + xid + sscl + vat + n(costing.otherDuty);
+    const clearingTotal = (costing.clearingCharges || []).reduce((sum, item) => sum + n(item.amount), 0);
+    const landedBeforeBank = cifLkr + totalDuty + clearingTotal + n(costing.extraInsurance);
+    const bankCommission = billValueLkr * n(costing.bankCommissionRate) / 100;
+    const totalCost = landedBeforeBank + n(costing.unloading) + bankCommission + n(costing.bankDocumentCharges) + n(costing.remittance);
+    const costPerKg = quantityKg ? totalCost / quantityKg : 0;
+    const amount = (value) => n(value).toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 15;
+    const gap = 5;
+    const columnWidth = (pageWidth - margin * 2 - gap * 2) / 3;
+    const columns = [margin, margin + columnWidth + gap, margin + (columnWidth + gap) * 2];
+    const section = (title, x, y, width = columnWidth) => {
+      doc.setFillColor(235, 241, 251); doc.rect(x, y, width, 6, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(40, 101, 219); doc.text(title, x + 2, y + 4.2);
+      return y + 8;
+    };
+    const row = (label, value, x, y, width = columnWidth, height = 5.2) => {
+      const safeLabel = doc.splitTextToSize(String(label), width * 0.58)[0];
+      doc.setFont("helvetica", "normal"); doc.setFontSize(6.5); doc.setTextColor(94, 108, 126); doc.text(safeLabel, x + 1.5, y);
+      doc.setFont("helvetica", "bold"); doc.setTextColor(44, 55, 73); doc.text(String(value ?? "-"), x + width - 1.5, y, { align: "right" });
+      doc.setDrawColor(228, 233, 240); doc.line(x, y + 1.7, x + width, y + 1.7);
+      return y + height;
+    };
+    const rows = (items, x, y, width = columnWidth, height = 5.2) => items.reduce((nextY, [label, value]) => row(label, value, x, nextY, width, height), y);
+
+    doc.setFillColor(40, 101, 219); doc.rect(0, 0, pageWidth, 25, "F");
+    doc.setTextColor(255); doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text("POST COSTING", margin, 11);
+    doc.setFontSize(9); doc.text(`File ${costing.fileNo || "-"}`, margin, 18);
+    doc.setFont("helvetica", "normal"); doc.text(`${costing.material || ""}  |  ${new Date().toLocaleDateString("en-LK")}`, pageWidth - margin, 18, { align: "right" });
+
+    let y1 = section("IMPORT DETAILS", columns[0], 31);
+    y1 = rows([["Company", costing.company || "-"], ["Material", costing.material || "-"], ["Supplier", costing.supplier || "-"], ["Country", costing.country || "-"], ["Payment type", costing.paymentType || "-"], ["LC no.", costing.lcNo || "-"], ["Bank", costing.bank || "-"], ["ETD", costing.etd || "-"], ["ETA", costing.eta || "-"], ["Clearing date", costing.clearingDate || "-"]], columns[0], y1);
+    y1 = section("PRICE & INVOICE", columns[0], y1 + 3);
+    rows([["FOB", amount(costing.priceFob)], ["CFR", amount(costing.priceCfr)], ["CIF", amount(costing.priceCif)], ["Unit price / MT", amount(costing.unitPriceMt)], ["Quantity MT", amount(costing.quantityMt)], [`Bill value (${costing.foreignCurrency || "USD"})`, amount(billValue)], ["Bank rate for TT", amount(bankRate)], ["Bill value LKR", amount(billValueLkr)], ["CIF LKR", amount(cifLkr)]], columns[0], y1);
+
+    let y2 = section("CUSTOMS DUTY", columns[1], 31);
+    y2 = rows([["Customs CIF", amount(customsCif)], [`CID (${amount(costing.cidRate)}%)`, amount(cid)], [`PAL (${amount(costing.palRate)}%)`, amount(pal)], ["XID", amount(xid)], [`SSCL (${amount(costing.ssclRate)}%)`, amount(sscl)], [`VAT (${amount(costing.vatRate)}%)`, amount(vat)], ["Other duty", amount(costing.otherDuty)], ["Total duty", amount(totalDuty)]], columns[1], y2);
+    y2 = section("FINAL COST SUMMARY (LKR)", columns[1], y2 + 3);
+    rows([["Cost + duty + clearing", amount(landedBeforeBank)], ["Unloading charges", amount(costing.unloading)], [`Bank commission (${amount(costing.bankCommissionRate)}%)`, amount(bankCommission)], ["Bank document charges", amount(costing.bankDocumentCharges)], ["Remittance", amount(costing.remittance)], ["TOTAL COST", amount(totalCost)], ["Cost / Kg incl. SSCL + VAT", amount(costPerKg)], ["Cost / Kg excl. VAT", amount(costPerKg - (quantityKg ? vat / quantityKg : 0))]], columns[1], y2);
+
+    const clearingItems = (costing.clearingCharges || []).filter((item) => n(item.amount) !== 0).map((item) => [item.name, amount(item.amount)]);
+    let y3 = section("CLEARING CHARGES", columns[2], 31);
+    const clearingGap = 3;
+    const clearingWidth = (columnWidth - clearingGap) / 2;
+    const splitAt = Math.ceil(clearingItems.length / 2);
+    rows(clearingItems.slice(0, splitAt), columns[2], y3, clearingWidth, 5.2);
+    rows(clearingItems.slice(splitAt), columns[2] + clearingWidth + clearingGap, y3, clearingWidth, 5.2);
+    const clearingRows = Math.max(splitAt, clearingItems.length - splitAt);
+    y3 += clearingRows * 5.2 + 3;
+    y3 = section("CLEARING TOTAL", columns[2], y3);
+    row("Total clearing bill", amount(clearingTotal), columns[2], y3);
+
+    const safeFileNo = String(costing.fileNo || "costing").replace(/[^a-z0-9_-]+/gi, "-");
+    doc.setProperties({ title: `Post Costing - ${costing.fileNo || "Costing"}`, subject: costing.material || "Post costing" });
+    const pdfUrl = URL.createObjectURL(doc.output("blob"));
+    pdfTab.location.replace(pdfUrl);
+    pdfTab.document.title = `Post-Costing-${safeFileNo}.pdf`;
+    window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 300000);
+  } catch (error) {
+    pdfTab.close();
+    throw error;
+  }
+}
+
 function PostCosting({ shipments, consignees, countries, records, onSave, onDelete }) {
   const [draft, setDraft] = useState(makeEmptyPostCosting);
   const [saving, setSaving] = useState(false);
@@ -1137,8 +1222,7 @@ function PostCosting({ shipments, consignees, countries, records, onSave, onDele
   const n = (value) => Number(value || 0);
   const quantityKg = n(draft.quantityMt) * 1000;
   const billValue = n(draft.priceCif) || n(draft.quantityMt) * n(draft.unitPriceMt) || n(draft.priceCfr) || n(draft.priceFob) || n(draft.foreignValue);
-  const exchangeRate = n(draft.conversionRate) || n(draft.bankRate);
-  const billValueLkr = billValue * exchangeRate;
+  const billValueLkr = billValue * n(draft.bankRate);
   const cifLkr = billValueLkr + n(draft.insuranceLkr) + n(draft.freightLkr);
   const customsCif = (billValue + n(draft.customsInsurance) + n(draft.customsFreight)) * n(draft.customsRate);
   const cid = customsCif * n(draft.cidRate) / 100;
@@ -1198,11 +1282,11 @@ function PostCosting({ shipments, consignees, countries, records, onSave, onDele
     finally { setSaving(false); }
   }
   async function remove() { if (!draft.id || !window.confirm(`Delete post costing ${draft.fileNo}?`)) return; await onDelete(draft.id); setDraft(makeEmptyPostCosting()); }
-  const input = (field, label, type = "text") => <label>{label}<input type={type} min={type === "number" ? "0" : undefined} step={type === "number" ? "any" : undefined} value={draft[field]} onChange={(event) => set(field, event.target.value)} /></label>;
+  const input = (field, label, type = "text") => <label>{label}<input type={type} min={type === "number" ? "0" : undefined} step={type === "number" ? "any" : undefined} value={draft[field]} onClick={type === "date" ? openDatePicker : undefined} onChange={(event) => set(field, event.target.value)} /></label>;
 
   return <section className="post-costing-page">
     <PageTitle eyebrow="LANDED COST" title="Post costing" subtitle="Record and save shipment price details for each imported material." action={<button className="button primary" onClick={() => setDraft(makeEmptyPostCosting())}><Plus size={16} /> New post costing</button>} />
-    <div className="post-costing-layout"><aside className="panel costing-list"><div className="costing-list-head"><strong>Saved costings</strong><span>{records.length}</span></div>{records.length ? records.map((item) => <button type="button" key={item.id} className={draft.id === item.id ? "active" : ""} onClick={() => { setDraft({ ...makeEmptyPostCosting(), ...item, clearingCharges: item.clearingCharges || makeEmptyPostCosting().clearingCharges }); setFormError(""); }}><strong>File {item.fileNo}</strong><span>{item.material}</span></button>) : <div className="costing-empty">No post costings saved yet.</div>}</aside>
+    <div className="post-costing-layout"><aside className="panel costing-list"><div className="costing-list-head"><strong>Saved costings</strong><span>{records.length}</span></div>{records.length ? records.map((item) => <button type="button" key={item.id} className={draft.id === item.id ? "active" : ""} onClick={() => { setDraft({ ...makeEmptyPostCosting(), ...item, clearingCharges: item.clearingCharges || makeEmptyPostCosting().clearingCharges }); setFormError(""); }} onDoubleClick={() => { try { openPostCostingPdf(item); } catch (error) { setFormError(error.message || "Unable to generate the costing PDF."); } }} title="Click to edit · Double-click to open PDF"><strong>File {item.fileNo}</strong><span>{item.material}</span></button>) : <div className="costing-empty">No post costings saved yet.</div>}</aside>
       <form className="panel post-costing-form" onSubmit={submit}>{formError && <div className="inline-error">{formError}</div>}
         <div className="post-shipment-picker"><div><span>AUTO-FILL</span><h2>Select cleared shipment</h2><p>Shipment, material and price details will be loaded automatically.</p></div><label>Cleared shipment number<select value={draft.sourceShipmentId || ""} onChange={(event) => selectClearedShipment(event.target.value)}><option value="">Select shipment</option>{clearedShipments.map((shipment) => <option key={shipment.id} value={shipment.id}>{shipment.importNo} · {shipment.description}</option>)}</select></label></div>
         <div className="costing-section-title"><div><span>IMPORT DETAILS</span><h2>Shipment and material</h2></div>{draft.id && <button type="button" className="button secondary compact danger-text" onClick={remove}>Delete</button>}</div>
@@ -1213,13 +1297,12 @@ function PostCosting({ shipments, consignees, countries, records, onSave, onDele
         <div className="post-calculation-table">
           <div><span>Bill Value - {draft.foreignCurrency}</span><strong>{decimalAmount(billValue)}</strong></div>
           <div><span>Invoiced Qty - Kgs.</span><strong>{decimalAmount(quantityKg)}</strong></div>
-          <label>Sri Lankan Rupees Rate ({draft.foreignCurrency}/SLR)<input type="number" min="0" step="any" value={draft.conversionRate} onChange={(event) => set("conversionRate", event.target.value)} /></label>
+          <label>Bank rate for TT<input type="number" min="0" step="any" value={draft.bankRate} onChange={(event) => set("bankRate", event.target.value)} /></label>
           <label>GAIN / LOSS<input type="number" step="any" value={draft.gainLoss} onChange={(event) => set("gainLoss", event.target.value)} /></label>
           <div className="calculated"><span>Bill Value SLR</span><strong>{money(billValueLkr)}</strong></div>
           <label>Insurance<input type="number" min="0" step="any" value={draft.insuranceLkr} onChange={(event) => set("insuranceLkr", event.target.value)} /></label>
           <label>Freight<input type="number" min="0" step="any" value={draft.freightLkr} onChange={(event) => set("freightLkr", event.target.value)} /></label>
           <div className="calculated total"><span>CIF - SLR</span><strong>{money(cifLkr)}</strong></div>
-          <label className="bank-rate">Bank rate for TT<input type="number" min="0" step="any" value={draft.bankRate} onChange={(event) => set("bankRate", event.target.value)} /></label>
         </div>
         <div className="costing-section-title section-gap"><div><span>CUSTOMS</span><h2>Customs conversion</h2></div></div>
         <div className="post-calculation-table customs-table">
