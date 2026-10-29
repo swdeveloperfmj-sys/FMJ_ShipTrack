@@ -250,7 +250,7 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .tt-payments-panel th { padding-right: 9px; padding-left: 9px; }
 .tt-payments-panel td { padding-right: 9px; padding-left: 9px; }
 .tt-payments-panel th:first-child,.tt-payments-panel td:first-child { padding-left: 14px; }
-.payments-table { width: 100%; min-width: 1400px; table-layout: auto; }
+.payments-table { width: 100%; min-width: 1000px; table-layout: auto; }
 .payments-table th { height: 32px; padding-right: 5px; padding-left: 5px; font-size: 8px; letter-spacing: -.1px; }
 .payments-table td { height: 38px; padding: 4px 5px; font-size: 8.5px; }
 .payments-table th:first-child,.payments-table td:first-child { padding-left: 7px; }
@@ -258,10 +258,10 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .payments-table .company-tag { min-width: 24px; min-height: 19px; padding: 0 4px; font-size: 8px; }
 .payments-table .shipper-cell,
 .payments-table .shipper-header { width: 1%; white-space: nowrap; }
-.payments-table .description-cell { min-width: 70px; max-width: 105px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.payments-table .remarks-header,.payments-table .remarks-cell { width: 180px; min-width: 180px; max-width: 180px; }
-.payments-table .payment-status-header { width: 88px; min-width: 88px; }
-.payments-table .remarks-cell { overflow: visible; text-overflow: clip; white-space: normal; line-height: 1.4; overflow-wrap: anywhere; }
+.payments-table .description-cell { min-width: 56px; max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.payments-table .remarks-header,.payments-table .remarks-cell { width: 96px; min-width: 96px; max-width: 96px; }
+.payments-table .payment-status-header { width: 68px; min-width: 68px; }
+.payments-table .remarks-cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .payments-table .badge { min-height: 19px; padding: 0 5px; font-size: 8px; }
 .payments-table .tt-sent-update-button { min-height: 23px; padding: 0 5px; font-size: 8px; }
 .payments-table .inline-editing { min-width: 82px; padding: 2px; }
@@ -275,8 +275,8 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .to-be-tt-page .button,.shipment-list-page .pending-tt-toolbar-actions > .button,.shipment-summary-filter .button { min-height: 27px; padding: 0 9px; font-size: 8.5px; }
 :is(.to-be-tt-page,.shipment-list-page,.shipment-summary-sections) .payments-table thead tr { height: 22px; }
 :is(.to-be-tt-page,.shipment-list-page,.shipment-summary-sections) .payments-table tbody tr { height: 24px; }
-:is(.to-be-tt-page,.shipment-list-page,.shipment-summary-sections) .payments-table th { height: 22px; padding: 0 3px; font-size: 7px; line-height: 1; }
-:is(.to-be-tt-page,.shipment-list-page,.shipment-summary-sections) .payments-table td { height: 24px; padding: 0 3px; font-size: 7.5px; line-height: 1; }
+:is(.to-be-tt-page,.shipment-list-page,.shipment-summary-sections) .payments-table th { height: 22px; padding: 0 2px; font-size: 7px; line-height: 1; }
+:is(.to-be-tt-page,.shipment-list-page,.shipment-summary-sections) .payments-table td { height: 24px; padding: 0 2px; font-size: 7.5px; line-height: 1; }
 :is(.to-be-tt-page,.shipment-list-page,.shipment-summary-sections) .payments-table th:first-child,
 :is(.to-be-tt-page,.shipment-list-page,.shipment-summary-sections) .payments-table td:first-child { padding-left: 5px; }
 :is(.to-be-tt-page,.shipment-list-page,.shipment-summary-sections) .payments-table .import-id { font-size: 8px; }
