@@ -1175,6 +1175,12 @@ function openPostCostingPdf(costing) {
       return y + height;
     };
     const rows = (items, x, y, width = columnWidth, height = 5.2) => items.reduce((nextY, [label, value]) => row(label, value, x, nextY, width, height), y);
+    const highlightedRow = (label, value, x, y, width = columnWidth) => {
+      doc.setFillColor(226, 247, 236); doc.setDrawColor(74, 168, 126); doc.roundedRect(x, y - 3.8, width, 10, 1.5, 1.5, "FD");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(25, 112, 78); doc.text(label, x + 2.5, y + 1.5);
+      doc.setFontSize(11); doc.setTextColor(16, 132, 91); doc.text(String(value), x + width - 2.5, y + 1.5, { align: "right" });
+      return y + 11;
+    };
 
     doc.setFillColor(40, 101, 219); doc.rect(0, 0, pageWidth, 25, "F");
     doc.setTextColor(255); doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text("POST COSTING", margin, 11);
@@ -1189,7 +1195,8 @@ function openPostCostingPdf(costing) {
     let y2 = section("CUSTOMS DUTY", columns[1], 31);
     y2 = rows([["Customs CIF", amount(customsCif)], [`CID (${amount(costing.cidRate)}%)`, amount(cid)], [`PAL (${amount(costing.palRate)}%)`, amount(pal)], ["XID", amount(xid)], [`SSCL (${amount(costing.ssclRate)}%)`, amount(sscl)], [`VAT (${amount(costing.vatRate)}%)`, amount(vat)], ["Other duty", amount(costing.otherDuty)], ["Total duty", amount(totalDuty)]], columns[1], y2);
     y2 = section("FINAL COST SUMMARY (LKR)", columns[1], y2 + 3);
-    rows([["Cost + duty + clearing", amount(landedBeforeBank)], ["Unloading charges", amount(costing.unloading)], [`Bank commission (${amount(costing.bankCommissionRate)}%)`, amount(bankCommission)], ["Bank document charges", amount(costing.bankDocumentCharges)], ["Remittance", amount(costing.remittance)], ["TOTAL COST", amount(totalCost)], ["Cost / Kg incl. SSCL + VAT", amount(costPerKg)], ["Cost / Kg excl. VAT", amount(costPerKg - (quantityKg ? vat / quantityKg : 0))]], columns[1], y2);
+    y2 = rows([["Cost + duty + clearing", amount(landedBeforeBank)], ["Unloading charges", amount(costing.unloading)], [`Bank commission (${amount(costing.bankCommissionRate)}%)`, amount(bankCommission)], ["Bank document charges", amount(costing.bankDocumentCharges)], ["Remittance", amount(costing.remittance)], ["TOTAL COST", amount(totalCost)], ["Cost / Kg incl. SSCL + VAT", amount(costPerKg)]], columns[1], y2);
+    highlightedRow("COST / KG EXCL. VAT", amount(costPerKg - (quantityKg ? vat / quantityKg : 0)), columns[1], y2 + 1);
 
     const clearingItems = (costing.clearingCharges || []).filter((item) => n(item.amount) !== 0).map((item) => [item.name, amount(item.amount)]);
     let y3 = section("CLEARING CHARGES", columns[2], 31);
@@ -1219,6 +1226,7 @@ function PostCosting({ shipments, consignees, countries, records, onSave, onDele
   const [draft, setDraft] = useState(makeEmptyPostCosting);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const [costingQuery, setCostingQuery] = useState("");
   const n = (value) => Number(value || 0);
   const quantityKg = n(draft.quantityMt) * 1000;
   const billValue = n(draft.priceCif) || n(draft.quantityMt) * n(draft.unitPriceMt) || n(draft.priceCfr) || n(draft.priceFob) || n(draft.foreignValue);
@@ -1242,6 +1250,12 @@ function PostCosting({ shipments, consignees, countries, records, onSave, onDele
   const set = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
   const setCharge = (index, value) => setDraft((current) => ({ ...current, clearingCharges: current.clearingCharges.map((item, itemIndex) => itemIndex === index ? { ...item, amount: value } : item) }));
   const clearedShipments = shipments.filter((shipment) => shipment.status === "Cleared");
+  const filteredCostings = useMemo(() => {
+    const query = costingQuery.trim().toLowerCase();
+    if (!query) return records;
+    return records.filter((item) => [item.fileNo, item.material, item.company, item.supplier, item.country]
+      .some((value) => String(value || "").toLowerCase().includes(query)));
+  }, [records, costingQuery]);
 
   function selectClearedShipment(shipmentId) {
     const shipment = clearedShipments.find((item) => item.id === shipmentId);
@@ -1286,7 +1300,7 @@ function PostCosting({ shipments, consignees, countries, records, onSave, onDele
 
   return <section className="post-costing-page">
     <PageTitle eyebrow="LANDED COST" title="Post costing" subtitle="Record and save shipment price details for each imported material." action={<button className="button primary" onClick={() => setDraft(makeEmptyPostCosting())}><Plus size={16} /> New post costing</button>} />
-    <div className="post-costing-layout"><aside className="panel costing-list"><div className="costing-list-head"><strong>Saved costings</strong><span>{records.length}</span></div>{records.length ? records.map((item) => <button type="button" key={item.id} className={draft.id === item.id ? "active" : ""} onClick={() => { setDraft({ ...makeEmptyPostCosting(), ...item, clearingCharges: item.clearingCharges || makeEmptyPostCosting().clearingCharges }); setFormError(""); }} onDoubleClick={() => { try { openPostCostingPdf(item); } catch (error) { setFormError(error.message || "Unable to generate the costing PDF."); } }} title="Click to edit · Double-click to open PDF"><strong>File {item.fileNo}</strong><span>{item.material}</span></button>) : <div className="costing-empty">No post costings saved yet.</div>}</aside>
+    <div className="post-costing-layout"><aside className="panel costing-list"><div className="costing-list-head"><strong>Saved costings</strong><span>{costingQuery ? `${filteredCostings.length}/${records.length}` : records.length}</span></div><div className="costing-filter"><input type="search" value={costingQuery} onChange={(event) => setCostingQuery(event.target.value)} placeholder="Filter costings..." aria-label="Filter saved costings" />{costingQuery && <button type="button" onClick={() => setCostingQuery("")} aria-label="Clear costing filter"><X size={14} /></button>}</div>{filteredCostings.length ? filteredCostings.map((item) => <button type="button" key={item.id} className={draft.id === item.id ? "active" : ""} onClick={() => { setDraft({ ...makeEmptyPostCosting(), ...item, clearingCharges: item.clearingCharges || makeEmptyPostCosting().clearingCharges }); setFormError(""); }} onDoubleClick={() => { try { openPostCostingPdf(item); } catch (error) { setFormError(error.message || "Unable to generate the costing PDF."); } }} title="Click to edit · Double-click to open PDF"><strong>File {item.fileNo}</strong><span>{item.material}</span></button>) : <div className="costing-empty">{records.length ? "No matching costings." : "No post costings saved yet."}</div>}</aside>
       <form className="panel post-costing-form" onSubmit={submit}>{formError && <div className="inline-error">{formError}</div>}
         <div className="post-shipment-picker"><div><span>AUTO-FILL</span><h2>Select cleared shipment</h2><p>Shipment, material and price details will be loaded automatically.</p></div><label>Cleared shipment number<select value={draft.sourceShipmentId || ""} onChange={(event) => selectClearedShipment(event.target.value)}><option value="">Select shipment</option>{clearedShipments.map((shipment) => <option key={shipment.id} value={shipment.id}>{shipment.importNo} · {shipment.description}</option>)}</select></label></div>
         <div className="costing-section-title"><div><span>IMPORT DETAILS</span><h2>Shipment and material</h2></div>{draft.id && <button type="button" className="button secondary compact danger-text" onClick={remove}>Delete</button>}</div>

@@ -887,6 +887,11 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .costing-list { overflow: hidden; padding: 0; }
 .costing-list-head { display: flex; justify-content: space-between; padding: 16px; border-bottom: 1px solid #e8edf3; color: #344155; font-size: 11px; }
 .costing-list-head span { color: #8b98aa; }
+.costing-filter { position: relative; padding: 10px 11px; border-bottom: 1px solid #e8edf3; }
+.costing-filter input { width: 100%; height: 33px; padding: 0 31px 0 10px; border: 1px solid #dfe6ee; border-radius: 7px; outline: none; background: #fafbfd; color: #344155; font-size: 9px; }
+.costing-filter input:focus { border-color: #79a0e3; box-shadow: 0 0 0 3px #edf3ff; }
+.costing-filter button { position: absolute; top: 50%; right: 17px; display: grid; place-items: center; padding: 3px; border: 0; border-radius: 4px; background: transparent; color: #8793a3; transform: translateY(-50%); }
+.costing-filter button:hover { background: #e9eef5; color: #344155; }
 .costing-list > button { display: flex; width: 100%; flex-direction: column; gap: 5px; padding: 13px 16px; border: 0; border-bottom: 1px solid #edf1f5; background: transparent; color: #344155; text-align: left; cursor: pointer; }
 .costing-list > button span { color: #7f8da0; font-size: 9px; }
 .costing-list > button.active { background: #edf4ff; box-shadow: inset 3px 0 #2865db; }
@@ -919,6 +924,9 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .danger-text { color: #b94a48; }
 
 .app-shell[data-theme="dark"] .costing-list-head,.app-shell[data-theme="dark"] .costing-list > button,.app-shell[data-theme="dark"] .costing-ingredient { border-color: #2c3a4e; color: #d6e0ed; }
+.app-shell[data-theme="dark"] .costing-filter { border-color: #2c3a4e; }
+.app-shell[data-theme="dark"] .costing-filter input { border-color: #35465d; background: #142030; color: #e8eef7; }
+.app-shell[data-theme="dark"] .costing-filter button:hover { background: #29394d; color: #e8eef7; }
 .app-shell[data-theme="dark"] .costing-list > button.active { background: #223652; }
 .app-shell[data-theme="dark"] .costing-section-title h2,.app-shell[data-theme="dark"] .costing-ingredient > strong { color: #dce6f3; }
 .app-shell[data-theme="dark"] .costing-fields input,.app-shell[data-theme="dark"] .costing-ingredient input,.app-shell[data-theme="dark"] .costing-ingredient select { border-color: #35465d; background: #142030; color: #e8eef7; }
