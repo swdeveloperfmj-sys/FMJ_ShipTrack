@@ -11,7 +11,7 @@ export default function PreCostingSheet({ draft, result, change, changeItem }) {
   const breakdownTotal = ["breakdownClearing", "breakdownOther", "breakdownBank"].reduce((sum, key) => sum + Number(draft[key] || 0), 0);
   return <div className="pre-sheet-scroll"><div className="pre-sheet-paper">
     <table className="pre-sheet" aria-label="Pre costing worksheet">
-      <colgroup>{[144, 54, 71, 86, 90, 89, 86, 260, 78, 36, 78, 79, 86, 78, 85, 78, 78].map((width, index) => <col key={index} style={{ width }} />)}</colgroup>
+      <colgroup>{[144, 54, 71, 86, 90, 89, 86, 260, 78, 80, 78, 79, 86, 78, 85, 78, 78].map((width, index) => <col key={index} style={{ width }} />)}</colgroup>
       <thead>
         <tr className="sheet-title-row"><td colSpan={3}></td><td colSpan={8} className="sheet-title">{input("reference", "Costing title", "text", { required: true, maxLength: 200 })}</td><td colSpan={6}></td></tr>
         <tr className="sheet-title-row"><td colSpan={3} className="sheet-hs"><label>HS CODE: {input("hsCode", "HS code", "text", { maxLength: 200 })}</label></td><td colSpan={8} className="sheet-material">{input("material", "Material", "text", { required: true, maxLength: 200 })}</td><td colSpan={3}></td><td colSpan={2}>{input("date", "Date", "date")}</td><td></td></tr>

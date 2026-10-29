@@ -16,7 +16,7 @@
 .pre-costing-page .pre-costing-layout { grid-template-columns: minmax(0, 1fr); }
 .pre-costing-page .pre-costing-form { padding: 0; border-radius: 0; }
 .pre-sheet-scroll { overflow-x: auto; }
-.pre-sheet-paper { min-width: 1550px; padding: 0 0 40px; color: #000; background-color: white; background-image: linear-gradient(#d4d4d4 1px, transparent 1px), linear-gradient(90deg, #d4d4d4 1px, transparent 1px); background-size: 80px 20px; font: 12px Arial, sans-serif; }
+.pre-sheet-paper { min-width: 1550px; padding: 0 0 40px; color: #000; background-color: white; font: 12px Arial, sans-serif; }
 .pre-sheet-paper .pre-sheet { table-layout: fixed; width: 100%; border-collapse: collapse; color: #000; font: 12px Arial, sans-serif; }
 .pre-sheet-paper .pre-sheet tr { background: transparent; }
 .pre-sheet-paper .pre-sheet td,.pre-sheet-paper .pre-sheet th { height: 21px; padding: 1px 3px; border: 1px solid #000; color: #000; background: #fff; text-align: right; font: inherit; white-space: normal; letter-spacing: 0; }
@@ -33,7 +33,7 @@
 .pre-sheet-paper .pre-sheet tbody td:first-child,.pre-sheet-paper .pre-sheet tfoot td:first-child { text-align: left; }
 .pre-sheet-paper .pre-sheet .sheet-highlight { background: #ff0; }
 .pre-sheet-paper .pre-sheet tfoot td { border-bottom: 3px double #000; }
-.pre-sheet-paper .pre-sheet tfoot td:nth-child(2),.pre-sheet-paper .pre-sheet tfoot td:nth-last-child(-n+2) { border: 1px solid #d4d4d4; background: transparent; }
+.pre-sheet-paper .pre-sheet tfoot td:nth-child(2),.pre-sheet-paper .pre-sheet tfoot td:nth-last-child(-n+2) { border: 0; background: transparent; }
 .sheet-breakdown { display: grid; grid-template-columns: 90px 86px minmax(350px, 1fr); gap: 0; width: 58%; margin-top: 40px; margin-left: 27%; text-align: left; line-height: 20px; }
 .sheet-breakdown > div { background: #fff; padding: 0 2px; }
 .sheet-breakdown > div:nth-child(3n+2) { text-align: right; }
@@ -743,7 +743,7 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .app-shell .pre-sheet-paper .sheet-breakdown > div,
 .app-shell .pre-sheet-paper .sheet-breakdown-total { color: #111; background-color: #fff; }
 .app-shell .pre-sheet-paper .pre-sheet tfoot td:nth-child(2),
-.app-shell .pre-sheet-paper .pre-sheet tfoot td:nth-last-child(-n+2) { border: 1px solid #d4d4d4; background-color: transparent; }
+.app-shell .pre-sheet-paper .pre-sheet tfoot td:nth-last-child(-n+2) { border: 0; background-color: transparent; }
 .app-shell[data-theme="dark"] tbody tr:hover { background: #202d3f; }
 .app-shell[data-theme="dark"] .import-id,
 .app-shell[data-theme="dark"] .breadcrumb strong,
