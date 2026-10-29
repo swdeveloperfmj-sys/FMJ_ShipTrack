@@ -39,6 +39,7 @@ import {
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
 import { api } from "./api.js";
+import PreCosting from "./PreCosting.jsx";
 
 const navigation = [
   { label: "Dashboard", icon: LayoutDashboard, key: "dashboard" },
@@ -51,6 +52,7 @@ const navigation = [
   { label: "Countries", icon: Globe2, key: "countries" },
   { label: "Material analysis", icon: Box, key: "materials" },
   { label: "Post costing", icon: FileText, key: "post-costing" },
+  { label: "Pre costing", icon: FileText, key: "pre-costing" },
 ];
 const reportNavigation = [
   { label: "SHIPMENT", key: "report-shipment" },
@@ -2332,6 +2334,7 @@ export default function App() {
     if (error && !shipments.length) return <div className="error-state"><strong>Unable to load shipments</strong><span>{error}</span><button className="button secondary" onClick={refresh}>Try again</button></div>;
     if (active === "dashboard") return <Dashboard shipments={shipments} consignees={consignees} analytics={analytics} accountName={authState?.name || authState?.username} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} onImport={() => setModalShipmentImport(true)} />;
     if (active === "materials") return <MaterialAnalysis materials={materials} onImport={importMaterials} onSave={saveMaterial} />;
+    if (active === "pre-costing") return <PreCosting />;
     if (active === "post-costing") return <PostCosting shipments={shipments} consignees={consignees} countries={countries} materials={materials} records={postCostings} onSave={savePostCosting} onDelete={deletePostCosting} />;
     if (active === "to-be-tt") {
       const pendingTTShipments = shipments.filter((shipment) =>
@@ -2423,7 +2426,7 @@ export default function App() {
             </div>
           </div>
         </header>
-        <main className={`content ${["materials", "post-costing", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", ...reportNavigation.map((item) => item.key)].includes(active) ? "content-wide" : ""}`}>
+        <main className={`content ${["materials", "post-costing", "pre-costing", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", ...reportNavigation.map((item) => item.key)].includes(active) ? "content-wide" : ""}`}>
           {renderContent()}
           <footer className="app-footer"><span>© 2026 FMJ ShipTrack</span><span>Shipment management, made simpler.</span></footer>
         </main>

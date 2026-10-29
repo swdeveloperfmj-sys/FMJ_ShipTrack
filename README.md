@@ -2,6 +2,20 @@
 
 Shipment and import management workspace with a React dashboard and an Express API.
 
+**Pre costing** provides item-level import estimates based on the SEA C&F worksheet.
+Enter quantities in kg, full item invoice values in USD, an LKR/USD exchange rate,
+and shipment-level LKR charges. Header inputs are limited to the worksheet's
+costing title, date, material and HS code. Charges are allocated by USD invoice value; VAT is
+excluded from the displayed net cost per kg. Save and reopen estimates from MongoDB,
+edit or delete them, and download a landscape PDF. **Load reference example** fills
+the supplied Master Batches example without saving it. Its clearing amount is
+58,000 LKR; the source breakdown totals 57,600 LKR.
+The source's manually entered net cost/kg is 19,503; the page calculates
+the VAT-exclusive value as (569,845 - 82,250) / 25 = 19,503.80 LKR/kg.
+User accounts need **Pre costing** sidebar access, assigned by the super admin.
+Restart the API after updating to enable `/api/pre-costings`.
+Run the costing checks with `node --test Frontend/src/preCosting.test.js`.
+
 ## Start the application
 
 Use two terminals from the project folders:

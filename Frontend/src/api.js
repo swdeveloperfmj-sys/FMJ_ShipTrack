@@ -20,6 +20,10 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  getPreCostings: () => request("/pre-costings"),
+  createPreCosting: (costing) => request("/pre-costings", { method: "POST", body: JSON.stringify(costing) }),
+  updatePreCosting: (id, costing) => request(`/pre-costings/${id}`, { method: "PUT", body: JSON.stringify(costing) }),
+  deletePreCosting: (id) => request(`/pre-costings/${id}`, { method: "DELETE" }),
   getAuthStatus: () => request("/auth/status"),
   setupSuperAdmin: (credentials) =>
     request("/auth/setup", { method: "POST", body: JSON.stringify(credentials) }),
