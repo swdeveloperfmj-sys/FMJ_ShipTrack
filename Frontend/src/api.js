@@ -55,6 +55,15 @@ export const api = {
   deleteConsignee: (id) => request(`/consignees/${id}`, { method: "DELETE" }),
   getShipments: () => request("/shipments"),
   getAnalytics: () => request("/analytics"),
+  getMaterials: () => request("/materials"),
+  updateMaterial: (id, material) =>
+    request(`/materials/${id}`, { method: "PUT", body: JSON.stringify(material) }),
+  importMaterials: (materials) =>
+    request("/materials/import", { method: "POST", body: JSON.stringify({ materials }) }),
+  getPostCostings: () => request("/post-costings"),
+  createPostCosting: (costing) => request("/post-costings", { method: "POST", body: JSON.stringify(costing) }),
+  updatePostCosting: (id, costing) => request(`/post-costings/${id}`, { method: "PUT", body: JSON.stringify(costing) }),
+  deletePostCosting: (id) => request(`/post-costings/${id}`, { method: "DELETE" }),
   createShipment: (shipment) =>
     request("/shipments", { method: "POST", body: JSON.stringify(shipment) }),
   updateShipment: (id, shipment) =>

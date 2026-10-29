@@ -37,6 +37,7 @@ import {
   X,
 } from "lucide-react";
 import * as XLSX from "xlsx";
+import { jsPDF } from "jspdf";
 import { api } from "./api.js";
 
 const navigation = [
@@ -48,6 +49,8 @@ const navigation = [
   { label: "Consignee Reports", icon: Building2, key: "companies" },
   { label: "Consignees", icon: ContactRound, key: "consignees" },
   { label: "Countries", icon: Globe2, key: "countries" },
+  { label: "Material analysis", icon: Box, key: "materials" },
+  { label: "Post costing", icon: FileText, key: "post-costing" },
 ];
 const reportNavigation = [
   { label: "SHIPMENT", key: "report-shipment" },
@@ -84,6 +87,7 @@ const emptyShipment = {
   importNo: "",
   company: "",
   supplier: "",
+  country: "",
   consignee: "",
   description: "",
   transportMode: "",
@@ -192,6 +196,65 @@ function parseShipmentWorkbook(file, consignees, existingShipments) {
     const workflow = importSection === "cleared" ? { status: "Cleared", clearanceStatus: "Cleared", paymentStatus: "Paid" } : importSection === "under-clearing" ? { status: "Under Clearing", paymentStatus: "Paid" } : importSection === "tt-sent" ? { status: "Pending", paymentStatus: "Paid" } : { status: "Pending", paymentStatus: "Pending" };
     return { row: headerIndex + index + 2, errors, shipment: { ...emptyShipment, importNo, company: consignee?.code || "", consignee: consignee?.name || consigneeName, supplier: importText(values.supplier), description: importText(values.description), transportMode, fclLcl, incoterm, incotermLocation, currency, totalCost, etd: importDate(values.etd), eta: importDate(values.eta), duty: importAmount(values.duty), doCharges: importAmount(values.doCharges), remarks, paymentMethod: "Advance TT", paymentTerms: "ADVANCE_TT", ...workflow } };
   }).filter(Boolean);
+}
+
+const materialMonthNumbers = { JAN: 1, JANUARY: 1, FEB: 2, FEBRUARY: 2, MAR: 3, MARCH: 3, APR: 4, APRIL: 4, MAY: 5, JUN: 6, JUNE: 6, JUL: 7, JULY: 7, AUG: 8, AUGUST: 8, SEP: 9, SEPT: 9, SEPTEMBER: 9, OCT: 10, OCTOBER: 10, NOV: 11, NOVEMBER: 11, DEC: 12, DECEMBER: 12 };
+
+function parseMaterialWorkbook(file) {
+  const workbook = XLSX.read(file, { type: "array", cellDates: true });
+  const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1, defval: "", raw: true });
+  const yearCell = rows.flat().find((value) => /^20\d{2}$/.test(String(value).trim()));
+  const year = Number(yearCell) || new Date().getFullYear();
+  const totals = new Map();
+  for (let companyRowIndex = 1; companyRowIndex < rows.length; companyRowIndex += 1) {
+    const companyRow = rows[companyRowIndex];
+    const companyColumns = companyRow.map((value, column) => ({ column, value: String(value || "").trim().toUpperCase() })).filter(({ value }) => /^(FMJ|AOP|RLA?|JD|UB)$/.test(value));
+    if (companyColumns.length < 2) continue;
+    const materialRow = rows[companyRowIndex - 1] || [];
+    for (let rowIndex = companyRowIndex + 1; rowIndex < rows.length; rowIndex += 1) {
+      const row = rows[rowIndex];
+      const monthNumber = materialMonthNumbers[String(row?.[0] || "").trim().toUpperCase()];
+      if (!monthNumber) {
+        if (rowIndex > companyRowIndex + 1 && row?.some((value) => materialMonthNumbers[String(value || "").trim().toUpperCase()])) break;
+        continue;
+      }
+      const month = `${year}-${String(monthNumber).padStart(2, "0")}`;
+      for (const { column } of companyColumns) {
+        const quantity = Number(row[column]);
+        if (!Number.isFinite(quantity) || quantity < 0) continue;
+        let materialName = "";
+        for (let materialColumn = column; materialColumn >= 0; materialColumn -= 1) {
+          const candidate = String(materialRow[materialColumn] || "").trim();
+          if (candidate && candidate !== String(year)) { materialName = candidate.replace(/\s+/g, " "); break; }
+        }
+        if (!materialName) continue;
+        if (!totals.has(materialName)) totals.set(materialName, new Map());
+        const materialMonths = totals.get(materialName);
+        materialMonths.set(month, (materialMonths.get(month) || 0) + quantity);
+      }
+    }
+  }
+  const materials = [...totals].map(([name, months]) => ({
+    name,
+    unit: "MT",
+    monthlyPurchases: [...months].map(([month, quantity]) => ({ month, quantity })).sort((a, b) => a.month.localeCompare(b.month)),
+  }));
+  if (!materials.length) throw new Error("No monthly material purchase rows were found in this workbook.");
+  return materials;
+}
+
+function materialForecast(material) {
+  const activeMonths = [...(material.monthlyPurchases || [])].filter((entry) => Number(entry.quantity) > 0).sort((a, b) => a.month.localeCompare(b.month)).slice(-3).reverse();
+  const baseWeights = [0.5, 0.3, 0.2].slice(0, activeMonths.length);
+  const weightTotal = baseWeights.reduce((sum, weight) => sum + weight, 0) || 1;
+  const forecast = activeMonths.reduce((sum, entry, index) => sum + Number(entry.quantity) * baseWeights[index], 0) / weightTotal;
+  const available = Number(material.currentStock || 0) + Number(material.onOrder || 0);
+  const target = forecast * (Number(material.leadTimeDays || 30) / 30 + Number(material.safetyStockMonths ?? 0.5));
+  const recommended = Math.max(0, target - available);
+  const coverage = forecast > 0 ? available / forecast : null;
+  const leadDemand = forecast * Number(material.leadTimeDays || 30) / 30;
+  const status = !forecast ? "No history" : available < leadDemand ? "Critical" : recommended > 0 ? "Reorder" : "Healthy";
+  return { forecast, recommended, coverage, status };
 }
 
 const money = (value) =>
@@ -480,7 +543,7 @@ function InlineEditCell({ shipment, field, value, children, onSave, type = "text
   return <td className={`${className || ""} ${editing ? "inline-editing" : "inline-editable"}`.trim()} onDoubleClick={(event) => { event.stopPropagation(); setEditing(true); }} title={editing ? undefined : `${value || "Empty"} — double-click to edit`}>
     {editing ? (type === "select"
       ? <select ref={inputRef} value={draft} disabled={saving} onChange={(event) => { setDraft(event.target.value); commit(event.target.value); }} onKeyDown={(event) => { if (event.key === "Escape") setEditing(false); }} onBlur={() => { if (!saving) setEditing(false); }}>{options.map((option) => <option key={typeof option === "string" ? option : option.value} value={typeof option === "string" ? option : option.value}>{typeof option === "string" ? option : option.label}</option>)}</select>
-      : <input ref={inputRef} type={type} value={draft} disabled={saving} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") commit(); if (event.key === "Escape") setEditing(false); }} onBlur={() => commit()} />)
+      : <input ref={inputRef} type={type} value={draft} disabled={saving} onClick={type === "date" ? openDatePicker : undefined} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") commit(); if (event.key === "Escape") setEditing(false); }} onBlur={() => commit()} />)
       : children}
   </td>;
 }
@@ -756,6 +819,7 @@ function ShipmentModal({ initial, consignees, countries, currencies, onClose, on
               <label className="shipment-field shipment-field--import">Imp No.<input name="importNo" value={form.importNo} onChange={change} required placeholder="FMJ-2026-003" /></label>
               <label className="shipment-field shipment-field--consignee">Consignee<select name="company" value={form.company} onChange={(event) => { const code = event.target.value; setForm((current) => ({ ...current, company: code, consignee: consignees.find((item) => item.code === code)?.name || current.consignee })); }} required><option value="" disabled>Select a consignee</option>{consignees.map((consignee) => <option key={consignee.id} value={consignee.code}>{consignee.name}</option>)}</select></label>
               <label className="shipment-field shipment-field--shipper">Shipper<input name="supplier" value={form.supplier} onChange={change} required /></label>
+              <label className="shipment-field shipment-field--conditional">Country<select name="country" value={form.country || ""} onChange={change}><option value="">Select a country</option>{form.country && !countries.some((country) => country.name === form.country) && <option value={form.country}>{form.country} (existing)</option>}{countries.map((country) => <option key={country.id} value={country.name}>{country.name}</option>)}</select></label>
               <label className="shipment-field shipment-field--description">Item Description<input name="description" value={form.description} onChange={change} required /></label>
               <label className="shipment-field shipment-field--payment-terms">Payment Terms<select name="paymentTerms" value={form.paymentTerms} onChange={(event) => {
                 const paymentTerms = event.target.value;
@@ -871,7 +935,7 @@ function PaymentLedgerModal({ shipment, onClose, onSave }) {
         </div>
         <div className="payment-ledger-columns">
           <section><h3>Add payment</h3><form className="ledger-entry-form" onSubmit={addPayment}>
-            <label>Date<input type="date" value={payment.date} onChange={(event) => setPayment((current) => ({ ...current, date: event.target.value }))} required /></label>
+            <label>Date<input type="date" value={payment.date} onClick={openDatePicker} onChange={(event) => setPayment((current) => ({ ...current, date: event.target.value }))} required /></label>
             <label>Amount ({shipment.currency})<input type="number" min="0.01" step="0.01" value={payment.amount} onChange={(event) => setPayment((current) => ({ ...current, amount: event.target.value }))} required /></label>
             <label>Method<select value={payment.method} onChange={(event) => setPayment((current) => ({ ...current, method: event.target.value }))}><option>TT</option><option>LC</option><option>DP</option><option>DA</option><option>Other</option></select></label>
             <label>Reference<input value={payment.reference} onChange={(event) => setPayment((current) => ({ ...current, reference: event.target.value }))} /></label>
@@ -879,7 +943,7 @@ function PaymentLedgerModal({ shipment, onClose, onSave }) {
             <button className="button secondary ledger-wide" type="submit"><Plus size={14} /> Add payment</button>
           </form></section>
           <section><h3>Add adjustment</h3><form className="ledger-entry-form" onSubmit={addAdjustment}>
-            <label>Date<input type="date" value={adjustment.date} onChange={(event) => setAdjustment((current) => ({ ...current, date: event.target.value }))} required /></label>
+            <label>Date<input type="date" value={adjustment.date} onClick={openDatePicker} onChange={(event) => setAdjustment((current) => ({ ...current, date: event.target.value }))} required /></label>
             <label>Amount ({shipment.currency})<input type="number" min="0.01" step="0.01" value={adjustment.amount} onChange={(event) => setAdjustment((current) => ({ ...current, amount: event.target.value }))} required /></label>
             <label>Type<select value={adjustment.type} onChange={(event) => setAdjustment((current) => ({ ...current, type: event.target.value }))}>{["Discount", "Credit Note", "Additional Charge", "Bank Charge", "Other"].map((type) => <option key={type}>{type}</option>)}</select></label>
             <label className="ledger-wide">Reason<input value={adjustment.reason} onChange={(event) => setAdjustment((current) => ({ ...current, reason: event.target.value }))} required /></label>
@@ -1062,6 +1126,372 @@ function ClearedShipmentModal({ shipment, onClose, onSave }) {
       </form>
     </section>
   </div>;
+}
+
+const clearingChargeNames = ["Handling / Documentation", "Additional Handling / Documentation", "Agency Fee", "Transport Charges", "Weighing Charges", "RCT Expenses", "Grayline Charges", "RCT Charges", "SLPA Charges", "CICT Rent", "Transport Detention / Charges", "Shipping Line Charges", "Valuation Charges", "Grayline Expenses", "Yard OT / Container Yard OT", "Detail Examination", "D/O Charges", "D/O Extension Charges", "SAGT Charges", "Other Charges / Out Pass", "Rank Container Terminal Charges", "Customs OT", "Additional Container", "Customs Examination RCT", "Container Scan", "Scan Out", "CICT OT", "Liner Detention Charges", "Grayline Examination", "Labour Charges", "Port Charges", "E Unit Entry Pass", "Amendment Charges", "Demurrage", "RCT Examination", "Computer Charges", "Without Examination", "Red Channel Examination", "VAT and SSCL"];
+const makeEmptyPostCosting = () => ({ sourceShipmentId: "", company: "", material: "", supplier: "", country: "", paymentType: "T.T", fileNo: "", lcNo: "", lcOpenedDate: "", bank: "", blDate: "", etd: "", eta: "", clearingDate: "", maturityDate: "", settlementDate: "", priceFob: 0, priceCfr: 0, priceCif: 0, unitPriceMt: 0, quantityMt: 0, location: "", foreignCurrency: "USD", foreignValue: 0, conversionRate: 0, gainLoss: 0, bankRate: 0, insuranceLkr: 0, freightLkr: 0, customsRate: 0, customsInsurance: 0, customsFreight: 0, cidRate: 0, palRate: 10, xidPerKg: 12, ssclRate: 2.5, vatRate: 18, otherDuty: 0, clearingCharges: clearingChargeNames.map((name) => ({ name, amount: 0 })), extraInsurance: 0, unloading: 0, bankCommissionRate: 3, bankDocumentCharges: 0, remittance: 0 });
+
+function openPostCostingPdf(costing) {
+  const pdfTab = window.open("", "_blank");
+  if (!pdfTab) throw new Error("Please allow pop-ups to open the costing PDF.");
+  pdfTab.document.write("<title>Preparing costing PDF...</title><p style='font-family:Arial;padding:24px'>Preparing PDF...</p>");
+
+  try {
+    const n = (value) => Number(value || 0);
+    const quantityKg = n(costing.quantityMt) * 1000;
+    const billValue = n(costing.priceCif) || n(costing.quantityMt) * n(costing.unitPriceMt) || n(costing.priceCfr) || n(costing.priceFob) || n(costing.foreignValue);
+    const bankRate = n(costing.bankRate);
+    const billValueLkr = billValue * bankRate;
+    const cifLkr = billValueLkr + n(costing.insuranceLkr) + n(costing.freightLkr);
+    const customsCif = (billValue + n(costing.customsInsurance) + n(costing.customsFreight)) * n(costing.customsRate);
+    const cid = customsCif * n(costing.cidRate) / 100;
+    const pal = customsCif * n(costing.palRate) / 100;
+    const xid = quantityKg * n(costing.xidPerKg);
+    const sscl = (customsCif * 1.1 + cid + pal + xid) * n(costing.ssclRate) / 100;
+    const vat = (customsCif * 1.1 + cid + pal + xid) * n(costing.vatRate) / 100;
+    const totalDuty = cid + pal + xid + sscl + vat + n(costing.otherDuty);
+    const clearingTotal = (costing.clearingCharges || []).reduce((sum, item) => sum + n(item.amount), 0);
+    const landedBeforeBank = cifLkr + totalDuty + clearingTotal + n(costing.extraInsurance);
+    const bankCommission = billValueLkr * n(costing.bankCommissionRate) / 100;
+    const totalCost = landedBeforeBank + n(costing.unloading) + bankCommission + n(costing.bankDocumentCharges) + n(costing.remittance);
+    const costPerKg = quantityKg ? totalCost / quantityKg : 0;
+    const amount = (value) => n(value).toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 15;
+    const gap = 5;
+    const columnWidth = (pageWidth - margin * 2 - gap * 2) / 3;
+    const columns = [margin, margin + columnWidth + gap, margin + (columnWidth + gap) * 2];
+    const section = (title, x, y, width = columnWidth) => {
+      doc.setFillColor(235, 241, 251); doc.rect(x, y, width, 6, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(40, 101, 219); doc.text(title, x + 2, y + 4.2);
+      return y + 8;
+    };
+    const row = (label, value, x, y, width = columnWidth, height = 5.2) => {
+      const safeLabel = doc.splitTextToSize(String(label), width * 0.58)[0];
+      doc.setFont("helvetica", "normal"); doc.setFontSize(6.5); doc.setTextColor(94, 108, 126); doc.text(safeLabel, x + 1.5, y);
+      doc.setFont("helvetica", "bold"); doc.setTextColor(44, 55, 73); doc.text(String(value ?? "-"), x + width - 1.5, y, { align: "right" });
+      doc.setDrawColor(228, 233, 240); doc.line(x, y + 1.7, x + width, y + 1.7);
+      return y + height;
+    };
+    const rows = (items, x, y, width = columnWidth, height = 5.2) => items.reduce((nextY, [label, value]) => row(label, value, x, nextY, width, height), y);
+    const highlightedRow = (label, value, x, y, width = columnWidth) => {
+      doc.setFillColor(226, 247, 236); doc.setDrawColor(74, 168, 126); doc.roundedRect(x, y - 3.8, width, 10, 1.5, 1.5, "FD");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(25, 112, 78); doc.text(label, x + 2.5, y + 1.5);
+      doc.setFontSize(11); doc.setTextColor(16, 132, 91); doc.text(String(value), x + width - 2.5, y + 1.5, { align: "right" });
+      return y + 11;
+    };
+
+    doc.setFillColor(40, 101, 219); doc.rect(0, 0, pageWidth, 25, "F");
+    doc.setTextColor(255); doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text("POST COSTING", margin, 11);
+    doc.setFontSize(9); doc.text(`File ${costing.fileNo || "-"}`, margin, 18);
+    doc.setFont("helvetica", "normal"); doc.text(`${costing.material || ""}  |  ${new Date().toLocaleDateString("en-LK")}`, pageWidth - margin, 18, { align: "right" });
+
+    let y1 = section("IMPORT DETAILS", columns[0], 31);
+    y1 = rows([["Company", costing.company || "-"], ["Material", costing.material || "-"], ["Supplier", costing.supplier || "-"], ["Country", costing.country || "-"], ["Payment type", costing.paymentType || "-"], ["LC no.", costing.lcNo || "-"], ["Bank", costing.bank || "-"], ["ETD", costing.etd || "-"], ["ETA", costing.eta || "-"], ["Clearing date", costing.clearingDate || "-"]], columns[0], y1);
+    y1 = section("PRICE & INVOICE", columns[0], y1 + 3);
+    rows([["FOB", amount(costing.priceFob)], ["CFR", amount(costing.priceCfr)], ["CIF", amount(costing.priceCif)], ["Unit price / MT", amount(costing.unitPriceMt)], ["Quantity MT", amount(costing.quantityMt)], [`Bill value (${costing.foreignCurrency || "USD"})`, amount(billValue)], ["Bank rate for TT", amount(bankRate)], ["Bill value LKR", amount(billValueLkr)], ["CIF LKR", amount(cifLkr)]], columns[0], y1);
+
+    let y2 = section("CUSTOMS DUTY", columns[1], 31);
+    y2 = rows([["Customs CIF", amount(customsCif)], [`CID (${amount(costing.cidRate)}%)`, amount(cid)], [`PAL (${amount(costing.palRate)}%)`, amount(pal)], ["XID", amount(xid)], [`SSCL (${amount(costing.ssclRate)}%)`, amount(sscl)], [`VAT (${amount(costing.vatRate)}%)`, amount(vat)], ["Other duty", amount(costing.otherDuty)], ["Total duty", amount(totalDuty)]], columns[1], y2);
+    y2 = section("FINAL COST SUMMARY (LKR)", columns[1], y2 + 3);
+    y2 = rows([["Cost + duty + clearing", amount(landedBeforeBank)], ["Unloading charges", amount(costing.unloading)], [`Bank commission (${amount(costing.bankCommissionRate)}%)`, amount(bankCommission)], ["Bank document charges", amount(costing.bankDocumentCharges)], ["Remittance", amount(costing.remittance)], ["TOTAL COST", amount(totalCost)], ["Cost / Kg incl. SSCL + VAT", amount(costPerKg)]], columns[1], y2);
+    highlightedRow("COST / KG EXCL. VAT", amount(costPerKg - (quantityKg ? vat / quantityKg : 0)), columns[1], y2 + 1);
+
+    const clearingItems = (costing.clearingCharges || []).filter((item) => n(item.amount) !== 0).map((item) => [item.name, amount(item.amount)]);
+    let y3 = section("CLEARING CHARGES", columns[2], 31);
+    const clearingGap = 3;
+    const clearingWidth = (columnWidth - clearingGap) / 2;
+    const splitAt = Math.ceil(clearingItems.length / 2);
+    rows(clearingItems.slice(0, splitAt), columns[2], y3, clearingWidth, 5.2);
+    rows(clearingItems.slice(splitAt), columns[2] + clearingWidth + clearingGap, y3, clearingWidth, 5.2);
+    const clearingRows = Math.max(splitAt, clearingItems.length - splitAt);
+    y3 += clearingRows * 5.2 + 3;
+    y3 = section("CLEARING TOTAL", columns[2], y3);
+    row("Total clearing bill", amount(clearingTotal), columns[2], y3);
+
+    const safeFileNo = String(costing.fileNo || "costing").replace(/[^a-z0-9_-]+/gi, "-");
+    doc.setProperties({ title: `Post Costing - ${costing.fileNo || "Costing"}`, subject: costing.material || "Post costing" });
+    const pdfUrl = URL.createObjectURL(doc.output("blob"));
+    pdfTab.location.replace(pdfUrl);
+    pdfTab.document.title = `Post-Costing-${safeFileNo}.pdf`;
+    window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 300000);
+  } catch (error) {
+    pdfTab.close();
+    throw error;
+  }
+}
+
+function PostCosting({ shipments, consignees, countries, records, onSave, onDelete }) {
+  const [draft, setDraft] = useState(makeEmptyPostCosting);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [costingQuery, setCostingQuery] = useState("");
+  const n = (value) => Number(value || 0);
+  const quantityKg = n(draft.quantityMt) * 1000;
+  const billValue = n(draft.priceCif) || n(draft.quantityMt) * n(draft.unitPriceMt) || n(draft.priceCfr) || n(draft.priceFob) || n(draft.foreignValue);
+  const billValueLkr = billValue * n(draft.bankRate);
+  const cifLkr = billValueLkr + n(draft.insuranceLkr) + n(draft.freightLkr);
+  const customsCif = (billValue + n(draft.customsInsurance) + n(draft.customsFreight)) * n(draft.customsRate);
+  const cid = customsCif * n(draft.cidRate) / 100;
+  const pal = customsCif * n(draft.palRate) / 100;
+  const xid = quantityKg * n(draft.xidPerKg);
+  const sscl = (customsCif * 1.1 + cid + pal + xid) * n(draft.ssclRate) / 100;
+  const vat = (customsCif * 1.1 + cid + pal + xid) * n(draft.vatRate) / 100;
+  const totalDuty = cid + pal + xid + sscl + vat + n(draft.otherDuty);
+  const costAndDuty = cifLkr + totalDuty;
+  const clearingTotal = (draft.clearingCharges || []).reduce((sum, item) => sum + n(item.amount), 0);
+  const landedBeforeBank = costAndDuty + clearingTotal + n(draft.extraInsurance);
+  const bankCommission = billValueLkr * n(draft.bankCommissionRate) / 100;
+  const totalCost = landedBeforeBank + n(draft.unloading) + bankCommission + n(draft.bankDocumentCharges) + n(draft.remittance);
+  const costPerKg = quantityKg ? totalCost / quantityKg : 0;
+  const vatPerKg = quantityKg ? vat / quantityKg : 0;
+  const ssclPerKg = quantityKg ? sscl / quantityKg : 0;
+  const set = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
+  const setCharge = (index, value) => setDraft((current) => ({ ...current, clearingCharges: current.clearingCharges.map((item, itemIndex) => itemIndex === index ? { ...item, amount: value } : item) }));
+  const clearedShipments = shipments.filter((shipment) => shipment.status === "Cleared");
+  const filteredCostings = useMemo(() => {
+    const query = costingQuery.trim().toLowerCase();
+    if (!query) return records;
+    return records.filter((item) => [item.fileNo, item.material, item.company, item.supplier, item.country]
+      .some((value) => String(value || "").toLowerCase().includes(query)));
+  }, [records, costingQuery]);
+
+  function selectClearedShipment(shipmentId) {
+    const shipment = clearedShipments.find((item) => item.id === shipmentId);
+    if (!shipment) { set("sourceShipmentId", ""); return; }
+    const companyName = consignees.find((consignee) => consignee.code === shipment.company)?.name || shipment.consignee || shipment.company || "";
+    const countryName = shipment.country || countries.find((country) => country.name === shipment.incotermLocation)?.name || "";
+    setDraft((current) => ({
+      ...current,
+      sourceShipmentId: shipment.id,
+      company: companyName,
+      material: shipment.description || "",
+      supplier: shipment.supplier || "",
+      country: countryName,
+      paymentType: shipment.paymentMethod || current.paymentType,
+      fileNo: shipment.importNo || "",
+      etd: shipment.etd || "",
+      eta: shipment.eta || "",
+      clearingDate: shipment.deliveryDate || shipment.arrivalDate || "",
+      foreignCurrency: shipment.currency || "USD",
+      foreignValue: Number(shipment.totalCost || 0),
+      priceFob: shipment.incoterm === "FOB" ? Number(shipment.totalCost || 0) : current.priceFob,
+      priceCfr: shipment.incoterm === "CFR" ? Number(shipment.totalCost || 0) : current.priceCfr,
+      priceCif: shipment.incoterm === "CIF" ? Number(shipment.totalCost || 0) : current.priceCif,
+      cidRate: 0,
+      palRate: 0,
+      xidPerKg: 0,
+      ssclRate: 0,
+      vatRate: 0,
+      otherDuty: Number(shipment.duty || 0),
+      clearingCharges: current.clearingCharges.map((charge) => charge.name === "D/O Charges" ? { ...charge, amount: Number(shipment.doCharges || 0) } : charge),
+    }));
+  }
+
+  async function submit(event) {
+    event.preventDefault(); setSaving(true); setFormError("");
+    try { const saved = await onSave(draft); setDraft({ ...makeEmptyPostCosting(), ...saved, clearingCharges: saved.clearingCharges || makeEmptyPostCosting().clearingCharges }); }
+    catch (error) { setFormError(error.message || "Unable to save post costing."); }
+    finally { setSaving(false); }
+  }
+  async function remove() { if (!draft.id || !window.confirm(`Delete post costing ${draft.fileNo}?`)) return; await onDelete(draft.id); setDraft(makeEmptyPostCosting()); }
+  const input = (field, label, type = "text") => <label>{label}<input type={type} min={type === "number" ? "0" : undefined} step={type === "number" ? "any" : undefined} value={draft[field]} onClick={type === "date" ? openDatePicker : undefined} onChange={(event) => set(field, event.target.value)} /></label>;
+
+  return <section className="post-costing-page">
+    <PageTitle eyebrow="LANDED COST" title="Post costing" subtitle="Record and save shipment price details for each imported material." action={<button className="button primary" onClick={() => setDraft(makeEmptyPostCosting())}><Plus size={16} /> New post costing</button>} />
+    <div className="post-costing-layout"><aside className="panel costing-list"><div className="costing-list-head"><strong>Saved costings</strong><span>{costingQuery ? `${filteredCostings.length}/${records.length}` : records.length}</span></div><div className="costing-filter"><input type="search" value={costingQuery} onChange={(event) => setCostingQuery(event.target.value)} placeholder="Filter costings..." aria-label="Filter saved costings" />{costingQuery && <button type="button" onClick={() => setCostingQuery("")} aria-label="Clear costing filter"><X size={14} /></button>}</div>{filteredCostings.length ? filteredCostings.map((item) => <button type="button" key={item.id} className={draft.id === item.id ? "active" : ""} onClick={() => { setDraft({ ...makeEmptyPostCosting(), ...item, clearingCharges: item.clearingCharges || makeEmptyPostCosting().clearingCharges }); setFormError(""); }} onDoubleClick={() => { try { openPostCostingPdf(item); } catch (error) { setFormError(error.message || "Unable to generate the costing PDF."); } }} title="Click to edit · Double-click to open PDF"><strong>File {item.fileNo}</strong><span>{item.material}</span></button>) : <div className="costing-empty">{records.length ? "No matching costings." : "No post costings saved yet."}</div>}</aside>
+      <form className="panel post-costing-form" onSubmit={submit}>{formError && <div className="inline-error">{formError}</div>}
+        <div className="post-shipment-picker"><div><span>AUTO-FILL</span><h2>Select cleared shipment</h2><p>Shipment, material and price details will be loaded automatically.</p></div><label>Cleared shipment number<select value={draft.sourceShipmentId || ""} onChange={(event) => selectClearedShipment(event.target.value)}><option value="">Select shipment</option>{clearedShipments.map((shipment) => <option key={shipment.id} value={shipment.id}>{shipment.importNo} · {shipment.description}</option>)}</select></label></div>
+        <div className="costing-section-title"><div><span>IMPORT DETAILS</span><h2>Shipment and material</h2></div>{draft.id && <button type="button" className="button secondary compact danger-text" onClick={remove}>Delete</button>}</div>
+        <div className="post-fields">{input("company", "Company")}{input("material", "Material")}{input("supplier", "Supplier")}{input("country", "Country")}{input("paymentType", "Payment type")}{input("fileNo", "File no.")}{input("lcNo", "LC no.")}{input("lcOpenedDate", "Date of LC Opened", "date")}{input("bank", "Bank")}{input("blDate", "BL date", "date")}{input("etd", "ETD", "date")}{input("eta", "ETA", "date")}{input("clearingDate", "Clearing date", "date")}{input("maturityDate", "Maturity date", "date")}{input("settlementDate", "Settlement date", "date")}</div>
+        <div className="costing-section-title section-gap"><div><span>PRICE DETAILS</span><h2>Shipment price and quantity</h2></div></div>
+        <div className="post-fields">{input("priceFob", "PRICE-FOB", "number")}{input("priceCfr", "CFR", "number")}{input("priceCif", "CIF", "number")}{input("unitPriceMt", "UNIT PRICE/MT", "number")}{input("quantityMt", "QUANTITY-MT", "number")}{input("location", "Location")}</div>
+        <div className="post-conversion-grid section-gap">
+          <section className="post-conversion-panel">
+            <div className="costing-section-title"><div><span>COSTING</span><h2>Invoice conversion</h2></div></div>
+            <div className="post-calculation-table">
+              <div><span>Bill Value - {draft.foreignCurrency}</span><strong>{decimalAmount(billValue)}</strong></div>
+              <div><span>Invoiced Qty - Kgs.</span><strong>{decimalAmount(quantityKg)}</strong></div>
+              <label>Bank rate for TT<input type="number" min="0" step="any" value={draft.bankRate} onChange={(event) => set("bankRate", event.target.value)} /></label>
+              <label>GAIN / LOSS<input type="number" step="any" value={draft.gainLoss} onChange={(event) => set("gainLoss", event.target.value)} /></label>
+              <div className="calculated"><span>Bill Value SLR</span><strong>{money(billValueLkr)}</strong></div>
+              <label>Insurance<input type="number" min="0" step="any" value={draft.insuranceLkr} onChange={(event) => set("insuranceLkr", event.target.value)} /></label>
+              <label>Freight<input type="number" min="0" step="any" value={draft.freightLkr} onChange={(event) => set("freightLkr", event.target.value)} /></label>
+              <div className="calculated total"><span>CIF - SLR</span><strong>{money(cifLkr)}</strong></div>
+            </div>
+          </section>
+          <section className="post-conversion-panel">
+            <div className="costing-section-title"><div><span>CUSTOMS</span><h2>Customs conversion</h2></div></div>
+            <div className="post-calculation-table customs-table">
+              <label>Customs Exchange Rate<input type="number" min="0" step="any" value={draft.customsRate} onChange={(event) => set("customsRate", event.target.value)} /></label>
+              <label>Insurance<input type="number" min="0" step="any" value={draft.customsInsurance} onChange={(event) => set("customsInsurance", event.target.value)} /></label>
+              <label>Freight<input type="number" min="0" step="any" value={draft.customsFreight} onChange={(event) => set("customsFreight", event.target.value)} /></label>
+            </div>
+          </section>
+        </div>
+        <div className="costing-section-title section-gap"><div><span>DUTY</span><h2>Customs duty calculation</h2></div></div>
+        <div className="post-duty-table">
+          <div className="calculated"><span className="rate">Duty</span><span>CIF - SLR</span><strong>{money(customsCif)}</strong></div>
+          <div><label><input type="number" min="0" step="any" value={draft.cidRate} onChange={(event) => set("cidRate", event.target.value)} />%</label><span>CID</span><strong>{money(cid)}</strong></div>
+          <div><label><input type="number" min="0" step="any" value={draft.palRate} onChange={(event) => set("palRate", event.target.value)} />%</label><span>PAL</span><strong>{money(pal)}</strong></div>
+          <div><label>Rs <input type="number" min="0" step="any" value={draft.xidPerKg} onChange={(event) => set("xidPerKg", event.target.value)} /> × 1KG</label><span>XID</span><strong>{money(xid)}</strong></div>
+          <div><label><input type="number" min="0" step="any" value={draft.ssclRate} onChange={(event) => set("ssclRate", event.target.value)} />%</label><span>NBT / SSCL</span><strong>{money(sscl)}</strong></div>
+          <div><label><input type="number" min="0" step="any" value={draft.vatRate} onChange={(event) => set("vatRate", event.target.value)} />%</label><span>VAT</span><strong>{money(vat)}</strong></div>
+          <div><span className="rate" /><span>Other</span><label className="amount"><input type="number" min="0" step="any" value={draft.otherDuty} onChange={(event) => set("otherDuty", event.target.value)} /></label></div>
+          <div className="total"><span className="rate" /><span>Total Duty</span><strong>{money(totalDuty)}</strong></div>
+          <div className="spacer" />
+          <div className="calculated"><span className="rate" /><span>Cost + duty</span><strong>{money(costAndDuty)}</strong></div>
+          <div><span className="rate" /><span>EXTRA PAYMENT (if any) Insurance premium</span><label className="amount"><input type="number" min="0" step="any" value={draft.extraInsurance} onChange={(event) => set("extraInsurance", event.target.value)} /></label></div>
+        </div>
+        <div className="costing-section-title section-gap"><div><span>CLEARING BILL</span><h2>Clearing and port charges</h2></div></div>
+        <div className="post-clearing-table">
+          {(draft.clearingCharges || []).map((item, index) => <label key={item.name}><span>{index === 0 ? "Clearing Bill" : ""}</span><em>{item.name}</em><input type="number" min="0" step="0.01" value={Number(item.amount) === 0 ? "" : item.amount} placeholder="0.00" onFocus={(event) => event.target.select()} onChange={(event) => setCharge(index, event.target.value)} aria-label={`${item.name} amount`} /></label>)}
+          <div className="clearing-total"><span /><strong>Total Clearing bill</strong><b>{money(clearingTotal)}</b></div>
+        </div>
+        <div className="post-final-layout">
+          <div className="post-final-cost-table">
+            <div><span /><strong>Total - cost + duty + clearing bill</strong><b>{money(landedBeforeBank)}</b></div>
+            <label><span /><strong>Unloading charges</strong><input type="number" min="0" step="any" value={draft.unloading} onChange={(event) => set("unloading", event.target.value)} /></label>
+            <div className="bank-heading"><span>Bank Charges</span><strong /><b /></div>
+            <label><span /><strong>LC / TT / DC Commission <input className="inline-rate" type="number" min="0" step="any" value={draft.bankCommissionRate} onChange={(event) => set("bankCommissionRate", event.target.value)} />%</strong><b>{money(bankCommission)}</b></label>
+            <label><span /><strong>Bank Document Charges</strong><input type="number" min="0" step="any" value={draft.bankDocumentCharges} onChange={(event) => set("bankDocumentCharges", event.target.value)} /></label>
+            <div className="bank-total"><span /><strong>Total</strong><b>{money(landedBeforeBank + n(draft.unloading) + bankCommission + n(draft.bankDocumentCharges))}</b></div>
+            <label className="remittance"><span /><strong>D/Remittance (L)</strong><input type="number" min="0" step="any" value={draft.remittance} onChange={(event) => set("remittance", event.target.value)} /></label>
+            <div className="grand-total"><span /><strong>Total cost</strong><b>{money(totalCost)}</b></div>
+            <div><span /><strong>Cost per Kg - incl SSCL + VAT</strong><b>{money(costPerKg)}</b></div>
+            <div><span /><strong>SSCL</strong><b>{money(ssclPerKg)}</b></div>
+            <div><span /><strong>LESS VAT</strong><b>{money(vatPerKg)}</b></div>
+          </div>
+          <aside className="cost-ex-vat-card">
+            <span>FINAL UNIT COST</span>
+            <h3>Cost per Kg - Excl VAT</h3>
+            <strong>{money(costPerKg - vatPerKg)}</strong>
+            <small>VAT excluded landed cost per kilogram</small>
+          </aside>
+        </div>
+        <div className="costing-actions"><button className="button primary" disabled={saving}>{saving ? "Saving…" : draft.id ? "Update post costing" : "Save post costing"}</button></div>
+      </form></div>
+  </section>;
+}
+
+function MaterialAnalysis({ materials, onImport, onSave }) {
+  const [query, setQuery] = useState("");
+  const [tableView, setTableView] = useState("monthly");
+  const [selectedYear, setSelectedYear] = useState("");
+  const [drafts, setDrafts] = useState({});
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
+  const [editingPurchase, setEditingPurchase] = useState(null);
+  const [savingPurchase, setSavingPurchase] = useState("");
+  const [purchaseError, setPurchaseError] = useState("");
+  const fileRef = useRef(null);
+  const availableYears = useMemo(() => [...new Set(materials.flatMap((material) => (material.monthlyPurchases || []).map((entry) => entry.month.slice(0, 4))))].filter(Boolean).sort().reverse(), [materials]);
+  const activeYear = selectedYear && availableYears.includes(selectedYear) ? selectedYear : availableYears[0] || String(new Date().getFullYear());
+  const rows = useMemo(() => materials
+    .map((material) => ({ ...material, analysis: materialForecast(material) }))
+    .filter((material) => material.name.toLowerCase().includes(query.trim().toLowerCase()))
+    .sort((a, b) => tableView === "monthly"
+      ? a.name.localeCompare(b.name)
+      : b.analysis.recommended - a.analysis.recommended || a.name.localeCompare(b.name)), [materials, query, tableView]);
+  const totals = useMemo(() => rows.reduce((summary, material) => ({
+    stock: summary.stock + Number(material.currentStock || 0),
+    forecast: summary.forecast + material.analysis.forecast,
+    recommended: summary.recommended + material.analysis.recommended,
+    alerts: summary.alerts + (material.analysis.recommended > 0 ? 1 : 0),
+  }), { stock: 0, forecast: 0, recommended: 0, alerts: 0 }), [rows]);
+  const valueFor = (material, field) => drafts[material.id]?.[field] ?? material[field];
+  const setDraft = (material, field, value) => setDrafts((current) => ({ ...current, [material.id]: { ...(current[material.id] || {}), [field]: value } }));
+
+  async function importWorkbook(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setImportError("");
+    try {
+      await onImport(parseMaterialWorkbook(await file.arrayBuffer()));
+    } catch (error) {
+      setImportError(error.message || "Unable to import this workbook.");
+    } finally {
+      setImporting(false);
+      event.target.value = "";
+    }
+  }
+
+  async function saveRow(material) {
+    const draft = drafts[material.id] || {};
+    await onSave(material.id, {
+      currentStock: Number(draft.currentStock ?? material.currentStock),
+      onOrder: Number(draft.onOrder ?? material.onOrder),
+      leadTimeDays: Number(draft.leadTimeDays ?? material.leadTimeDays),
+      safetyStockMonths: Number(draft.safetyStockMonths ?? material.safetyStockMonths),
+    });
+    setDrafts((current) => { const next = { ...current }; delete next[material.id]; return next; });
+  }
+
+  function editPurchase(material, month, quantity) {
+    if (savingPurchase) return;
+    setPurchaseError("");
+    setEditingPurchase({ materialId: material.id, month, value: String(quantity || "") });
+  }
+
+  async function savePurchase(material, month) {
+    if (!editingPurchase || editingPurchase.materialId !== material.id || editingPurchase.month !== month) return;
+    const quantity = Number(editingPurchase.value);
+    if (editingPurchase.value.trim() === "" || !Number.isFinite(quantity) || quantity < 0) {
+      setEditingPurchase(null);
+      return;
+    }
+    const cellKey = `${material.id}:${month}`;
+    const monthlyPurchases = (material.monthlyPurchases || []).filter((entry) => entry.month !== month);
+    monthlyPurchases.push({ month, quantity });
+    setSavingPurchase(cellKey);
+    setPurchaseError("");
+    try {
+      await onSave(material.id, {
+        currentStock: Number(material.currentStock || 0),
+        onOrder: Number(material.onOrder || 0),
+        leadTimeDays: Number(material.leadTimeDays || 30),
+        safetyStockMonths: Number(material.safetyStockMonths ?? 0.5),
+        monthlyPurchases,
+      });
+      setEditingPurchase(null);
+    } catch (error) {
+      setPurchaseError(error.message || "Unable to update the monthly purchase.");
+    } finally {
+      setSavingPurchase("");
+    }
+  }
+
+  return <section className="material-analysis-page">
+    <PageTitle eyebrow="INVENTORY PLANNING" title="Material analysis" subtitle="Review purchase history, current stock and purchase-based demand forecasts." action={<><input ref={fileRef} className="visually-hidden" type="file" accept=".xlsx,.xls" onChange={importWorkbook} /><button className="button primary" disabled={importing} onClick={() => fileRef.current?.click()}><Upload size={16} /> {importing ? "Importing…" : "Import purchase workbook"}</button></>} />
+    {(importError || purchaseError) && <div className="inline-error">{importError || purchaseError}</div>}
+    <div className="material-method-note"><span className="material-method-icon"><TrendingUp size={17} /></span><div><strong>Purchase forecast</strong><span>Latest three active purchase months are weighted 50%, 30% and 20%. The order suggestion includes lead time and safety stock, then deducts stock already available or on order.</span></div></div>
+    <section className="material-kpis">
+      <article className="material-kpi stock"><span className="material-kpi-icon"><Box size={17} /></span><div><span>Current stock</span><strong>{decimalAmount(totals.stock)} <small>MT</small></strong><em>Available inventory</em></div></article>
+      <article className="material-kpi forecast"><span className="material-kpi-icon"><TrendingUp size={17} /></span><div><span>Next-period forecast</span><strong>{decimalAmount(totals.forecast)} <small>MT</small></strong><em>Purchase-based estimate</em></div></article>
+      <article className="material-kpi purchase"><span className="material-kpi-icon"><ArrowUpRight size={17} /></span><div><span>Recommended purchase</span><strong>{decimalAmount(totals.recommended)} <small>MT</small></strong><em>Suggested order quantity</em></div></article>
+      <article className="material-kpi review"><span className="material-kpi-icon"><Clock3 size={17} /></span><div><span>Materials to review</span><strong>{totals.alerts}</strong><em>Need purchasing attention</em></div></article>
+    </section>
+    <section className="panel material-table-panel">
+      <div className="material-view-bar"><div className="material-view-tabs"><button className={tableView === "monthly" ? "active" : ""} onClick={() => setTableView("monthly")}>Monthly purchases</button><button className={tableView === "stock" ? "active" : ""} onClick={() => setTableView("stock")}>Stock plan</button></div><div className="material-view-controls">{tableView === "monthly" && availableYears.length > 0 && <label>Year<select value={activeYear} onChange={(event) => setSelectedYear(event.target.value)}>{availableYears.map((year) => <option key={year}>{year}</option>)}</select></label>}<label className="material-search"><span>Search</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Material name" /></label></div></div>
+      <div className="table-toolbar"><div className="table-title"><h2>{tableView === "monthly" ? `Monthly purchase history · ${activeYear}` : "Material stock plan"}</h2><span className="count-pill">{rows.length}</span></div><span className="material-table-hint">{tableView === "monthly" ? "Quantities shown in MT · Double-click a value to edit" : "Update stock inputs and save each changed row"}</span></div>
+      {!materials.length ? <div className="empty-state"><Box size={34} /><strong>No material history imported</strong><span>Import the Jan–Dec raw material purchase workbook to create the analysis.</span><button className="button primary" onClick={() => fileRef.current?.click()}><Upload size={16} /> Import workbook</button></div> : tableView === "monthly" ? <div className="table-scroll"><table className="data-table material-table monthly-material-table"><thead><tr><th>Material</th>{["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((month) => <th key={month}>{month}</th>)}<th>Total</th><th>Avg / active mo.</th></tr></thead><tbody>{rows.map((material) => {
+        const monthValues = Array.from({ length: 12 }, (_, index) => Number(material.monthlyPurchases?.find((entry) => entry.month === `${activeYear}-${String(index + 1).padStart(2, "0")}`)?.quantity || 0));
+        const annualTotal = monthValues.reduce((sum, value) => sum + value, 0);
+        const activeMonths = monthValues.filter((value) => value > 0).length;
+        return <tr key={material.id}><td><strong>{material.name}</strong><span className="cell-subtext">{material.unit || "MT"}</span></td>{monthValues.map((value, index) => {
+          const month = `${activeYear}-${String(index + 1).padStart(2, "0")}`;
+          const cellKey = `${material.id}:${month}`;
+          const isEditing = editingPurchase?.materialId === material.id && editingPurchase?.month === month;
+          return <td key={month} className={`${value > 0 ? "monthly-value has-value" : "monthly-value"}${isEditing ? " editing" : ""}${savingPurchase === cellKey ? " saving" : ""}`} onDoubleClick={() => editPurchase(material, month, value)} title="Double-click to edit">{isEditing ? <input className="monthly-value-input" type="number" min="0" step="0.01" autoFocus value={editingPurchase.value} disabled={savingPurchase === cellKey} onChange={(event) => setEditingPurchase((current) => ({ ...current, value: event.target.value }))} onFocus={(event) => event.target.select()} onBlur={() => savePurchase(material, month)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") setEditingPurchase(null); }} aria-label={`${material.name} ${month} purchase quantity`} /> : value > 0 ? decimalAmount(value) : "—"}</td>;
+        })}<td className="monthly-total">{decimalAmount(annualTotal)}</td><td className="monthly-average">{activeMonths ? decimalAmount(annualTotal / activeMonths) : "—"}</td></tr>;
+      })}</tbody><tfoot><tr><th>Monthly total</th>{Array.from({ length: 12 }, (_, index) => { const monthKey = `${activeYear}-${String(index + 1).padStart(2, "0")}`; const total = rows.reduce((sum, material) => sum + Number(material.monthlyPurchases?.find((entry) => entry.month === monthKey)?.quantity || 0), 0); return <th key={monthKey}>{total > 0 ? decimalAmount(total) : "—"}</th>; })}<th>{decimalAmount(rows.reduce((sum, material) => sum + (material.monthlyPurchases || []).filter((entry) => entry.month.startsWith(activeYear)).reduce((monthSum, entry) => monthSum + Number(entry.quantity || 0), 0), 0))}</th><th /></tr></tfoot></table></div> : <div className="table-scroll"><table className="data-table material-table"><thead><tr><th>Material</th><th>Recent purchases</th><th>Forecast</th><th>Current stock</th><th>On order</th><th>Lead days</th><th>Safety months</th><th>Coverage</th><th>Recommended</th><th>Status</th><th /></tr></thead><tbody>{rows.map((material) => {
+        const recent = [...(material.monthlyPurchases || [])].filter((entry) => Number(entry.quantity) > 0).slice(-4);
+        return <tr key={material.id}><td><strong>{material.name}</strong><span className="cell-subtext">{material.unit || "MT"}</span></td><td><div className="purchase-history">{recent.length ? recent.map((entry) => <span key={entry.month}><small>{entry.month.slice(5)}</small>{decimalAmount(entry.quantity)}</span>) : <em>No purchases</em>}</div></td><td><strong>{decimalAmount(material.analysis.forecast)}</strong><span className="cell-subtext">MT / period</span></td>{["currentStock", "onOrder", "leadTimeDays", "safetyStockMonths"].map((field) => <td key={field}><input className="material-number-input" type="number" min="0" step={field === "leadTimeDays" ? "1" : "0.01"} value={valueFor(material, field)} onChange={(event) => setDraft(material, field, event.target.value)} aria-label={`${material.name} ${field}`} /></td>)}<td>{material.analysis.coverage === null ? "—" : `${material.analysis.coverage.toFixed(1)} mo`}</td><td className="recommended-quantity">{decimalAmount(material.analysis.recommended)} MT</td><td><span className={`stock-status ${material.analysis.status.toLowerCase().replace(" ", "-")}`}>{material.analysis.status}</span></td><td><button className="button secondary compact" disabled={!drafts[material.id]} onClick={() => saveRow(material)}>Save</button></td></tr>;
+      })}</tbody></table></div>}
+    </section>
+  </section>;
 }
 
 function Dashboard({ shipments, consignees, analytics, accountName, onNavigate, onEdit, onAdd, onImport }) {
@@ -1572,6 +2002,8 @@ export default function App() {
   const [currencies, setCurrencies] = useState([]);
   const [users, setUsers] = useState([]);
   const [analytics, setAnalytics] = useState(null);
+  const [materials, setMaterials] = useState([]);
+  const [postCostings, setPostCostings] = useState([]);
   const [modalShipment, setModalShipment] = useState(undefined);
   const [modalShipmentImport, setModalShipmentImport] = useState(false);
   const [paymentLedgerShipment, setPaymentLedgerShipment] = useState(undefined);
@@ -1595,18 +2027,22 @@ export default function App() {
   const refresh = useCallback(async () => {
     setError("");
     try {
-      const [shipmentData, analyticsData, consigneeData, countryData, currencyData] = await Promise.all([
+      const [shipmentData, analyticsData, consigneeData, countryData, currencyData, materialData, postCostingData] = await Promise.all([
         api.getShipments(),
         api.getAnalytics(),
         api.getConsignees(),
         api.getCountries(),
         api.getCurrencies(),
+        api.getMaterials(),
+        api.getPostCostings(),
       ]);
       setShipments(sortShipmentsByConsignee(shipmentData, consigneeData));
       setAnalytics(analyticsData);
       setConsignees(consigneeData);
       setCountries(countryData);
       setCurrencies(currencyData);
+      setMaterials(materialData);
+      setPostCostings(postCostingData);
     } catch (loadError) {
       setError(loadError.message);
     } finally {
@@ -1644,6 +2080,8 @@ export default function App() {
       setConsignees([]);
       setCountries([]);
       setCurrencies([]);
+      setMaterials([]);
+      setPostCostings([]);
     };
     window.addEventListener("fmj-session-expired", expireSession);
     return () => window.removeEventListener("fmj-session-expired", expireSession);
@@ -1800,6 +2238,31 @@ export default function App() {
     await refresh();
   }
 
+  async function importMaterials(materialRecords) {
+    const result = await api.importMaterials(materialRecords);
+    setNotice(`${result.count} material${result.count === 1 ? "" : "s"} imported successfully`);
+    await refresh();
+  }
+
+  async function saveMaterial(id, material) {
+    const updated = await api.updateMaterial(id, material);
+    setMaterials((current) => current.map((item) => item.id === id ? updated : item));
+    setNotice(`${updated.name} stock settings updated`);
+  }
+
+  async function savePostCosting(costing) {
+    const saved = costing.id ? await api.updatePostCosting(costing.id, costing) : await api.createPostCosting(costing);
+    setPostCostings((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
+    setNotice(`Post costing ${saved.fileNo} saved`);
+    return saved;
+  }
+
+  async function deletePostCosting(id) {
+    await api.deletePostCosting(id);
+    setPostCostings((current) => current.filter((item) => item.id !== id));
+    setNotice("Post costing deleted");
+  }
+
   async function signOut() {
     try {
       await api.logout();
@@ -1827,6 +2290,8 @@ export default function App() {
     if (loading) return <div className="loading-state"><span className="loader" />Loading shipment workspace…</div>;
     if (error && !shipments.length) return <div className="error-state"><strong>Unable to load shipments</strong><span>{error}</span><button className="button secondary" onClick={refresh}>Try again</button></div>;
     if (active === "dashboard") return <Dashboard shipments={shipments} consignees={consignees} analytics={analytics} accountName={authState?.name || authState?.username} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} onImport={() => setModalShipmentImport(true)} />;
+    if (active === "materials") return <MaterialAnalysis materials={materials} onImport={importMaterials} onSave={saveMaterial} />;
+    if (active === "post-costing") return <PostCosting shipments={shipments} consignees={consignees} countries={countries} records={postCostings} onSave={savePostCosting} onDelete={deletePostCosting} />;
     if (active === "to-be-tt") {
       const pendingTTShipments = shipments.filter((shipment) =>
         hasOutstandingPayment(shipment),
@@ -1917,7 +2382,7 @@ export default function App() {
             </div>
           </div>
         </header>
-        <main className={`content ${["to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", ...reportNavigation.map((item) => item.key)].includes(active) ? "content-wide" : ""}`}>
+        <main className={`content ${["materials", "post-costing", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", ...reportNavigation.map((item) => item.key)].includes(active) ? "content-wide" : ""}`}>
           {renderContent()}
           <footer className="app-footer"><span>© 2026 FMJ ShipTrack</span><span>Shipment management, made simpler.</span></footer>
         </main>
