@@ -17,7 +17,7 @@ export function validatePreCosting(draft) {
   }
   if (!Number.isFinite(Number(draft.exchangeRate)) || Number(draft.exchangeRate) <= 0) return "Enter an exchange rate greater than zero.";
   for (const [key, label] of chargeFields) {
-    if (draft[key] === "" || !Number.isFinite(Number(draft[key])) || Number(draft[key]) < 0) return `${label} must be zero or a positive amount.`;
+    if (!Number.isFinite(Number(draft[key])) || Number(draft[key]) < 0) return `${label} must be zero or a positive amount.`;
   }
   if (!Array.isArray(draft.items) || !draft.items.length || draft.items.length > 100) return "Enter between 1 and 100 items.";
   for (const [index, item] of draft.items.entries()) {
@@ -31,7 +31,7 @@ export function validatePreCosting(draft) {
 // USD value is the full line value, not a unit price. Round only for presentation.
 export function calculatePreCosting(draft) {
   const totalUsd = draft.items.reduce((sum, item) => sum + Number(item.usdValue), 0);
-  const ready = Number.isFinite(Number(draft.exchangeRate)) && Number(draft.exchangeRate) > 0 && Number.isFinite(totalUsd) && totalUsd > 0 && draft.items.every((item) => Number.isFinite(Number(item.quantity)) && Number.isFinite(Number(item.usdValue)) && Number(item.quantity) > 0 && Number(item.usdValue) > 0) && chargeFields.every(([key]) => draft[key] !== "" && Number.isFinite(Number(draft[key])) && Number(draft[key]) >= 0);
+  const ready = Number.isFinite(Number(draft.exchangeRate)) && Number(draft.exchangeRate) > 0 && Number.isFinite(totalUsd) && totalUsd > 0 && draft.items.every((item) => Number.isFinite(Number(item.quantity)) && Number.isFinite(Number(item.usdValue)) && Number(item.quantity) > 0 && Number(item.usdValue) > 0) && chargeFields.every(([key]) => Number.isFinite(Number(draft[key])) && Number(draft[key]) >= 0);
   if (!ready) return null;
   const rows = draft.items.map((item) => {
     const share = Number(item.usdValue) / totalUsd;
