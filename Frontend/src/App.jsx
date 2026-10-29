@@ -62,7 +62,8 @@ const reportNavigation = [
   { label: "UB", key: "report-ub", consigneeName: "UB" },
 ];
 const userAccessOptions = [
-  ...navigation.map(({ key, label }) => ({ key, label })),
+  { key: "post-costing", label: "Post costing" },
+  ...navigation.filter(({ key }) => key !== "post-costing").map(({ key, label }) => ({ key, label })),
   { key: "reports", label: "Reports & Analytics" },
   { key: "settings", label: "Settings" },
 ];
@@ -1222,11 +1223,12 @@ function openPostCostingPdf(costing) {
   }
 }
 
-function PostCosting({ shipments, consignees, countries, records, onSave, onDelete }) {
+function PostCosting({ shipments, consignees, countries, materials, records, onSave, onDelete }) {
   const [draft, setDraft] = useState(makeEmptyPostCosting);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [costingQuery, setCostingQuery] = useState("");
+  const [costingContextMenu, setCostingContextMenu] = useState(null);
   const n = (value) => Number(value || 0);
   const quantityKg = n(draft.quantityMt) * 1000;
   const billValue = n(draft.priceCif) || n(draft.quantityMt) * n(draft.unitPriceMt) || n(draft.priceCfr) || n(draft.priceFob) || n(draft.foreignValue);
@@ -1249,13 +1251,50 @@ function PostCosting({ shipments, consignees, countries, records, onSave, onDele
   const ssclPerKg = quantityKg ? sscl / quantityKg : 0;
   const set = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
   const setCharge = (index, value) => setDraft((current) => ({ ...current, clearingCharges: current.clearingCharges.map((item, itemIndex) => itemIndex === index ? { ...item, amount: value } : item) }));
-  const clearedShipments = shipments.filter((shipment) => shipment.status === "Cleared");
+  const materialWords = (value) => String(value || "").toLowerCase().match(/[a-z0-9]+/g) || [];
+  const isRawMaterialShipment = (shipment) => {
+    const shipmentWords = materialWords(shipment.description);
+    if (!shipmentWords.length) return false;
+    return materials.some((material) => {
+      const rawMaterialWords = materialWords(material.name);
+      if (!rawMaterialWords.length) return false;
+      if (shipmentWords.join("") === rawMaterialWords.join("")) return true;
+      return rawMaterialWords.every((word) => shipmentWords.includes(word));
+    });
+  };
+  const clearedShipments = shipments.filter((shipment) => shipment.status === "Cleared" && isRawMaterialShipment(shipment));
   const filteredCostings = useMemo(() => {
     const query = costingQuery.trim().toLowerCase();
     if (!query) return records;
     return records.filter((item) => [item.fileNo, item.material, item.company, item.supplier, item.country]
       .some((value) => String(value || "").toLowerCase().includes(query)));
   }, [records, costingQuery]);
+
+  useEffect(() => {
+    if (!costingContextMenu) return undefined;
+    const close = () => setCostingContextMenu(null);
+    const closeOnEscape = (event) => { if (event.key === "Escape") close(); };
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [costingContextMenu]);
+
+  function editCosting(item) {
+    setDraft({ ...makeEmptyPostCosting(), ...item, clearingCharges: item.clearingCharges || makeEmptyPostCosting().clearingCharges });
+    setFormError("");
+    setCostingContextMenu(null);
+  }
+
+  function openCostingContextMenu(event, item) {
+    event.preventDefault();
+    setCostingContextMenu({
+      item,
+      top: event.currentTarget.offsetTop + event.currentTarget.offsetHeight - 4,
+    });
+  }
 
   function selectClearedShipment(shipmentId) {
     const shipment = clearedShipments.find((item) => item.id === shipmentId);
@@ -1300,9 +1339,10 @@ function PostCosting({ shipments, consignees, countries, records, onSave, onDele
 
   return <section className="post-costing-page">
     <PageTitle eyebrow="LANDED COST" title="Post costing" subtitle="Record and save shipment price details for each imported material." action={<button className="button primary" onClick={() => setDraft(makeEmptyPostCosting())}><Plus size={16} /> New post costing</button>} />
-    <div className="post-costing-layout"><aside className="panel costing-list"><div className="costing-list-head"><strong>Saved costings</strong><span>{costingQuery ? `${filteredCostings.length}/${records.length}` : records.length}</span></div><div className="costing-filter"><input type="search" value={costingQuery} onChange={(event) => setCostingQuery(event.target.value)} placeholder="Filter costings..." aria-label="Filter saved costings" />{costingQuery && <button type="button" onClick={() => setCostingQuery("")} aria-label="Clear costing filter"><X size={14} /></button>}</div>{filteredCostings.length ? filteredCostings.map((item) => <button type="button" key={item.id} className={draft.id === item.id ? "active" : ""} onClick={() => { setDraft({ ...makeEmptyPostCosting(), ...item, clearingCharges: item.clearingCharges || makeEmptyPostCosting().clearingCharges }); setFormError(""); }} onDoubleClick={() => { try { openPostCostingPdf(item); } catch (error) { setFormError(error.message || "Unable to generate the costing PDF."); } }} title="Click to edit · Double-click to open PDF"><strong>File {item.fileNo}</strong><span>{item.material}</span></button>) : <div className="costing-empty">{records.length ? "No matching costings." : "No post costings saved yet."}</div>}</aside>
+    <div className="post-costing-layout"><aside className="panel costing-list"><div className="costing-list-head"><strong>Saved costings</strong><span>{costingQuery ? `${filteredCostings.length}/${records.length}` : records.length}</span></div><div className="costing-filter"><input type="search" value={costingQuery} onChange={(event) => setCostingQuery(event.target.value)} placeholder="Filter costings..." aria-label="Filter saved costings" />{costingQuery && <button type="button" onClick={() => setCostingQuery("")} aria-label="Clear costing filter"><X size={14} /></button>}</div>{filteredCostings.length ? filteredCostings.map((item) => <button type="button" key={item.id} className={draft.id === item.id ? "active" : ""} onContextMenu={(event) => openCostingContextMenu(event, item)} onDoubleClick={() => { try { openPostCostingPdf(item); } catch (error) { setFormError(error.message || "Unable to generate the costing PDF."); } }} title="Right-click to edit · Double-click to open PDF"><strong>File {item.fileNo}</strong><span>{item.material}</span></button>) : <div className="costing-empty">{records.length ? "No matching costings." : "No post costings saved yet."}</div>}</aside>
+      {costingContextMenu && <div className="shipment-action-menu shipment-context-menu costing-context-menu" style={{ top: costingContextMenu.top }} role="menu" onPointerDown={(event) => event.stopPropagation()}><button role="menuitem" onClick={() => editCosting(costingContextMenu.item)}>Edit costing</button></div>}
       <form className="panel post-costing-form" onSubmit={submit}>{formError && <div className="inline-error">{formError}</div>}
-        <div className="post-shipment-picker"><div><span>AUTO-FILL</span><h2>Select cleared shipment</h2><p>Shipment, material and price details will be loaded automatically.</p></div><label>Cleared shipment number<select value={draft.sourceShipmentId || ""} onChange={(event) => selectClearedShipment(event.target.value)}><option value="">Select shipment</option>{clearedShipments.map((shipment) => <option key={shipment.id} value={shipment.id}>{shipment.importNo} · {shipment.description}</option>)}</select></label></div>
+        <div className="post-shipment-picker"><div><span>AUTO-FILL</span><h2>Select cleared shipment</h2><p>Only cleared shipments matching the raw-material list are shown.</p></div><label>Cleared shipment number<select value={draft.sourceShipmentId || ""} onChange={(event) => selectClearedShipment(event.target.value)}><option value="">{clearedShipments.length ? "Select shipment" : "No matching cleared shipments"}</option>{clearedShipments.map((shipment) => <option key={shipment.id} value={shipment.id}>{shipment.importNo} · {shipment.description}</option>)}</select></label></div>
         <div className="costing-section-title"><div><span>IMPORT DETAILS</span><h2>Shipment and material</h2></div>{draft.id && <button type="button" className="button secondary compact danger-text" onClick={remove}>Delete</button>}</div>
         <div className="post-fields">{input("company", "Company")}{input("material", "Material")}{input("supplier", "Supplier")}{input("country", "Country")}{input("paymentType", "Payment type")}{input("fileNo", "File no.")}{input("lcNo", "LC no.")}{input("lcOpenedDate", "Date of LC Opened", "date")}{input("bank", "Bank")}{input("blDate", "BL date", "date")}{input("etd", "ETD", "date")}{input("eta", "ETA", "date")}{input("clearingDate", "Clearing date", "date")}{input("maturityDate", "Maturity date", "date")}{input("settlementDate", "Settlement date", "date")}</div>
         <div className="costing-section-title section-gap"><div><span>PRICE DETAILS</span><h2>Shipment price and quantity</h2></div></div>
@@ -2291,7 +2331,7 @@ export default function App() {
     if (error && !shipments.length) return <div className="error-state"><strong>Unable to load shipments</strong><span>{error}</span><button className="button secondary" onClick={refresh}>Try again</button></div>;
     if (active === "dashboard") return <Dashboard shipments={shipments} consignees={consignees} analytics={analytics} accountName={authState?.name || authState?.username} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} onImport={() => setModalShipmentImport(true)} />;
     if (active === "materials") return <MaterialAnalysis materials={materials} onImport={importMaterials} onSave={saveMaterial} />;
-    if (active === "post-costing") return <PostCosting shipments={shipments} consignees={consignees} countries={countries} records={postCostings} onSave={savePostCosting} onDelete={deletePostCosting} />;
+    if (active === "post-costing") return <PostCosting shipments={shipments} consignees={consignees} countries={countries} materials={materials} records={postCostings} onSave={savePostCosting} onDelete={deletePostCosting} />;
     if (active === "to-be-tt") {
       const pendingTTShipments = shipments.filter((shipment) =>
         hasOutstandingPayment(shipment),
