@@ -25,7 +25,10 @@ export function normalizePreCosting(body = {}) {
   }
   data.exchangeRate = number(body.exchangeRate, "exchange rate", true);
   for (const key of ["breakdownClearing", "breakdownOther", "breakdownBank"]) data[key] = number(body[key] ?? 0, key);
-  for (const key of ["insurance", "freight", "cid", "pal", "eic", "sscl", "vat", "clearing"]) data[key] = number(body[key], key);
+  for (const key of ["insurance", "freight", "cid", "pal", "eic", "sscl", "vat", "clearing"]) {
+    const value = body[key];
+    data[key] = number(typeof value === "string" && value.trim() === "" ? 0 : value, key);
+  }
   if (!Array.isArray(body.items) || !body.items.length || body.items.length > 100) throw new Error("Enter between 1 and 100 items.");
   data.items = body.items.map((item) => {
     if (typeof item?.description !== "string" || !item.description.trim() || item.description.length > 200) throw new Error("Enter a valid item description.");
