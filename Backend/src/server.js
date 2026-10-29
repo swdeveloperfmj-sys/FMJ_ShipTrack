@@ -7,6 +7,7 @@ import { rateLimit } from "express-rate-limit";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import nodemailer from "nodemailer";
+import { preCostingsRouter } from "./preCostings.js";
 import { createHmac, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
 
 const app = express();
@@ -710,8 +711,9 @@ app.get("/api/health", (_request, response) => {
 });
 
 app.use("/api", requireAuthenticated);
+app.use("/api/pre-costings", preCostingsRouter);
 
-const sidebarAccessKeys = ["dashboard", "materials", "post-costing", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", "companies", "consignees", "countries", "reports", "settings"];
+const sidebarAccessKeys = ["dashboard", "materials", "post-costing", "pre-costing", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", "companies", "consignees", "countries", "reports", "settings"];
 const serializeUser = (user) => ({ id: user._id, name: user.name, username: user.username, sidebarAccess: user.sidebarAccess || [], fontSize: user.fontSize || 100, createdAt: user.createdAt });
 
 app.put("/api/settings/font-size", async (request, response, next) => {

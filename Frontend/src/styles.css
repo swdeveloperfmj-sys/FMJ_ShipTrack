@@ -13,6 +13,62 @@
 }
 
 * { box-sizing: border-box; }
+.pre-costing-page .pre-costing-layout { grid-template-columns: minmax(0, 1fr); }
+.pre-costing-page .pre-costing-form { padding: 0; border-radius: 0; }
+.pre-sheet-scroll { overflow-x: auto; }
+.pre-sheet-paper { min-width: 1550px; padding: 0 0 40px; color: #000; background-color: white; font: 12px Arial, sans-serif; }
+.pre-sheet-paper .pre-sheet { table-layout: fixed; width: 100%; border-collapse: collapse; color: #000; font: 12px Arial, sans-serif; }
+.pre-sheet-paper .pre-sheet tr { background: transparent; }
+.pre-sheet-paper .pre-sheet td,.pre-sheet-paper .pre-sheet th { height: 21px; padding: 1px 3px; border: 1px solid #000; color: #000; background: #fff; text-align: right; font: inherit; white-space: normal; letter-spacing: 0; }
+.pre-sheet-paper .pre-sheet .sheet-title-row td,.pre-sheet-paper .pre-sheet .sheet-assumptions td { border: 0; background: transparent; }
+.pre-sheet-paper input { width: 100%; min-width: 0; height: 19px; margin: 0; padding: 0 2px; border: 0; border-radius: 0; outline: 0; background: transparent; color: #000; font: inherit; text-align: inherit; box-shadow: none; }
+.pre-sheet-paper input:focus { outline: 2px solid #217346; outline-offset: -1px; background: #f0fff3; }
+.pre-sheet-paper input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
+.pre-sheet-paper input::-webkit-inner-spin-button,.pre-sheet-paper input::-webkit-outer-spin-button { appearance: none; margin: 0; }
+.pre-sheet-paper .pre-sheet .sheet-title { background: #fbe5d6; text-align: center; font-weight: bold; }
+.pre-sheet-paper .pre-sheet .sheet-material { background: #f8cbad; text-align: center; font-weight: bold; }
+.pre-sheet-paper .sheet-hs label { display: flex; align-items: center; white-space: nowrap; font-weight: bold; text-align: left; }
+.pre-sheet-paper .sheet-assumptions td:nth-child(4) input { color: red; text-align: center; }
+.pre-sheet-paper .pre-sheet .sheet-column-headings th { position: relative; height: 60px; padding-right: 8px; text-align: center; font-weight: bold; line-height: 1.7; overflow-wrap: anywhere; }
+.pre-sheet-paper .sheet-column-resizer { position: absolute; top: 0; right: -1px; z-index: 1; width: 8px; height: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; cursor: col-resize; touch-action: none; }
+.pre-sheet-paper .sheet-column-resizer:hover,.pre-sheet-paper .sheet-column-resizer:focus-visible { background: #2865db55; outline: 2px solid #2865db; outline-offset: -2px; }
+.pre-sheet-resizing,.pre-sheet-resizing * { cursor: col-resize; user-select: none; }
+.pre-sheet-paper .pre-sheet tbody td:first-child,.pre-sheet-paper .pre-sheet tfoot td:first-child { text-align: left; }
+.pre-sheet-paper .pre-sheet .sheet-highlight { background: #ff0; }
+.pre-sheet-paper .pre-sheet tfoot td { border-bottom: 3px double #000; }
+.pre-sheet-paper .pre-sheet tfoot td:nth-child(2),.pre-sheet-paper .pre-sheet tfoot td:nth-last-child(-n+2) { border: 0; background: transparent; }
+.sheet-breakdown { display: grid; grid-template-columns: 90px 86px minmax(350px, 1fr); gap: 0; width: 58%; margin-top: 40px; margin-left: 27%; text-align: left; line-height: 20px; }
+.sheet-breakdown > div { background: #fff; padding: 0 2px; }
+.sheet-breakdown > div:nth-child(3n+2) { text-align: right; }
+.sheet-breakdown-total { padding: 0 3px; border-top: 1px solid #000; border-bottom: 3px double #000; background: #fff; text-align: right; font-weight: bold; }
+.pre-row-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px; }
+.pre-row-actions > span { margin-left: auto; color: var(--muted); font-size: 11px; }
+.pre-costing-form .pre-actions { padding: 0 12px 14px; }
+.pre-costing-page .costing-list { max-height: 240px; overflow: auto; }
+.pre-costing-layout { display: grid; grid-template-columns: minmax(0, 1fr) 215px; gap: 16px; align-items: start; }
+.pre-costing-form { padding: 20px; }
+.pre-costing-form fieldset { min-width: 0; border: 0; margin: 0; padding: 0; }
+.pre-costing-form .costing-section-title:not(:first-child) { margin-top: 24px; }
+.pre-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pre-hint { color: #788394; font-size: 11px; line-height: 1.7; margin: 8px 0 14px; }
+.pre-input-table { width: 100%; min-width: 600px; }
+.pre-input-table th:first-child { width: 45%; }
+.pre-input-table input { width: 100%; min-height: 36px; border: 1px solid #dfe6ee; border-radius: 5px; padding: 8px; background: #fff; color: var(--ink); }
+.pre-results { margin: 20px 0; max-height: 500px; }
+.pre-results table { min-width: 1800px; width: 100%; }
+.pre-results td { text-align: right; font-variant-numeric: tabular-nums; }
+.pre-results td:first-child { text-align: left; white-space: normal; min-width: 170px; }
+.pre-results th { white-space: normal; min-width: 95px; }
+.pre-results th small { display: block; margin-top: 5px; color: #8793a3; }
+.pre-results tfoot { font-weight: 700; background: #edf3ff; }
+.pre-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 20px; }
+.pre-notice { color: #16845b; font-size: 12px; }
+.pre-costing-page .costing-list > button { cursor: pointer; }
+.pre-costing-page button:disabled { cursor: default; opacity: .6; }
+.app-shell[data-theme="dark"] .pre-input-table input { background: #142030; color: #e8eef7; border-color: #35465d; }
+.app-shell[data-theme="dark"] .pre-results tfoot { background: #203754; }
+@media (max-width: 1100px) { .pre-costing-layout { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 650px) { .pre-fields { grid-template-columns: 1fr 1fr; } .pre-costing-page .page-title { align-items: flex-start; flex-direction: column; } .pre-costing-page .page-actions { flex-wrap: wrap; } .pre-costing-form { padding: 12px; } }
 body { margin: 0; min-width: 320px; }
 button, input, select { font: inherit; }
 button { cursor: pointer; }
@@ -91,7 +147,7 @@ button { cursor: pointer; }
 .account-menu-signout { display: flex; align-items: center; gap: 9px; width: 100%; margin-top: 5px; padding: 9px 10px; border: 0; border-radius: 6px; background: transparent; color: #bb514a; text-align: left; font-size: 10px; font-weight: 600; }
 .account-menu-signout:hover { background: #fff1ef; }
 .content { width: min(1440px, 100%); min-height: calc(100vh - 62px); display: flex; flex-direction: column; margin: 0 auto; padding: 30px 36px 20px; }
-.content.content-wide { width: 100%; }
+.content.content-wide { width: 100%; padding: 10px 12px 12px; }
 .to-be-tt-page { display: flex; flex: 1; min-height: 0; flex-direction: column; }
 .to-be-tt-page .tt-payments-panel { display: flex; min-height: 0; flex: 1; flex-direction: column; }
 .to-be-tt-page .tt-payments-panel .table-scroll { flex: 1; }
@@ -250,7 +306,7 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .tt-payments-panel th { padding-right: 9px; padding-left: 9px; }
 .tt-payments-panel td { padding-right: 9px; padding-left: 9px; }
 .tt-payments-panel th:first-child,.tt-payments-panel td:first-child { padding-left: 14px; }
-.payments-table { width: 100%; min-width: 1400px; table-layout: auto; }
+.payments-table { width: 100%; min-width: 1000px; table-layout: auto; }
 .payments-table th { height: 32px; padding-right: 5px; padding-left: 5px; font-size: 8px; letter-spacing: -.1px; }
 .payments-table td { height: 38px; padding: 4px 5px; font-size: 8.5px; }
 .payments-table th:first-child,.payments-table td:first-child { padding-left: 7px; }
@@ -258,13 +314,38 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .payments-table .company-tag { min-width: 24px; min-height: 19px; padding: 0 4px; font-size: 8px; }
 .payments-table .shipper-cell,
 .payments-table .shipper-header { width: 1%; white-space: nowrap; }
-.payments-table .description-cell { min-width: 70px; max-width: 105px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.payments-table th:last-child,.payments-table .remarks-cell { width: 180px; min-width: 180px; max-width: 180px; }
-.payments-table .remarks-cell { overflow: visible; text-overflow: clip; white-space: normal; line-height: 1.4; overflow-wrap: anywhere; }
+.payments-table .description-cell { min-width: 56px; max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.payments-table .remarks-header,.payments-table .remarks-cell { width: 96px; min-width: 96px; max-width: 96px; }
+.payments-table .payment-status-header { width: 68px; min-width: 68px; }
+.payments-table .remarks-cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .payments-table .badge { min-height: 19px; padding: 0 5px; font-size: 8px; }
 .payments-table .tt-sent-update-button { min-height: 23px; padding: 0 5px; font-size: 8px; }
 .payments-table .inline-editing { min-width: 82px; padding: 2px; }
 .payments-table .inline-editing input,.payments-table .inline-editing select { min-width: 76px; height: 28px; padding: 0 4px; font-size: 9px; }
+.to-be-tt-page .table-toolbar,.shipment-list-page .table-toolbar,.shipment-summary-filter .table-toolbar,.shipment-summary-sections .table-toolbar { min-height: 40px; padding: 7px 10px; gap: 8px; }
+.to-be-tt-page .table-title h2,.shipment-list-page .table-title h2,.shipment-summary-filter .table-title h2,.shipment-summary-sections .table-title h2 { font-size: 10.5px; }
+.to-be-tt-page .count-pill,.shipment-list-page .count-pill,.shipment-summary-filter .count-pill,.shipment-summary-sections .count-pill { padding: 2px 6px; font-size: 8px; }
+.to-be-tt-page .table-search,.to-be-tt-page .filter-select,.shipment-list-page .table-search,.shipment-list-page .filter-select,.shipment-summary-filter .table-search,.shipment-summary-filter .filter-select { height: 27px; padding: 0 7px; }
+.to-be-tt-page .table-search input,.to-be-tt-page .filter-select select,.shipment-list-page .table-search input,.shipment-list-page .filter-select select,.shipment-summary-filter .table-search input,.shipment-summary-filter .filter-select select { font-size: 8.5px; }
+.to-be-tt-page .compact-filter-button,.shipment-list-page .compact-filter-button,.shipment-summary-filter .compact-filter-button { height: 27px; padding: 0 8px; font-size: 8.5px; }
+.to-be-tt-page .button,.shipment-list-page .pending-tt-toolbar-actions > .button,.shipment-summary-filter .button { min-height: 27px; padding: 0 9px; font-size: 8.5px; }
+:is(.to-be-tt-page,.shipment-list-page,.shipment-summary-sections) .payments-table thead tr { height: 22px; }
+:is(.to-be-tt-page,.shipment-list-page,.shipment-summary-sections) .payments-table tbody tr { height: 24px; }
+:is(.to-be-tt-page,.shipment-list-page,.shipment-summary-sections) .payments-table th { height: 22px; padding: 0 2px; font-size: 7px; line-height: 1; }
+:is(.to-be-tt-page,.shipment-list-page,.shipment-summary-sections) .payments-table td { height: 24px; padding: 0 2px; font-size: 7.5px; line-height: 1; }
+:is(.to-be-tt-page,.shipment-list-page,.shipment-summary-sections) .payments-table th:first-child,
+:is(.to-be-tt-page,.shipment-list-page,.shipment-summary-sections) .payments-table td:first-child { padding-left: 5px; }
+:is(.to-be-tt-page,.shipment-list-page,.shipment-summary-sections) .payments-table .import-id { font-size: 8px; }
+:is(.to-be-tt-page,.shipment-list-page,.shipment-summary-sections) .payments-table td small { margin-top: 1px; font-size: 7px; }
+:is(.to-be-tt-page,.shipment-list-page,.shipment-summary-sections) .payments-table .company-tag { min-width: 19px; min-height: 14px; height: 14px; padding: 0 3px; border-radius: 3px; font-size: 6.5px; }
+:is(.to-be-tt-page,.shipment-list-page,.shipment-summary-sections) .payments-table .badge { min-height: 14px; height: 14px; padding: 0 4px; font-size: 6.5px; }
+:is(.to-be-tt-page,.shipment-list-page,.shipment-summary-sections) .payments-table .tt-sent-update-button { min-height: 17px; height: 17px; padding: 0 4px; border-radius: 4px; font-size: 6.5px; line-height: 1; }
+:is(.to-be-tt-page,.shipment-list-page,.shipment-summary-sections) .payments-table .remarks-cell { line-height: 1; }
+:is(.to-be-tt-page,.shipment-list-page,.shipment-summary-sections) .payments-table .inline-editing { padding: 1px 2px; }
+:is(.to-be-tt-page,.shipment-list-page,.shipment-summary-sections) .payments-table .inline-editing input,
+:is(.to-be-tt-page,.shipment-list-page,.shipment-summary-sections) .payments-table .inline-editing select { height: 20px; padding: 0 2px; font-size: 7.5px; }
+.to-be-tt-page .table-footer,.shipment-list-page .table-footer,.shipment-summary-sections .table-footer { padding: 6px 10px; font-size: 8px; }
+.shipment-summary-sections { gap: 10px; }
 .tt-sent-update-button { min-height: 27px; padding: 0 9px; border: 1px solid #b9d1f5; border-radius: 5px; background: #eff6ff; color: #2865bd; font-size: 9px; font-weight: 700; white-space: nowrap; cursor: pointer; }
 .tt-sent-update-button:hover { border-color: #6e9fe3; background: #e1eeff; }
 .tt-sent-date-modal { width: min(460px, 100%); }
@@ -359,7 +440,7 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .shipment-import-review { max-height: 290px; overflow: auto; border: 1px solid #e8edf3; border-radius: 7px; }
 .shipment-import-review table { min-width: 560px; }.shipment-import-review th { position: sticky; top: 0; }.shipment-import-review td { height: auto; padding-top: 9px; padding-bottom: 9px; white-space: normal; }
 .import-valid-copy { color: #25845f; }.import-error-copy { color: #bf5548; }
-.shipment-summary-sections { display: grid; gap: 16px; }
+.shipment-summary-sections { display: grid; gap: 10px; }
 .shipment-fullscreen-backdrop { padding: 0; }
 .shipment-fullscreen-backdrop .shipment-modal-fullscreen { width: 100%; height: 100%; max-height: 100vh; max-height: 100dvh; border: 0; border-radius: 0; }
 .shipment-modal-fullscreen form { flex: 1; min-height: 0; padding: 0 32px; }
@@ -646,6 +727,26 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 }
 .app-shell[data-theme="dark"] th { background: #202b3b; color: #9eabbd; }
 .app-shell[data-theme="dark"] td { border-color: #293547; color: #bcc6d4; }
+/* Keep the Excel-style worksheet legible in both application themes. */
+.app-shell .pre-sheet-paper { color-scheme: light; color: #111; background-color: #fff; }
+.app-shell .pre-sheet-paper .pre-sheet td,
+.app-shell .pre-sheet-paper .pre-sheet th { color: #111; background-color: #fff; border-color: #000; }
+.app-shell .pre-sheet-paper .pre-sheet .sheet-title-row td,
+.app-shell .pre-sheet-paper .pre-sheet .sheet-assumptions td { background-color: transparent; border: 0; }
+.app-shell .pre-sheet-paper .pre-sheet .sheet-title-row .sheet-title { background-color: #fbe5d6; }
+.app-shell .pre-sheet-paper .pre-sheet .sheet-title-row .sheet-material { background-color: #f8cbad; }
+.app-shell .pre-sheet-paper input,
+.app-shell .pre-sheet-paper label,
+.app-shell .pre-sheet-paper output { color: #111; }
+.app-shell .pre-sheet-paper input { background-color: transparent; -webkit-text-fill-color: currentColor; }
+.app-shell .pre-sheet-paper input:focus { background-color: #f0fff3; }
+.app-shell .pre-sheet-paper .sheet-assumptions td:nth-child(4) input { color: #d00000; }
+.app-shell .pre-sheet-paper .pre-sheet .sheet-highlight { color: #000; background-color: #ff0; }
+.app-shell .pre-sheet-paper .pre-sheet tbody tr:hover { background-color: transparent; }
+.app-shell .pre-sheet-paper .sheet-breakdown > div,
+.app-shell .pre-sheet-paper .sheet-breakdown-total { color: #111; background-color: #fff; }
+.app-shell .pre-sheet-paper .pre-sheet tfoot td:nth-child(2),
+.app-shell .pre-sheet-paper .pre-sheet tfoot td:nth-last-child(-n+2) { border: 0; background-color: transparent; }
 .app-shell[data-theme="dark"] tbody tr:hover { background: #202d3f; }
 .app-shell[data-theme="dark"] .import-id,
 .app-shell[data-theme="dark"] .breadcrumb strong,

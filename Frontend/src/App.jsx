@@ -39,6 +39,7 @@ import {
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
 import { api } from "./api.js";
+import PreCosting from "./PreCosting.jsx";
 
 const navigation = [
   { label: "Dashboard", icon: LayoutDashboard, key: "dashboard" },
@@ -51,6 +52,7 @@ const navigation = [
   { label: "Countries", icon: Globe2, key: "countries" },
   { label: "Material analysis", icon: Box, key: "materials" },
   { label: "Post costing", icon: FileText, key: "post-costing" },
+  { label: "Pre costing", icon: FileText, key: "pre-costing" },
 ];
 const reportNavigation = [
   { label: "SHIPMENT", key: "report-shipment" },
@@ -618,7 +620,7 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
   const headers = {
     shipments: ["Import No.", "Consignee", "Shipper", "Consignee name", "Description", "ETA", "Status", ""],
     tracking: ["Import No.", "Shipper", "ETD", "ETA", "Arrival", "Delivery", "Status", ""],
-    payments: ["Import No.", "Consignee", "Shipper", "Item description", "Transport", "Incoterm", "Payment terms", "Invoice", "Paid", "Balance", "Payment status", "ETD", "ETA CMB", "Duty (LKR)", "DO (LKR)", "Clearance", "Remarks", ""],
+    payments: ["Import No.", "Consignee", "Shipper", "Item description", "Transport", "Incoterm", "Payment terms", "Invoice", "Paid", "Balance", "ETD", "ETA CMB", "Duty (LKR)", "DO (LKR)", "Clearance", "Remarks", "Payment status", ""],
     customs: ["Import No.", "Consignee", "Duty", "DO charges", "Clearance progress", "Clearance status", "Shipment status", ""],
   }[mode];
   const workflowAction = onTTSent ? { label: "TT Sent", onClick: onTTSent } : onUnderClearing ? { label: "Under Clearing", onClick: onUnderClearing } : onCleared ? { label: "Cleared", onClick: onCleared } : null;
@@ -630,7 +632,7 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
   return (
     <div className="table-scroll">
       <table className={mode === "payments" ? "payments-table" : undefined}>
-        <thead><tr>{tableHeaders.map((header, index) => <th key={`${header}-${index}`} className={header === "Shipper" ? "shipper-header" : header === "Item description" ? "description-header" : undefined}>{header}</th>)}</tr></thead>
+        <thead><tr>{tableHeaders.map((header, index) => <th key={`${header}-${index}`} className={header === "Shipper" ? "shipper-header" : header === "Item description" ? "description-header" : header === "Remarks" ? "remarks-header" : header === "Payment status" ? "payment-status-header" : undefined}>{header}</th>)}</tr></thead>
         <tbody>
           {displayRows.map((shipment, index) => {
             const isGroupStart = index > 0 && (shipment.company || "").trim().toUpperCase() !== (displayRows[index - 1]?.company || "").trim().toUpperCase();
@@ -659,13 +661,14 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
                   <InlineEditCell shipment={shipment} field="incoterm" value={shipment.incoterm} onSave={onCellSave} type="select" options={shipment.transportMode === "AIR" ? ["CIP", "CPT", "FCA", "EXW"] : ["CIF", "CFR", "FOB", "EXW"]} buildPatch={(incoterm) => ({ incoterm, incotermLocation: ["CIP", "CPT", "CIF", "CFR"].includes(incoterm) ? "Colombo, Sri Lanka" : shipment.incotermLocation === "Colombo, Sri Lanka" ? "" : shipment.incotermLocation })}>{shipment.incoterm || "—"}</InlineEditCell>
                   <InlineEditCell shipment={shipment} field="paymentTerms" value={shipment.paymentTerms} onSave={onCellSave} type="select" options={[{ value: "ADVANCE_TT", label: "TT" }, { value: "LETTER_OF_CREDIT", label: "Letter of credit" }, { value: "DA_BL", label: "DA - From date of BL" }, { value: "DP_SIGHT", label: "DP of Sight" }, { value: "OPEN_ACCOUNT", label: "Open account" }]} buildPatch={(paymentTerms) => ({ paymentTerms, paymentMethod: paymentTerms === "ADVANCE_TT" ? "Advance TT" : paymentTerms === "LETTER_OF_CREDIT" ? "Sight LC" : paymentTerms === "DA_BL" ? "DA - From date of BL" : paymentTerms === "DP_SIGHT" ? "DP of Sight" : "Open account", paymentTermType: paymentTerms === "LETTER_OF_CREDIT" ? "Sight" : "", paymentTermDays: ["DA_BL", "OPEN_ACCOUNT"].includes(paymentTerms) ? 30 : "" })}>{paymentTermsLabel(shipment)}</InlineEditCell>
                   <InlineEditCell shipment={shipment} field="totalCost" value={shipment.totalCost} onSave={onCellSave} type="number">{currencyAmount(payment.finalPayable, shipment.currency)}</InlineEditCell>
-                  <td>{currencyAmount(payment.totalPaid, shipment.currency)}</td><td>{currencyAmount(payment.balance, shipment.currency)}</td><td><StatusBadge>{payment.status}</StatusBadge></td>
+                  <td>{currencyAmount(payment.totalPaid, shipment.currency)}</td><td>{currencyAmount(payment.balance, shipment.currency)}</td>
                   <InlineEditCell shipment={shipment} field="etd" value={shipment.etd} onSave={onCellSave} type="date">{dateLabel(shipment.etd)}</InlineEditCell>
                   <InlineEditCell shipment={shipment} field="eta" value={shipment.eta} onSave={onCellSave} type="date">{dateLabel(shipment.eta)}</InlineEditCell>
                   <InlineEditCell shipment={shipment} field="duty" value={shipment.duty} onSave={onCellSave} type="number">{decimalAmount(shipment.duty)}</InlineEditCell>
                   <InlineEditCell shipment={shipment} field="doCharges" value={shipment.doCharges} onSave={onCellSave} type="number">{decimalAmount(shipment.doCharges)}</InlineEditCell>
                   <InlineEditCell shipment={shipment} field="clearanceStatus" value={shipment.clearanceStatus} onSave={onCellSave}>{shipment.clearanceStatus || "—"}</InlineEditCell>
                   <InlineEditCell shipment={shipment} field="remarks" value={shipment.remarks} onSave={onCellSave} className="remarks-cell">{shipment.remarks || "—"}</InlineEditCell>
+                  <td><StatusBadge>{payment.status}</StatusBadge></td>
                 </>}
                 {mode === "customs" && <>
                   <td className="consignee-row-first" style={{ "--consignee-color": consigneeColorFor(shipment.company, consignees) }}><span className="import-id">{shipment.importNo}</span><small>{shipment.supplier}</small></td>
@@ -2331,6 +2334,7 @@ export default function App() {
     if (error && !shipments.length) return <div className="error-state"><strong>Unable to load shipments</strong><span>{error}</span><button className="button secondary" onClick={refresh}>Try again</button></div>;
     if (active === "dashboard") return <Dashboard shipments={shipments} consignees={consignees} analytics={analytics} accountName={authState?.name || authState?.username} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} onImport={() => setModalShipmentImport(true)} />;
     if (active === "materials") return <MaterialAnalysis materials={materials} onImport={importMaterials} onSave={saveMaterial} />;
+    if (active === "pre-costing") return <PreCosting />;
     if (active === "post-costing") return <PostCosting shipments={shipments} consignees={consignees} countries={countries} materials={materials} records={postCostings} onSave={savePostCosting} onDelete={deletePostCosting} />;
     if (active === "to-be-tt") {
       const pendingTTShipments = shipments.filter((shipment) =>
@@ -2422,7 +2426,7 @@ export default function App() {
             </div>
           </div>
         </header>
-        <main className={`content ${["materials", "post-costing", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", ...reportNavigation.map((item) => item.key)].includes(active) ? "content-wide" : ""}`}>
+        <main className={`content ${["materials", "post-costing", "pre-costing", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", ...reportNavigation.map((item) => item.key)].includes(active) ? "content-wide" : ""}`}>
           {renderContent()}
           <footer className="app-footer"><span>© 2026 FMJ ShipTrack</span><span>Shipment management, made simpler.</span></footer>
         </main>
