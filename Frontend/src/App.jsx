@@ -62,7 +62,8 @@ const reportNavigation = [
   { label: "UB", key: "report-ub", consigneeName: "UB" },
 ];
 const userAccessOptions = [
-  ...navigation.map(({ key, label }) => ({ key, label })),
+  { key: "post-costing", label: "Post costing" },
+  ...navigation.filter(({ key }) => key !== "post-costing").map(({ key, label }) => ({ key, label })),
   { key: "reports", label: "Reports & Analytics" },
   { key: "settings", label: "Settings" },
 ];
