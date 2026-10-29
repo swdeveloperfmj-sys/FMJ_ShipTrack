@@ -1293,22 +1293,28 @@ function PostCosting({ shipments, consignees, countries, records, onSave, onDele
         <div className="post-fields">{input("company", "Company")}{input("material", "Material")}{input("supplier", "Supplier")}{input("country", "Country")}{input("paymentType", "Payment type")}{input("fileNo", "File no.")}{input("lcNo", "LC no.")}{input("lcOpenedDate", "Date of LC Opened", "date")}{input("bank", "Bank")}{input("blDate", "BL date", "date")}{input("etd", "ETD", "date")}{input("eta", "ETA", "date")}{input("clearingDate", "Clearing date", "date")}{input("maturityDate", "Maturity date", "date")}{input("settlementDate", "Settlement date", "date")}</div>
         <div className="costing-section-title section-gap"><div><span>PRICE DETAILS</span><h2>Shipment price and quantity</h2></div></div>
         <div className="post-fields">{input("priceFob", "PRICE-FOB", "number")}{input("priceCfr", "CFR", "number")}{input("priceCif", "CIF", "number")}{input("unitPriceMt", "UNIT PRICE/MT", "number")}{input("quantityMt", "QUANTITY-MT", "number")}{input("location", "Location")}</div>
-        <div className="costing-section-title section-gap"><div><span>COSTING</span><h2>Invoice conversion</h2></div></div>
-        <div className="post-calculation-table">
-          <div><span>Bill Value - {draft.foreignCurrency}</span><strong>{decimalAmount(billValue)}</strong></div>
-          <div><span>Invoiced Qty - Kgs.</span><strong>{decimalAmount(quantityKg)}</strong></div>
-          <label>Bank rate for TT<input type="number" min="0" step="any" value={draft.bankRate} onChange={(event) => set("bankRate", event.target.value)} /></label>
-          <label>GAIN / LOSS<input type="number" step="any" value={draft.gainLoss} onChange={(event) => set("gainLoss", event.target.value)} /></label>
-          <div className="calculated"><span>Bill Value SLR</span><strong>{money(billValueLkr)}</strong></div>
-          <label>Insurance<input type="number" min="0" step="any" value={draft.insuranceLkr} onChange={(event) => set("insuranceLkr", event.target.value)} /></label>
-          <label>Freight<input type="number" min="0" step="any" value={draft.freightLkr} onChange={(event) => set("freightLkr", event.target.value)} /></label>
-          <div className="calculated total"><span>CIF - SLR</span><strong>{money(cifLkr)}</strong></div>
-        </div>
-        <div className="costing-section-title section-gap"><div><span>CUSTOMS</span><h2>Customs conversion</h2></div></div>
-        <div className="post-calculation-table customs-table">
-          <label>Customs Exchange Rate<input type="number" min="0" step="any" value={draft.customsRate} onChange={(event) => set("customsRate", event.target.value)} /></label>
-          <label>Insurance<input type="number" min="0" step="any" value={draft.customsInsurance} onChange={(event) => set("customsInsurance", event.target.value)} /></label>
-          <label>Freight<input type="number" min="0" step="any" value={draft.customsFreight} onChange={(event) => set("customsFreight", event.target.value)} /></label>
+        <div className="post-conversion-grid section-gap">
+          <section className="post-conversion-panel">
+            <div className="costing-section-title"><div><span>COSTING</span><h2>Invoice conversion</h2></div></div>
+            <div className="post-calculation-table">
+              <div><span>Bill Value - {draft.foreignCurrency}</span><strong>{decimalAmount(billValue)}</strong></div>
+              <div><span>Invoiced Qty - Kgs.</span><strong>{decimalAmount(quantityKg)}</strong></div>
+              <label>Bank rate for TT<input type="number" min="0" step="any" value={draft.bankRate} onChange={(event) => set("bankRate", event.target.value)} /></label>
+              <label>GAIN / LOSS<input type="number" step="any" value={draft.gainLoss} onChange={(event) => set("gainLoss", event.target.value)} /></label>
+              <div className="calculated"><span>Bill Value SLR</span><strong>{money(billValueLkr)}</strong></div>
+              <label>Insurance<input type="number" min="0" step="any" value={draft.insuranceLkr} onChange={(event) => set("insuranceLkr", event.target.value)} /></label>
+              <label>Freight<input type="number" min="0" step="any" value={draft.freightLkr} onChange={(event) => set("freightLkr", event.target.value)} /></label>
+              <div className="calculated total"><span>CIF - SLR</span><strong>{money(cifLkr)}</strong></div>
+            </div>
+          </section>
+          <section className="post-conversion-panel">
+            <div className="costing-section-title"><div><span>CUSTOMS</span><h2>Customs conversion</h2></div></div>
+            <div className="post-calculation-table customs-table">
+              <label>Customs Exchange Rate<input type="number" min="0" step="any" value={draft.customsRate} onChange={(event) => set("customsRate", event.target.value)} /></label>
+              <label>Insurance<input type="number" min="0" step="any" value={draft.customsInsurance} onChange={(event) => set("customsInsurance", event.target.value)} /></label>
+              <label>Freight<input type="number" min="0" step="any" value={draft.customsFreight} onChange={(event) => set("customsFreight", event.target.value)} /></label>
+            </div>
+          </section>
         </div>
         <div className="costing-section-title section-gap"><div><span>DUTY</span><h2>Customs duty calculation</h2></div></div>
         <div className="post-duty-table">
@@ -1329,19 +1335,26 @@ function PostCosting({ shipments, consignees, countries, records, onSave, onDele
           {(draft.clearingCharges || []).map((item, index) => <label key={item.name}><span>{index === 0 ? "Clearing Bill" : ""}</span><em>{item.name}</em><input type="number" min="0" step="0.01" value={Number(item.amount) === 0 ? "" : item.amount} placeholder="0.00" onFocus={(event) => event.target.select()} onChange={(event) => setCharge(index, event.target.value)} aria-label={`${item.name} amount`} /></label>)}
           <div className="clearing-total"><span /><strong>Total Clearing bill</strong><b>{money(clearingTotal)}</b></div>
         </div>
-        <div className="post-final-cost-table">
-          <div><span /><strong>Total - cost + duty + clearing bill</strong><b>{money(landedBeforeBank)}</b></div>
-          <label><span /><strong>Unloading charges</strong><input type="number" min="0" step="any" value={draft.unloading} onChange={(event) => set("unloading", event.target.value)} /></label>
-          <div className="bank-heading"><span>Bank Charges</span><strong /><b /></div>
-          <label><span /><strong>LC / TT / DC Commission <input className="inline-rate" type="number" min="0" step="any" value={draft.bankCommissionRate} onChange={(event) => set("bankCommissionRate", event.target.value)} />%</strong><b>{money(bankCommission)}</b></label>
-          <label><span /><strong>Bank Document Charges</strong><input type="number" min="0" step="any" value={draft.bankDocumentCharges} onChange={(event) => set("bankDocumentCharges", event.target.value)} /></label>
-          <div className="bank-total"><span /><strong>Total</strong><b>{money(landedBeforeBank + n(draft.unloading) + bankCommission + n(draft.bankDocumentCharges))}</b></div>
-          <label className="remittance"><span /><strong>D/Remittance (L)</strong><input type="number" min="0" step="any" value={draft.remittance} onChange={(event) => set("remittance", event.target.value)} /></label>
-          <div className="grand-total"><span /><strong>Total cost</strong><b>{money(totalCost)}</b></div>
-          <div><span /><strong>Cost per Kg - incl SSCL + VAT</strong><b>{money(costPerKg)}</b></div>
-          <div><span /><strong>SSCL</strong><b>{money(ssclPerKg)}</b></div>
-          <div><span /><strong>LESS VAT</strong><b>{money(vatPerKg)}</b></div>
-          <div className="cost-ex-vat"><span /><strong>Cost per Kg - Excl VAT</strong><b>{money(costPerKg - vatPerKg)}</b></div>
+        <div className="post-final-layout">
+          <div className="post-final-cost-table">
+            <div><span /><strong>Total - cost + duty + clearing bill</strong><b>{money(landedBeforeBank)}</b></div>
+            <label><span /><strong>Unloading charges</strong><input type="number" min="0" step="any" value={draft.unloading} onChange={(event) => set("unloading", event.target.value)} /></label>
+            <div className="bank-heading"><span>Bank Charges</span><strong /><b /></div>
+            <label><span /><strong>LC / TT / DC Commission <input className="inline-rate" type="number" min="0" step="any" value={draft.bankCommissionRate} onChange={(event) => set("bankCommissionRate", event.target.value)} />%</strong><b>{money(bankCommission)}</b></label>
+            <label><span /><strong>Bank Document Charges</strong><input type="number" min="0" step="any" value={draft.bankDocumentCharges} onChange={(event) => set("bankDocumentCharges", event.target.value)} /></label>
+            <div className="bank-total"><span /><strong>Total</strong><b>{money(landedBeforeBank + n(draft.unloading) + bankCommission + n(draft.bankDocumentCharges))}</b></div>
+            <label className="remittance"><span /><strong>D/Remittance (L)</strong><input type="number" min="0" step="any" value={draft.remittance} onChange={(event) => set("remittance", event.target.value)} /></label>
+            <div className="grand-total"><span /><strong>Total cost</strong><b>{money(totalCost)}</b></div>
+            <div><span /><strong>Cost per Kg - incl SSCL + VAT</strong><b>{money(costPerKg)}</b></div>
+            <div><span /><strong>SSCL</strong><b>{money(ssclPerKg)}</b></div>
+            <div><span /><strong>LESS VAT</strong><b>{money(vatPerKg)}</b></div>
+          </div>
+          <aside className="cost-ex-vat-card">
+            <span>FINAL UNIT COST</span>
+            <h3>Cost per Kg - Excl VAT</h3>
+            <strong>{money(costPerKg - vatPerKg)}</strong>
+            <small>VAT excluded landed cost per kilogram</small>
+          </aside>
         </div>
         <div className="costing-actions"><button className="button primary" disabled={saving}>{saving ? "Saving…" : draft.id ? "Update post costing" : "Save post costing"}</button></div>
       </form></div>
