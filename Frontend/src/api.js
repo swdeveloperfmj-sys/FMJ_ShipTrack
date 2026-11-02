@@ -20,6 +20,8 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  getActivity: (filters = {}) => request(`/activity?${new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== ""))}`),
+  recordPageView: (page) => request("/activity/page-view", { method: "POST", body: JSON.stringify({ page }) }),
   getPreCostings: () => request("/pre-costings"),
   createPreCosting: (costing) => request("/pre-costings", { method: "POST", body: JSON.stringify(costing) }),
   updatePreCosting: (id, costing) => request(`/pre-costings/${id}`, { method: "PUT", body: JSON.stringify(costing) }),

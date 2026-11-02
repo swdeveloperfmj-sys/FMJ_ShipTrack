@@ -2,6 +2,21 @@
 
 Shipment and import management workspace with a React dashboard and an Express API.
 
+Super administrators can open **User activity** from the sidebar or the dashboard
+shortcut. The activity timeline records sign-ins, sign-outs, page visits, and API
+create/update/delete attempts for shipments, directories, materials, costings, users
+and settings. Filter by user (including deleted users), module, action, result,
+Sri Lanka calendar dates or record ID. Select **View workflow** on an event to
+follow that record's history; shipment events include the resulting workflow status.
+Results refresh every 30 seconds and are paginated. Only super administrators can
+read the activity API. Passwords, verification codes and complete request payloads
+are excluded. Background data reads, local exports and actions outside this app are
+not recorded. History begins after this feature is installed; older activity cannot
+be reconstructed. Restart the backend to enable the new endpoints and MongoDB
+`activitylogs` collection. If an activity write fails after a business operation,
+the operation completes and the backend logs the tracking failure.
+Run activity checks with `node --test Backend/src/activity.test.js`.
+
 **Pre costing** provides item-level import estimates based on the SEA C&F worksheet.
 Enter quantities in kg, full item invoice values in USD, an LKR/USD exchange rate,
 and shipment-level LKR charges. Header inputs are limited to the worksheet's

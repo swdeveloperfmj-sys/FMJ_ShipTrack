@@ -8,6 +8,7 @@ import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import nodemailer from "nodemailer";
 import { preCostingsRouter } from "./preCostings.js";
+import { ActivityLog, activityMiddleware, activityFilter, recordActivity } from "./activity.js";
 import { createHmac, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
 
 const app = express();
@@ -229,6 +230,7 @@ const shipmentFields = [
 app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
+app.use(activityMiddleware);
 
 app.get("/", (_request, response) => {
   response.json({
@@ -437,6 +439,7 @@ app.post("/api/auth/login", loginLimiter, async (request, response, next) => {
       return response.status(401).json({ error: "Username or password is incorrect." });
     }
     if (user) {
+      await recordActivity({ id: user._id, name: user.name, username: user.username, role: "user" }, { action: "Sign in", resource: "session", outcome: "Success", statusCode: 200 });
       setSessionCookie(response, { ...user.toObject(), role: "user" });
       return response.json({ authenticated: true, username: user.username, name: user.name, role: "user", sidebarAccess: user.sidebarAccess || [], fontSize: user.fontSize || 100 });
     }
@@ -503,6 +506,7 @@ app.post("/api/auth/verify", verifyLimiter, async (request, response, next) => {
     }
 
     await LoginChallenge.deleteOne({ _id: challengeId });
+    await recordActivity({ id: admin._id, name: admin.username, username: admin.username, role: "super-admin" }, { action: "Sign in", resource: "session", outcome: "Success", statusCode: 200 });
     setSessionCookie(response, { ...admin.toObject(), role: "super-admin" });
     response.json({ authenticated: true, username: admin.username, name: admin.username, role: "super-admin", sidebarAccess: [], fontSize: admin.fontSize || 100 });
   } catch (error) {
@@ -510,9 +514,12 @@ app.post("/api/auth/verify", verifyLimiter, async (request, response, next) => {
   }
 });
 
-app.post("/api/auth/logout", requireAuthenticated, (_request, response) => {
-  clearSessionCookie(response);
-  response.status(204).end();
+app.post("/api/auth/logout", requireAuthenticated, async (request, response, next) => {
+  try {
+    await recordActivity(request.user, { action: "Sign out", resource: "session", outcome: "Success", statusCode: 204 });
+    clearSessionCookie(response);
+    response.status(204).end();
+  } catch (error) { next(error); }
 });
 
 function serializeShipment(shipment) {
@@ -711,6 +718,31 @@ app.get("/api/health", (_request, response) => {
 });
 
 app.use("/api", requireAuthenticated);
+app.get("/api/activity", requireSuperAdmin, async (request, response, next) => {
+  let filter;
+  try { filter = activityFilter(request.query); } catch (error) { return response.status(400).json({ error: error.message }); }
+  const page = Math.max(1, Math.min(100000, Number.parseInt(request.query.page, 10) || 1));
+  const limit = 50;
+  try {
+    const [events, total, actors] = await Promise.all([
+      ActivityLog.find(filter).sort({ occurredAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+      ActivityLog.countDocuments(filter),
+      ActivityLog.aggregate([{ $sort: { occurredAt: -1 } }, { $group: { _id: "$actorId", name: { $first: "$actorName" }, username: { $first: "$username" } } }, { $sort: { name: 1 } }]),
+    ]);
+    response.json({ events: events.map(({ _id, ...event }) => ({ id: _id, ...event })), total, page, limit, actors });
+  } catch (error) { next(error); }
+});
+app.post("/api/activity/page-view", async (request, response, next) => {
+  const page = request.body?.page;
+  const allowed = ["dashboard", "materials", "post-costing", "pre-costing", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", "companies", "consignees", "countries", "settings", "users", "report-shipment", "report-cleared", "report-fmj", "report-jd", "report-rla", "report-aop", "report-ub"];
+  if (!allowed.includes(page)) return response.status(400).json({ error: "Invalid page." });
+  const accessKey = page.startsWith("report-") ? "reports" : page;
+  if (request.user.role !== "super-admin" && !request.user.sidebarAccess.includes(accessKey)) return response.status(403).json({ error: "Page access is required." });
+  try {
+    await recordActivity(request.user, { action: "View page", resource: "pages", label: page, outcome: "Success", statusCode: 204 });
+    response.status(204).end();
+  } catch (error) { next(error); }
+});
 app.use("/api/pre-costings", preCostingsRouter);
 
 const sidebarAccessKeys = ["dashboard", "materials", "post-costing", "pre-costing", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", "companies", "consignees", "countries", "reports", "settings"];
