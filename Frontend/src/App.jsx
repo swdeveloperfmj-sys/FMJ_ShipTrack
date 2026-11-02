@@ -40,6 +40,7 @@ import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
 import { api } from "./api.js";
 import PreCosting from "./PreCosting.jsx";
+import UserActivity from "./UserActivity.jsx";
 
 const navigation = [
   { label: "Dashboard", icon: LayoutDashboard, key: "dashboard" },
@@ -2066,6 +2067,18 @@ export default function App() {
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [ttFilters, setTtFilters] = useState(emptyShipmentFilters);
   const accountMenuRef = useRef(null);
+  const lastActivityPage = useRef("");
+
+  useEffect(() => {
+    if (!authState?.authenticated) { lastActivityPage.current = ""; return; }
+    if (active === "activity") { lastActivityPage.current = ""; return; }
+    const accessKey = active.startsWith("report-") ? "reports" : active;
+    if (authState.role !== "super-admin" && !authState.sidebarAccess?.includes(accessKey)) return;
+    const key = `${authState.username}:${active}`;
+    if (lastActivityPage.current === key) return;
+    lastActivityPage.current = key;
+    api.recordPageView(active).catch(() => { lastActivityPage.current = ""; });
+  }, [active, authState?.authenticated, authState?.username, authState?.role, authState?.sidebarAccess]);
 
   const refresh = useCallback(async () => {
     setError("");
@@ -2321,7 +2334,7 @@ export default function App() {
 
   const availableNavigation = authState?.role === "super-admin" ? navigation : navigation.filter((item) => authState?.sidebarAccess?.includes(item.key));
   const canAccessReports = authState?.role === "super-admin" || authState?.sidebarAccess?.includes("reports");
-  const activeTitle = active === "settings" ? "Settings" : active === "users" ? "Users" : [...navigation, ...reportNavigation].find((item) => item.key === active)?.label || "Dashboard";
+  const activeTitle = active === "activity" ? "User activity" : active === "settings" ? "Settings" : active === "users" ? "Users" : [...navigation, ...reportNavigation].find((item) => item.key === active)?.label || "Dashboard";
   const openModal = (shipment) => setModalShipment(shipment || null);
   const markAuthenticated = (account) => {
     setAuthError("");
@@ -2330,9 +2343,10 @@ export default function App() {
   };
 
   function renderContent() {
+    if (active === "activity" && authState?.role === "super-admin") return <UserActivity />;
     if (loading) return <div className="loading-state"><span className="loader" />Loading shipment workspace…</div>;
     if (error && !shipments.length) return <div className="error-state"><strong>Unable to load shipments</strong><span>{error}</span><button className="button secondary" onClick={refresh}>Try again</button></div>;
-    if (active === "dashboard") return <Dashboard shipments={shipments} consignees={consignees} analytics={analytics} accountName={authState?.name || authState?.username} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} onImport={() => setModalShipmentImport(true)} />;
+    if (active === "dashboard") return <>{authState?.role === "super-admin" && <button className="panel activity-dashboard-link" onClick={() => setActive("activity")}><Activity size={22} /><span><strong>User activity & process flow</strong><small>Monitor user actions and follow record workflows</small></span><ArrowRight size={20} /></button>}<Dashboard shipments={shipments} consignees={consignees} analytics={analytics} accountName={authState?.name || authState?.username} onNavigate={setActive} onEdit={openModal} onAdd={() => openModal(null)} onImport={() => setModalShipmentImport(true)} /></>;
     if (active === "materials") return <MaterialAnalysis materials={materials} onImport={importMaterials} onSave={saveMaterial} />;
     if (active === "pre-costing") return <PreCosting />;
     if (active === "post-costing") return <PostCosting shipments={shipments} consignees={consignees} countries={countries} materials={materials} records={postCostings} onSave={savePostCosting} onDelete={deletePostCosting} />;
@@ -2406,6 +2420,7 @@ export default function App() {
           {canAccessReports && <div className="reports-nav-group"><button title={sidebarCollapsed ? "Reports & Analytics" : undefined} className={`nav-item reports-nav-toggle ${active.startsWith("report-") ? "active" : ""}`} onClick={() => sidebarCollapsed ? setSidebarCollapsed(false) : setReportsOpen((open) => !open)} aria-expanded={reportsOpen}><Activity size={18} /><span>Reports &amp; Analytics</span><ChevronDown size={15} className={reportsOpen ? "reports-nav-chevron open" : "reports-nav-chevron"} /></button>
             {reportsOpen && <div className="reports-nav-links">{reportNavigation.map(({ label, key }) => <button key={key} className={`reports-nav-link ${active === key ? "active" : ""}`} onClick={() => { setActive(key); setSidebarOpen(false); }}>{label}</button>)}</div>}
           </div>}
+          {authState?.role === "super-admin" && <button title={sidebarCollapsed ? "User activity" : undefined} className={`nav-item ${active === "activity" ? "active" : ""}`} onClick={() => { setActive("activity"); setSidebarOpen(false); }}><Activity size={18} /><span>User activity</span></button>}
           {authState?.role === "super-admin" && <button title={sidebarCollapsed ? "Users" : undefined} className={`nav-item ${active === "users" ? "active" : ""}`} onClick={() => { setActive("users"); setSidebarOpen(false); }}><Users size={18} /><span>Users</span></button>}
           {authState?.role === "super-admin" && <button title={sidebarCollapsed ? "Settings" : undefined} className={`nav-item ${active === "settings" ? "active" : ""}`} onClick={() => { setActive("settings"); setSidebarOpen(false); }}><Settings size={18} /><span>Settings</span></button>}
           {authState?.role === "user" && authState.sidebarAccess?.includes("settings") && <button title={sidebarCollapsed ? "Settings" : undefined} className={`nav-item ${active === "settings" ? "active" : ""}`} onClick={() => { setActive("settings"); setSidebarOpen(false); }}><Settings size={18} /><span>Settings</span></button>}
