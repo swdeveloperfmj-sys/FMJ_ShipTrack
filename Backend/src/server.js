@@ -886,7 +886,7 @@ function normalizePostCosting(body) {
   if (!material || material.length > 200) throw new Error("Enter a valid material name.");
   const data = { ...body };
   delete data.id; delete data.fileNo; delete data.material; delete data.createdAt; delete data.updatedAt;
-  if (JSON.stringify(data).length > 100000) throw new Error("Post costing data is too large.");
+  if (JSON.stringify(data).length > 100000) throw new Error("Single Post costing data is too large.");
   return { fileNo, material, data, updatedAt: new Date().toISOString() };
 }
 app.get("/api/post-costings", async (_request, response, next) => {
@@ -896,10 +896,10 @@ app.post("/api/post-costings", async (request, response, next) => {
   try { response.status(201).json(serializePostCosting(await PostCosting.create({ _id: randomUUID(), ...normalizePostCosting(request.body) }))); } catch (error) { if (error.message?.startsWith("Enter") || error.message?.includes("too large")) return response.status(400).json({ error: error.message }); next(error); }
 });
 app.put("/api/post-costings/:id", async (request, response, next) => {
-  try { const item = await PostCosting.findByIdAndUpdate(request.params.id, normalizePostCosting(request.body), { new: true, runValidators: true }); if (!item) return response.status(404).json({ error: "Post costing not found." }); response.json(serializePostCosting(item)); } catch (error) { if (error.message?.startsWith("Enter") || error.message?.includes("too large")) return response.status(400).json({ error: error.message }); next(error); }
+  try { const item = await PostCosting.findByIdAndUpdate(request.params.id, normalizePostCosting(request.body), { new: true, runValidators: true }); if (!item) return response.status(404).json({ error: "Single Post costing not found." }); response.json(serializePostCosting(item)); } catch (error) { if (error.message?.startsWith("Enter") || error.message?.includes("too large")) return response.status(400).json({ error: error.message }); next(error); }
 });
 app.delete("/api/post-costings/:id", async (request, response, next) => {
-  try { const item = await PostCosting.findByIdAndDelete(request.params.id); if (!item) return response.status(404).json({ error: "Post costing not found." }); response.status(204).end(); } catch (error) { next(error); }
+  try { const item = await PostCosting.findByIdAndDelete(request.params.id); if (!item) return response.status(404).json({ error: "Single Post costing not found." }); response.status(204).end(); } catch (error) { next(error); }
 });
 
 app.get("/api/shipments", async (request, response, next) => {

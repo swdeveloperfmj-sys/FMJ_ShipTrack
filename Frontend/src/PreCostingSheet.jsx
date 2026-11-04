@@ -61,7 +61,6 @@ export default function PreCostingSheet({ draft, result, change, changeItem }) {
         const editable = ["description", "quantity", "usdValue"].includes(key);
         return <td key={key} className={key === "perKg" || key === "withoutVat" ? "sheet-highlight" : ""}>{editable ? <input aria-label={`Item ${index + 1} ${key}`} title={key === "usdValue" ? "Full USD line value, including invoiced C&F freight" : undefined} type={key === "description" ? "text" : "number"} required min={key === "description" ? undefined : "0.000001"} step="any" maxLength={key === "description" ? 200 : undefined} value={item[key]} onChange={(event) => changeItem(index, key, event.target.value)} /> : amount(result?.rows[index]?.[key])}</td>;
       })}</tr>)}</tbody>
-      <tfoot><tr>{sheetColumns.map(([key]) => <td key={key}>{key === "description" ? input("totalLabel", "Description below items", "text", { maxLength: 200 }) : ["quantity", "perKg", "withoutVat"].includes(key) ? "" : amount(result?.totals[key])}</td>)}</tr></tfoot>
     </table>
     <div className="sheet-breakdown">
       <div>Clearing</div><div>{input("breakdownClearing", "Clearing breakdown amount", "number", { min: 0, step: "any" })}</div><div className="sheet-breakdown-detail">{input("breakdownDetails", "Clearing breakdown details", "text", { maxLength: 500 })}</div>

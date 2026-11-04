@@ -3,7 +3,7 @@ import { Download, Plus, Save, Trash2 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import { api } from "./api.js";
 import PreCostingSheet from "./PreCostingSheet.jsx";
-import { calculatePreCosting, chargeFields, newPreCosting, samplePreCosting, validatePreCosting } from "./preCosting.js";
+import { calculatePreCosting, chargeFields, newPreCosting, preparePreCostingDraft, samplePreCosting, validatePreCosting } from "./preCosting.js";
 
 const money = (value) => Number(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const columns = [["description", "Item description"], ["quantity", "Qty kg"], ["usdValue", "USD value / C&F"], ["lkrValue", "LKR value"], ["insurance", "Insurance"], ["freight", "Freight"], ["cif", "CIF value"], ["cid", "CID"], ["pal", "PAL"], ["eic", "EIC"], ["sscl", "SSCL"], ["vat", "VAT"], ["duty", "Total duty"], ["clearing", "Clearing / other"], ["landed", "Landed cost"], ["perKg", "Cost / kg"], ["withoutVat", "Cost / kg excl. VAT"]];
@@ -23,11 +23,11 @@ function downloadPdf(draft, result) {
     y += 14;
   };
   startPage();
-  for (const [index, row] of [...result.rows, { ...result.totals, description: "TOTAL" }].entries()) {
+  for (const row of result.rows) {
     const lines = pdf.splitTextToSize(row.description, width - 2);
     const height = Math.max(10, lines.length * 3.5 + 4);
     if (y + height > 270) { pdf.addPage(); startPage(); }
-    pdf.setFillColor(index === result.rows.length ? 224 : 247, 243, 252);
+    pdf.setFillColor(247, 243, 252);
     pdf.rect(12, y - 4, 396, height, "F");
     columns.forEach(([key], column) => {
       if (key === "description") pdf.text(lines, 13 + column * width, y);
@@ -66,7 +66,7 @@ export default function PreCosting() {
   function change(key, value) { setDraft((current) => ({ ...current, [key]: value })); setDirty(true); setNotice(""); }
   function replace(value) {
     if (dirty && !window.confirm("Discard unsaved pre costing changes?")) return;
-    setDraft(value); setDirty(false); setError(""); setNotice("");
+    setDraft(preparePreCostingDraft(value)); setDirty(false); setError(""); setNotice("");
   }
   function changeItem(index, key, value) { change("items", draft.items.map((item, i) => i === index ? { ...item, [key]: value } : item)); }
   async function save(event) {
@@ -94,6 +94,7 @@ export default function PreCosting() {
         {error && <div className="inline-error" role="alert">{error}</div>}{notice && <p className="pre-notice" role="status">{notice}</p>}
         <fieldset disabled={busy}>
           <PreCostingSheet draft={draft} result={result} change={change} changeItem={changeItem} />
+          {result?.rows.some((row) => !row) && <p className="pre-notice" role="status">Preview charges use completed rows only. Enter quantity and USD value for each new row to calculate its costs.</p>}
           <div className="pre-row-actions">
             <button type="button" className="button secondary" disabled={draft.items.length >= 100} onClick={() => change("items", [...draft.items, { description: "", quantity: "", usdValue: "" }])}><Plus size={14} /> Add item</button>
             <button type="button" className="button secondary" disabled={draft.items.length >= 100} onClick={() => change("items", [...draft.items, ...Array.from({ length: Math.min(5, 100 - draft.items.length) }, () => ({ description: "", quantity: "", usdValue: "" }))])}><Plus size={14} /> Add 5 rows</button>

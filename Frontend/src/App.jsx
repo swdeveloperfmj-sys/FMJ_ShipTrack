@@ -51,7 +51,7 @@ const navigation = [
   { label: "Consignees", icon: ContactRound, key: "consignees" },
   { label: "Countries", icon: Globe2, key: "countries" },
   { label: "Material analysis", icon: Box, key: "materials" },
-  { label: "Post costing", icon: FileText, key: "post-costing" },
+  { label: "Single Post costing", icon: FileText, key: "post-costing" },
   { label: "Pre costing", icon: FileText, key: "pre-costing" },
 ];
 const reportNavigation = [
@@ -64,7 +64,7 @@ const reportNavigation = [
   { label: "UB", key: "report-ub", consigneeName: "UB" },
 ];
 const userAccessOptions = [
-  { key: "post-costing", label: "Post costing" },
+  { key: "post-costing", label: "Single Post costing" },
   ...navigation.filter(({ key }) => key !== "post-costing").map(({ key, label }) => ({ key, label })),
   { key: "reports", label: "Reports & Analytics" },
   { key: "settings", label: "Settings" },
@@ -1215,7 +1215,7 @@ function openPostCostingPdf(costing) {
     row("Total clearing bill", amount(clearingTotal), columns[2], y3);
 
     const safeFileNo = String(costing.fileNo || "costing").replace(/[^a-z0-9_-]+/gi, "-");
-    doc.setProperties({ title: `Post Costing - ${costing.fileNo || "Costing"}`, subject: costing.material || "Post costing" });
+    doc.setProperties({ title: `Post Costing - ${costing.fileNo || "Costing"}`, subject: costing.material || "Single Post costing" });
     const pdfUrl = URL.createObjectURL(doc.output("blob"));
     pdfTab.location.replace(pdfUrl);
     pdfTab.document.title = `Post-Costing-${safeFileNo}.pdf`;
@@ -1341,7 +1341,7 @@ function PostCosting({ shipments, consignees, countries, materials, records, onS
   const input = (field, label, type = "text") => <label>{label}<input type={type} min={type === "number" ? "0" : undefined} step={type === "number" ? "any" : undefined} value={draft[field]} onClick={type === "date" ? openDatePicker : undefined} onChange={(event) => set(field, event.target.value)} /></label>;
 
   return <section className="post-costing-page">
-    <PageTitle eyebrow="LANDED COST" title="Post costing" subtitle="Record and save shipment price details for each imported material." action={<button className="button primary" onClick={() => setDraft(makeEmptyPostCosting())}><Plus size={16} /> New post costing</button>} />
+    <PageTitle eyebrow="LANDED COST" title="Single Post costing" subtitle="Record and save shipment price details for each imported material." action={<button className="button primary" onClick={() => setDraft(makeEmptyPostCosting())}><Plus size={16} /> New post costing</button>} />
     <div className="post-costing-layout"><aside className="panel costing-list"><div className="costing-list-head"><strong>Saved costings</strong><span>{costingQuery ? `${filteredCostings.length}/${records.length}` : records.length}</span></div><div className="costing-filter"><input type="search" value={costingQuery} onChange={(event) => setCostingQuery(event.target.value)} placeholder="Filter costings..." aria-label="Filter saved costings" />{costingQuery && <button type="button" onClick={() => setCostingQuery("")} aria-label="Clear costing filter"><X size={14} /></button>}</div>{filteredCostings.length ? filteredCostings.map((item) => <button type="button" key={item.id} className={draft.id === item.id ? "active" : ""} onContextMenu={(event) => openCostingContextMenu(event, item)} onDoubleClick={() => { try { openPostCostingPdf(item); } catch (error) { setFormError(error.message || "Unable to generate the costing PDF."); } }} title="Right-click to edit · Double-click to open PDF"><strong>File {item.fileNo}</strong><span>{item.material}</span></button>) : <div className="costing-empty">{records.length ? "No matching costings." : "No post costings saved yet."}</div>}</aside>
       {costingContextMenu && <div className="shipment-action-menu shipment-context-menu costing-context-menu" style={{ top: costingContextMenu.top }} role="menu" onPointerDown={(event) => event.stopPropagation()}><button role="menuitem" onClick={() => editCosting(costingContextMenu.item)}>Edit costing</button></div>}
       <form className="panel post-costing-form" onSubmit={submit}>{formError && <div className="inline-error">{formError}</div>}
@@ -2296,14 +2296,14 @@ export default function App() {
   async function savePostCosting(costing) {
     const saved = costing.id ? await api.updatePostCosting(costing.id, costing) : await api.createPostCosting(costing);
     setPostCostings((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
-    setNotice(`Post costing ${saved.fileNo} saved`);
+    setNotice(`Single Post costing ${saved.fileNo} saved`);
     return saved;
   }
 
   async function deletePostCosting(id) {
     await api.deletePostCosting(id);
     setPostCostings((current) => current.filter((item) => item.id !== id));
-    setNotice("Post costing deleted");
+    setNotice("Single Post costing deleted");
   }
 
   async function signOut() {
