@@ -68,7 +68,8 @@ const reportNavigation = [
 const userAccessOptions = [
   { key: "post-costing", label: "Single Post costing" },
   ...navigation.filter(({ key }) => key !== "post-costing").map(({ key, label }) => ({ key, label })),
-  { key: "reports", label: "Reports & Analytics" },
+  { key: "reports", label: "Reports & Analytics (all reports)" },
+  ...reportNavigation.map(({ key, label }) => ({ key, label: `Reports - ${label}` })),
   { key: "settings", label: "Settings" },
 ];
 
@@ -1866,7 +1867,7 @@ function UserModal({ initial, onClose, onSave }) {
     setSaving(true); setError("");
     try { await onSave(null, initial.id, true); onClose(); } catch (deleteError) { setError(deleteError.message); setSaving(false); }
   }
-  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="shipment-modal consignee-modal" role="dialog" aria-modal="true" aria-labelledby="user-modal-title"><div className="modal-head"><div><div className="eyebrow">{initial ? "UPDATE USER" : "NEW USER"}</div><h2 id="user-modal-title">{initial ? "Edit user" : "Create user"}</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Close"><X size={20} /></button></div><form onSubmit={submit}><div className="form-section"><div className="form-grid"><label>Full name<input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required maxLength={120} /></label><label>Username<input value={form.username} onChange={(event) => setForm((current) => ({ ...current, username: event.target.value }))} required minLength={3} maxLength={40} pattern="[A-Za-z0-9._-]+" /></label><label>{initial ? "New password (optional)" : "Password"}<input type="password" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} required={!initial} minLength={6} maxLength={128} /></label><label>{initial ? "Re-enter new password" : "Re-enter password"}<input type="password" value={form.confirmPassword} onChange={(event) => setForm((current) => ({ ...current, confirmPassword: event.target.value }))} required={!initial} minLength={6} maxLength={128} /></label></div></div><div className="form-section"><h3>Left sidebar access</h3><div className="user-access-list">{userAccessOptions.map((item) => <label key={item.key}><input type="checkbox" checked={form.sidebarAccess.includes(item.key)} onChange={() => toggleAccess(item.key)} />{item.label}</label>)}</div></div>{error && <div className="form-error">{error}</div>}<div className="modal-footer">{initial && <button type="button" className="delete-button" onClick={remove} disabled={saving}>Delete user</button>}<button type="button" className="button secondary" onClick={onClose}>Cancel</button><button className="button primary" disabled={saving}>{saving ? "Saving…" : initial ? "Save changes" : "Create user"}</button></div></form></section></div>;
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="shipment-modal consignee-modal" role="dialog" aria-modal="true" aria-labelledby="user-modal-title"><div className="modal-head"><div><div className="eyebrow">{initial ? "UPDATE USER" : "NEW USER"}</div><h2 id="user-modal-title">{initial ? "Edit user" : "Create user"}</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Close"><X size={20} /></button></div><form onSubmit={submit}><div className="form-section"><div className="form-grid"><label>Full name<input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required maxLength={120} /></label><label>Username<input value={form.username} onChange={(event) => setForm((current) => ({ ...current, username: event.target.value }))} required minLength={3} maxLength={40} pattern="[A-Za-z0-9._-]+" /></label><label>{initial ? "New password (optional)" : "Password"}<input type="password" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} required={!initial} minLength={6} maxLength={128} /></label><label>{initial ? "Re-enter new password" : "Re-enter password"}<input type="password" value={form.confirmPassword} onChange={(event) => setForm((current) => ({ ...current, confirmPassword: event.target.value }))} required={!initial} minLength={6} maxLength={128} /></label></div></div><div className="form-section"><h3>Left sidebar access</h3><div className="user-access-list">{userAccessOptions.map((item) => <label key={item.key}><input type="checkbox" checked={form.sidebarAccess.includes(item.key) || (item.key.startsWith("report-") && form.sidebarAccess.includes("reports"))} disabled={item.key.startsWith("report-") && form.sidebarAccess.includes("reports")} onChange={() => toggleAccess(item.key)} />{item.label}</label>)}</div><p className="muted">Select all reports above, or choose individual reports. Users is available to super administrators only.</p></div>{error && <div className="form-error">{error}</div>}<div className="modal-footer">{initial && <button type="button" className="delete-button" onClick={remove} disabled={saving}>Delete user</button>}<button type="button" className="button secondary" onClick={onClose}>Cancel</button><button className="button primary" disabled={saving}>{saving ? "Saving…" : initial ? "Save changes" : "Create user"}</button></div></form></section></div>;
 }
 
 function UserDirectory({ users, onEdit }) {
@@ -2111,7 +2112,7 @@ export default function App() {
   }, [authState?.role]);
   useEffect(() => {
     if (authState?.role !== "user") return;
-    const firstAllowed = navigation.find((item) => authState.sidebarAccess?.includes(item.key))?.key || (authState.sidebarAccess?.includes("settings") ? "settings" : null);
+    const firstAllowed = navigation.find((item) => authState.sidebarAccess?.includes(item.key))?.key || reportNavigation.find((item) => authState.sidebarAccess?.includes("reports") || authState.sidebarAccess?.includes(item.key))?.key || (authState.sidebarAccess?.includes("settings") ? "settings" : null);
     if (firstAllowed) setActive(firstAllowed);
   }, [authState?.role, authState?.sidebarAccess]);
   useEffect(() => {
@@ -2322,7 +2323,8 @@ export default function App() {
   }
 
   const availableNavigation = authState?.role === "super-admin" ? navigation : navigation.filter((item) => authState?.sidebarAccess?.includes(item.key));
-  const canAccessReports = authState?.role === "super-admin" || authState?.sidebarAccess?.includes("reports");
+  const availableReports = reportNavigation.filter((item) => authState?.role === "super-admin" || authState?.sidebarAccess?.includes("reports") || authState?.sidebarAccess?.includes(item.key));
+  const canAccessReports = availableReports.length > 0;
   const activeTitle = active === "settings" ? "Settings" : active === "users" ? "Users" : [...navigation, ...reportNavigation].find((item) => item.key === active)?.label || "Dashboard";
   const openModal = (shipment) => setModalShipment(shipment || null);
   const markAuthenticated = (account) => {
@@ -2366,6 +2368,7 @@ export default function App() {
       return <ShipmentListPage eyebrow="CLEARANCE" title="Cleared Shipments" subtitle="Shipments that have completed customs clearance." rows={clearedShipments} mode="payments" consignees={consignees} onEdit={openModal} onDelete={deleteShipmentFromList} onAdd={() => openModal(null)} onPayments={setPaymentLedgerShipment} onCellSave={saveShipmentCell} showAdd={false} footer="cleared shipments" />;
     }
     if (active.startsWith("report-")) {
+      if (!availableReports.some((item) => item.key === active)) return <EmptyState message="Report access required" description="Ask your administrator to enable this report in Left sidebar access." />;
       const report = reportNavigation.find((item) => item.key === active);
       const consigneeCode = report?.consigneeName && consignees.find((item) => item.name.toUpperCase() === report.consigneeName)?.code;
       const reportShipments = report?.key === "report-cleared"
@@ -2407,7 +2410,7 @@ export default function App() {
         <div className="nav-caption">WORKSPACE</div>
         <nav>{availableNavigation.map(({ label, icon: Icon, key }) => <button key={key} title={sidebarCollapsed ? label : undefined} className={`nav-item ${active === key ? "active" : ""}`} onClick={() => { setActive(key); setSidebarOpen(false); }}><Icon size={18} /><span>{label}</span>{key === "tracking" && analytics?.delayed > 0 && <i className="nav-count">{analytics.delayed}</i>}</button>)}
           {canAccessReports && <div className="reports-nav-group"><button title={sidebarCollapsed ? "Reports & Analytics" : undefined} className={`nav-item reports-nav-toggle ${active.startsWith("report-") ? "active" : ""}`} onClick={() => sidebarCollapsed ? setSidebarCollapsed(false) : setReportsOpen((open) => !open)} aria-expanded={reportsOpen}><Activity size={18} /><span>Reports &amp; Analytics</span><ChevronDown size={15} className={reportsOpen ? "reports-nav-chevron open" : "reports-nav-chevron"} /></button>
-            {reportsOpen && <div className="reports-nav-links">{reportNavigation.map(({ label, key }) => <button key={key} className={`reports-nav-link ${active === key ? "active" : ""}`} onClick={() => { setActive(key); setSidebarOpen(false); }}>{label}</button>)}</div>}
+            {reportsOpen && <div className="reports-nav-links">{availableReports.map(({ label, key }) => <button key={key} className={`reports-nav-link ${active === key ? "active" : ""}`} onClick={() => { setActive(key); setSidebarOpen(false); }}>{label}</button>)}</div>}
           </div>}
           {authState?.role === "super-admin" && <button title={sidebarCollapsed ? "Users" : undefined} className={`nav-item ${active === "users" ? "active" : ""}`} onClick={() => { setActive("users"); setSidebarOpen(false); }}><Users size={18} /><span>Users</span></button>}
           {authState?.role === "super-admin" && <button title={sidebarCollapsed ? "Settings" : undefined} className={`nav-item ${active === "settings" ? "active" : ""}`} onClick={() => { setActive("settings"); setSidebarOpen(false); }}><Settings size={18} /><span>Settings</span></button>}
