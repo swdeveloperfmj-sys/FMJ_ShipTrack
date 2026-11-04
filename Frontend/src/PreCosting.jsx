@@ -3,7 +3,8 @@ import { Download, Plus, Save, Trash2 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import { api } from "./api.js";
 import PreCostingSheet from "./PreCostingSheet.jsx";
-import { calculatePreCosting, chargeFields, newPreCosting, samplePreCosting, validatePreCosting } from "./preCosting.js";
+import DutyCalculator from "./DutyCalculator.jsx";
+import { calculatePreCosting, chargeFields, newPreCosting, preparePreCostingDraft, samplePreCosting, validatePreCosting } from "./preCosting.js";
 
 const money = (value) => Number(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const columns = [["description", "Item description"], ["quantity", "Qty kg"], ["usdValue", "USD value / C&F"], ["lkrValue", "LKR value"], ["insurance", "Insurance"], ["freight", "Freight"], ["cif", "CIF value"], ["cid", "CID"], ["pal", "PAL"], ["eic", "EIC"], ["sscl", "SSCL"], ["vat", "VAT"], ["duty", "Total duty"], ["clearing", "Clearing / other"], ["landed", "Landed cost"], ["perKg", "Cost / kg"], ["withoutVat", "Cost / kg excl. VAT"]];
@@ -23,11 +24,11 @@ function downloadPdf(draft, result) {
     y += 14;
   };
   startPage();
-  for (const [index, row] of [...result.rows, { ...result.totals, description: "TOTAL" }].entries()) {
+  for (const row of result.rows) {
     const lines = pdf.splitTextToSize(row.description, width - 2);
     const height = Math.max(10, lines.length * 3.5 + 4);
     if (y + height > 270) { pdf.addPage(); startPage(); }
-    pdf.setFillColor(index === result.rows.length ? 224 : 247, 243, 252);
+    pdf.setFillColor(247, 243, 252);
     pdf.rect(12, y - 4, 396, height, "F");
     columns.forEach(([key], column) => {
       if (key === "description") pdf.text(lines, 13 + column * width, y);
@@ -44,6 +45,14 @@ function downloadPdf(draft, result) {
 }
 
 export default function PreCosting() {
+  const [calculatorOpen, setCalculatorOpen] = useState(false);
+  useEffect(() => {
+    const shortcut = (event) => {
+      if (event.key === "F1") { event.preventDefault(); setCalculatorOpen(true); }
+    };
+    window.addEventListener("keydown", shortcut, true);
+    return () => window.removeEventListener("keydown", shortcut, true);
+  }, []);
   const [draft, setDraft] = useState(newPreCosting);
   const [records, setRecords] = useState([]);
   const [query, setQuery] = useState("");
@@ -64,9 +73,17 @@ export default function PreCosting() {
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
   function change(key, value) { setDraft((current) => ({ ...current, [key]: value })); setDirty(true); setNotice(""); }
+  function passCalculation(headers) {
+    if (busy) return;
+    setDraft((current) => ({ ...current, ...headers }));
+    setDirty(true);
+    setError("");
+    setNotice("Calculation values passed to Exchange rate, CID, PAL, EIC, VAT and SSCL. Save pre costing to keep these changes.");
+    setCalculatorOpen(false);
+  }
   function replace(value) {
     if (dirty && !window.confirm("Discard unsaved pre costing changes?")) return;
-    setDraft(value); setDirty(false); setError(""); setNotice("");
+    setDraft(preparePreCostingDraft(value)); setDirty(false); setError(""); setNotice("");
   }
   function changeItem(index, key, value) { change("items", draft.items.map((item, i) => i === index ? { ...item, [key]: value } : item)); }
   async function save(event) {
@@ -88,12 +105,15 @@ export default function PreCosting() {
   }
   const filtered = records.filter((item) => `${item.reference} ${item.material}`.toLowerCase().includes(query.toLowerCase()));
   return <section className="pre-costing-page">
+    <DutyCalculator open={calculatorOpen} onClose={() => setCalculatorOpen(false)} onPass={passCalculation} busy={busy} />
+    <button type="button" className="button secondary" onClick={() => setCalculatorOpen(true)}>Calculation (F1)</button>
     <div className="page-title"><div><span className="eyebrow">IMPORT ESTIMATES</span><h1>Pre costing</h1><p>Estimate landed cost by item, using the SEA C&amp;F costing format.</p></div><div className="page-actions"><button disabled={busy} className="button secondary" onClick={() => replace(samplePreCosting())}>Load reference example</button><button disabled={busy} className="button primary" onClick={() => replace(newPreCosting())}><Plus size={16} /> New pre costing</button></div></div>
     <div className="pre-costing-layout">
       <form className="panel pre-costing-form" onSubmit={save}>
         {error && <div className="inline-error" role="alert">{error}</div>}{notice && <p className="pre-notice" role="status">{notice}</p>}
         <fieldset disabled={busy}>
           <PreCostingSheet draft={draft} result={result} change={change} changeItem={changeItem} />
+          {result?.rows.some((row) => !row) && <p className="pre-notice" role="status">Preview charges use completed rows only. Enter quantity and USD value for each new row to calculate its costs.</p>}
           <div className="pre-row-actions">
             <button type="button" className="button secondary" disabled={draft.items.length >= 100} onClick={() => change("items", [...draft.items, { description: "", quantity: "", usdValue: "" }])}><Plus size={14} /> Add item</button>
             <button type="button" className="button secondary" disabled={draft.items.length >= 100} onClick={() => change("items", [...draft.items, ...Array.from({ length: Math.min(5, 100 - draft.items.length) }, () => ({ description: "", quantity: "", usdValue: "" }))])}><Plus size={14} /> Add 5 rows</button>

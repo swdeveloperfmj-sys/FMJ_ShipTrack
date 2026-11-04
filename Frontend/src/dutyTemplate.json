@@ -1,0 +1,674 @@
+{
+    "styles":  [
+                   {
+                       "fill":  false,
+                       "color":  "#000000",
+                       "bold":  false,
+                       "border":  false,
+                       "align":  "right",
+                       "format":  0
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#0000FF",
+                       "bold":  false,
+                       "border":  false,
+                       "align":  "center",
+                       "format":  4
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#000000",
+                       "bold":  true,
+                       "border":  false,
+                       "align":  "center",
+                       "format":  4
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#000000",
+                       "bold":  true,
+                       "border":  false,
+                       "align":  "center",
+                       "format":  0
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#0000FF",
+                       "bold":  true,
+                       "border":  false,
+                       "align":  "center",
+                       "format":  4
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#000000",
+                       "bold":  false,
+                       "border":  false,
+                       "align":  "right",
+                       "format":  165
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#000000",
+                       "bold":  false,
+                       "border":  false,
+                       "align":  "right",
+                       "format":  4
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#0000FF",
+                       "bold":  true,
+                       "border":  false,
+                       "align":  "center",
+                       "format":  166
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#000000",
+                       "bold":  false,
+                       "border":  false,
+                       "align":  "center",
+                       "format":  4
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#000000",
+                       "bold":  false,
+                       "border":  false,
+                       "align":  "center",
+                       "format":  0
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#993366",
+                       "bold":  false,
+                       "border":  false,
+                       "align":  "right",
+                       "format":  0
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#993366",
+                       "bold":  false,
+                       "border":  false,
+                       "align":  "right",
+                       "format":  4
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#000000",
+                       "bold":  false,
+                       "border":  false,
+                       "align":  "center",
+                       "format":  9
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#993366",
+                       "bold":  false,
+                       "border":  false,
+                       "align":  "center",
+                       "format":  4
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#000000",
+                       "bold":  false,
+                       "border":  false,
+                       "align":  "center",
+                       "format":  0
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#000000",
+                       "bold":  false,
+                       "border":  false,
+                       "align":  "center",
+                       "format":  10
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#0000FF",
+                       "bold":  true,
+                       "border":  false,
+                       "align":  "center",
+                       "format":  9
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#000000",
+                       "bold":  false,
+                       "border":  false,
+                       "align":  "right",
+                       "format":  165
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#FF0000",
+                       "bold":  true,
+                       "border":  false,
+                       "align":  "right",
+                       "format":  4
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#0000FF",
+                       "bold":  false,
+                       "border":  false,
+                       "align":  "center",
+                       "format":  9
+                   },
+                   {
+                       "fill":  true,
+                       "color":  "#FF0000",
+                       "bold":  true,
+                       "border":  true,
+                       "align":  "center",
+                       "format":  4
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#000000",
+                       "bold":  false,
+                       "border":  false,
+                       "align":  "right",
+                       "format":  165
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#000000",
+                       "bold":  false,
+                       "border":  false,
+                       "align":  "right",
+                       "format":  165
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#000000",
+                       "bold":  false,
+                       "border":  false,
+                       "align":  "right",
+                       "format":  0
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#000000",
+                       "bold":  false,
+                       "border":  false,
+                       "align":  "center",
+                       "format":  165
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#000000",
+                       "bold":  false,
+                       "border":  false,
+                       "align":  "center",
+                       "format":  166
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#000000",
+                       "bold":  false,
+                       "border":  false,
+                       "align":  "center",
+                       "format":  9
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#000000",
+                       "bold":  false,
+                       "border":  false,
+                       "align":  "right",
+                       "format":  0
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#FF0000",
+                       "bold":  false,
+                       "border":  false,
+                       "align":  "right",
+                       "format":  0
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#FF0000",
+                       "bold":  false,
+                       "border":  false,
+                       "align":  "right",
+                       "format":  4
+                   },
+                   {
+                       "fill":  false,
+                       "color":  "#0000FF",
+                       "bold":  false,
+                       "border":  false,
+                       "align":  "center",
+                       "format":  164
+                   }
+               ],
+    "widths":  [
+                   82,
+                   119,
+                   86,
+                   115,
+                   107,
+                   152,
+                   104,
+                   85
+               ],
+    "cells":  {
+                  "F1":  {
+                             "formula":  "",
+                             "style":  1,
+                             "value":  ""
+                         },
+                  "G1":  {
+                             "formula":  "",
+                             "style":  1,
+                             "value":  ""
+                         },
+                  "D3":  {
+                             "formula":  "",
+                             "style":  2,
+                             "value":  ""
+                         },
+                  "E3":  {
+                             "formula":  "",
+                             "style":  3,
+                             "value":  "Exchange rate"
+                         },
+                  "F3":  {
+                             "formula":  "",
+                             "style":  2,
+                             "value":  ""
+                         },
+                  "D4":  {
+                             "formula":  "",
+                             "style":  2,
+                             "value":  2288
+                         },
+                  "E4":  {
+                             "formula":  "",
+                             "style":  30,
+                             "value":  340
+                         },
+                  "F4":  {
+                             "formula":  "D4*E4",
+                             "style":  4,
+                             "value":  777920
+                         },
+                  "G4":  {
+                             "formula":  "",
+                             "style":  5,
+                             "value":  ""
+                         },
+                  "H4":  {
+                             "formula":  "",
+                             "style":  5,
+                             "value":  ""
+                         },
+                  "F5":  {
+                             "formula":  "",
+                             "style":  0,
+                             "value":  "  "
+                         },
+                  "G5":  {
+                             "formula":  "",
+                             "style":  5,
+                             "value":  ""
+                         },
+                  "H5":  {
+                             "formula":  "",
+                             "style":  5,
+                             "value":  ""
+                         },
+                  "A6":  {
+                             "formula":  "",
+                             "style":  0,
+                             "value":  "CID"
+                         },
+                  "B6":  {
+                             "formula":  "F4",
+                             "style":  6,
+                             "value":  777920
+                         },
+                  "C6":  {
+                             "formula":  "",
+                             "style":  7,
+                             "value":  0
+                         },
+                  "D6":  {
+                             "formula":  "B6*C6",
+                             "style":  8,
+                             "value":  0
+                         },
+                  "E6":  {
+                             "formula":  "",
+                             "style":  9,
+                             "value":  ""
+                         },
+                  "G6":  {
+                             "formula":  "",
+                             "style":  5,
+                             "value":  ""
+                         },
+                  "H6":  {
+                             "formula":  "",
+                             "style":  5,
+                             "value":  ""
+                         },
+                  "A7":  {
+                             "formula":  "",
+                             "style":  10,
+                             "value":  "SUR"
+                         },
+                  "B7":  {
+                             "formula":  "F4",
+                             "style":  11,
+                             "value":  777920
+                         },
+                  "C7":  {
+                             "formula":  "",
+                             "style":  12,
+                             "value":  0
+                         },
+                  "D7":  {
+                             "formula":  "D6*C7",
+                             "style":  13,
+                             "value":  0
+                         },
+                  "E7":  {
+                             "formula":  "",
+                             "style":  14,
+                             "value":  ""
+                         },
+                  "F7":  {
+                             "formula":  "",
+                             "style":  5,
+                             "value":  ""
+                         },
+                  "A8":  {
+                             "formula":  "",
+                             "style":  0,
+                             "value":  "PAL"
+                         },
+                  "B8":  {
+                             "formula":  "F4",
+                             "style":  6,
+                             "value":  777920
+                         },
+                  "C8":  {
+                             "formula":  "",
+                             "style":  26,
+                             "value":  0.1
+                         },
+                  "D8":  {
+                             "formula":  "ROUND(B8*C8,0)",
+                             "style":  8,
+                             "value":  77792
+                         },
+                  "E8":  {
+                             "formula":  "",
+                             "style":  14,
+                             "value":  ""
+                         },
+                  "F8":  {
+                             "formula":  "",
+                             "style":  5,
+                             "value":  ""
+                         },
+                  "A9":  {
+                             "formula":  "",
+                             "style":  0,
+                             "value":  "EIC"
+                         },
+                  "B9":  {
+                             "formula":  "F4",
+                             "style":  6,
+                             "value":  777920
+                         },
+                  "C9":  {
+                             "formula":  "",
+                             "style":  16,
+                             "value":  0
+                         },
+                  "D9":  {
+                             "formula":  "C9*B9",
+                             "style":  8,
+                             "value":  0
+                         },
+                  "E9":  {
+                             "formula":  "",
+                             "style":  14,
+                             "value":  " "
+                         },
+                  "G9":  {
+                             "formula":  "",
+                             "style":  17,
+                             "value":  ""
+                         },
+                  "H9":  {
+                             "formula":  "",
+                             "style":  5,
+                             "value":  ""
+                         },
+                  "A10":  {
+                              "formula":  "",
+                              "style":  0,
+                              "value":  "VAT"
+                          },
+                  "B10":  {
+                              "formula":  "(F4*1.1)+(D6+D7+D8+D9)",
+                              "style":  18,
+                              "value":  933504.00000000012
+                          },
+                  "C10":  {
+                              "formula":  "",
+                              "style":  19,
+                              "value":  0.18
+                          },
+                  "D10":  {
+                              "formula":  "C10*B10",
+                              "style":  8,
+                              "value":  168030.72
+                          },
+                  "E10":  {
+                              "formula":  "",
+                              "style":  0,
+                              "value":  "                                                                  "
+                          },
+                  "F10":  {
+                              "formula":  "",
+                              "style":  8,
+                              "value":  ""
+                          },
+                  "G10":  {
+                              "formula":  "",
+                              "style":  5,
+                              "value":  ""
+                          },
+                  "H10":  {
+                              "formula":  "",
+                              "style":  5,
+                              "value":  ""
+                          },
+                  "A11":  {
+                              "formula":  "",
+                              "style":  0,
+                              "value":  "SRL/SSCL"
+                          },
+                  "B11":  {
+                              "formula":  "B10",
+                              "style":  29,
+                              "value":  933504.00000000012
+                          },
+                  "C11":  {
+                              "formula":  "",
+                              "style":  15,
+                              "value":  0.025
+                          },
+                  "D11":  {
+                              "formula":  "ROUND(B11*C11,0)",
+                              "style":  8,
+                              "value":  23338
+                          },
+                  "G11":  {
+                              "formula":  "",
+                              "style":  5,
+                              "value":  ""
+                          },
+                  "H11":  {
+                              "formula":  "",
+                              "style":  5,
+                              "value":  ""
+                          },
+                  "A12":  {
+                              "formula":  "",
+                              "style":  0,
+                              "value":  "COM"
+                          },
+                  "D12":  {
+                              "formula":  "",
+                              "style":  4,
+                              "value":  3764
+                          },
+                  "E12":  {
+                              "formula":  "",
+                              "style":  8,
+                              "value":  3764
+                          },
+                  "F12":  {
+                              "formula":  "",
+                              "style":  21,
+                              "value":  5250
+                          },
+                  "G12":  {
+                              "formula":  "",
+                              "style":  5,
+                              "value":  ""
+                          },
+                  "H12":  {
+                              "formula":  "",
+                              "style":  5,
+                              "value":  ""
+                          },
+                  "A13":  {
+                              "formula":  "",
+                              "style":  0,
+                              "value":  "NBT/"
+                          },
+                  "B13":  {
+                              "formula":  "B10",
+                              "style":  6,
+                              "value":  933504.00000000012
+                          },
+                  "C13":  {
+                              "formula":  "",
+                              "style":  16,
+                              "value":  0
+                          },
+                  "D13":  {
+                              "formula":  "ROUND(C13*B13,0)",
+                              "style":  8,
+                              "value":  0
+                          },
+                  "G13":  {
+                              "formula":  "",
+                              "style":  5,
+                              "value":  ""
+                          },
+                  "H13":  {
+                              "formula":  "",
+                              "style":  5,
+                              "value":  ""
+                          },
+                  "C14":  {
+                              "formula":  "",
+                              "style":  14,
+                              "value":  ""
+                          },
+                  "D14":  {
+                              "formula":  "SUM(D6:D13)",
+                              "style":  20,
+                              "value":  272924.72
+                          },
+                  "F14":  {
+                              "formula":  "",
+                              "style":  8,
+                              "value":  ""
+                          },
+                  "G14":  {
+                              "formula":  "",
+                              "style":  5,
+                              "value":  ""
+                          },
+                  "H14":  {
+                              "formula":  "",
+                              "style":  5,
+                              "value":  ""
+                          },
+                  "C15":  {
+                              "formula":  "",
+                              "style":  0,
+                              "value":  " "
+                          },
+                  "D15":  {
+                              "formula":  "",
+                              "style":  2,
+                              "value":  ""
+                          },
+                  "F15":  {
+                              "formula":  "",
+                              "style":  5,
+                              "value":  ""
+                          },
+                  "G15":  {
+                              "formula":  "",
+                              "style":  21,
+                              "value":  ""
+                          },
+                  "H15":  {
+                              "formula":  "",
+                              "style":  22,
+                              "value":  ""
+                          },
+                  "C16":  {
+                              "formula":  "",
+                              "style":  28,
+                              "value":  ""
+                          },
+                  "D16":  {
+                              "formula":  "",
+                              "style":  27,
+                              "value":  ""
+                          },
+                  "E16":  {
+                              "formula":  "",
+                              "style":  27,
+                              "value":  ""
+                          },
+                  "F16":  {
+                              "formula":  "",
+                              "style":  27,
+                              "value":  ""
+                          },
+                  "G16":  {
+                              "formula":  "",
+                              "style":  27,
+                              "value":  ""
+                          },
+                  "H16":  {
+                              "formula":  "",
+                              "style":  27,
+                              "value":  ""
+                          },
+                  "G17":  {
+                              "formula":  "",
+                              "style":  23,
+                              "value":  ""
+                          }
+              }
+}

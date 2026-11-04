@@ -1,0 +1,24 @@
+.duty-dialog { width: min(1010px, calc(100vw - 32px)); max-width: none; max-height: calc(100vh - 32px); padding: 0; border: 1px solid #a8b2ae; border-radius: 6px; color: #111; background: white; box-shadow: 0 20px 80px #0007; color-scheme: light; }
+.duty-dialog::backdrop { background: #0f172a99; }
+.duty-titlebar { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: #217346; color: white; }
+.duty-titlebar button { padding: 0 7px; border: 0; background: transparent; color: white; font-size: 25px; cursor: pointer; }
+.duty-toolbar,.duty-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; background: #f3f4f3; color: #333; font: 12px Arial, sans-serif; }
+.duty-toolbar button,.duty-footer button { padding: 6px 10px; background: #fff; color: #333; border: 1px solid #bbc5bf; border-radius: 3px; cursor: pointer; }
+.duty-formula { display: flex; align-items: center; gap: 12px; padding: 5px 10px; border-block: 1px solid #d2d6d3; font: 13px Arial, sans-serif; background: #fff; color: #111; }
+.duty-formula > span { min-width: 64px; border-right: 1px solid #ddd; }
+.duty-formula i { color: #6a716c; }
+.duty-formula output { color: #111; }
+.duty-grid-scroll { overflow: auto; background: white; }
+.duty-dialog .duty-grid { width: 986px; table-layout: fixed; border-collapse: collapse; font: 13.333px Arial, sans-serif; color: black; }
+.duty-dialog .duty-grid tr { background: white; }
+.duty-dialog .duty-grid td { position: relative; height: inherit; padding: 0; border: 1px solid #d9d9d9; background: white; white-space: nowrap; }
+.duty-dialog .duty-grid th { height: 23px; padding: 0; border: 1px solid #c9ceca; background: #f0f2f0; color: #555; text-align: center; font: 12px Arial, sans-serif; letter-spacing: 0; }
+.duty-dialog .duty-grid input,.duty-dialog .duty-grid td button { display: block; width: 100%; min-width: 0; height: 100%; min-height: 18px; margin: 0; padding: 0 4px; border: 0; border-radius: 0; outline: none; box-shadow: none; background: transparent; color: inherit; -webkit-text-fill-color: currentColor; font: inherit; text-align: inherit; overflow: hidden; }
+.duty-dialog .duty-grid input { cursor: text; }
+.duty-dialog .duty-grid .duty-selected::after { content: ""; position: absolute; inset: -1px; border: 2px solid #217346; pointer-events: none; }
+.duty-dialog .duty-grid .duty-total { background: #ff0; }
+.duty-footer > span { padding: 5px 20px; background: white; color: #217346; border-bottom: 3px solid #217346; font-weight: bold; }
+.duty-footer small { flex: 1; }
+.duty-pass-hint { margin: 0; padding: 8px 12px; background: #fff; color: #444; font: 12px Arial, sans-serif; }
+.duty-footer .duty-pass { background: #217346; border-color: #217346; color: white; font-weight: bold; }
+.duty-footer .duty-pass:disabled { opacity: .5; cursor: default; }

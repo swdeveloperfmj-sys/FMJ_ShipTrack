@@ -20,6 +20,10 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  getPostCostingSheets: () => request("/post-costing-sheets"),
+  createPostCostingSheet: (costing) => request("/post-costing-sheets", { method: "POST", body: JSON.stringify(costing) }),
+  updatePostCostingSheet: (id, costing) => request(`/post-costing-sheets/${id}`, { method: "PUT", body: JSON.stringify(costing) }),
+  deletePostCostingSheet: (id) => request(`/post-costing-sheets/${id}`, { method: "DELETE" }),
   getPreCostings: () => request("/pre-costings"),
   createPreCosting: (costing) => request("/pre-costings", { method: "POST", body: JSON.stringify(costing) }),
   updatePreCosting: (id, costing) => request(`/pre-costings/${id}`, { method: "PUT", body: JSON.stringify(costing) }),

@@ -11,6 +11,12 @@ export function samplePreCosting() {
   return { ...newPreCosting(), reference: "AVIENT-INDIA- - PRE Costing - SEA freight", material: "MASTER BATCHES", hsCode: "3206.49.00", date: "2026-05-10", totalLabel: "RED", breakdownClearing: 41300, breakdownOther: 11300, breakdownBank: 5000, breakdownDetails: "(Transport 22800+ Cargo bill 2,000 clearing 16500)", exchangeRate: 336, insurance: 1500, pal: 37615, sscl: 15000, vat: 82250, clearing: 58000, items: [{ description: "PE 34407349", quantity: 25, usdValue: 1117.5 }] };
 }
 
+// Older worksheets stored the final description in a totals footer.
+export function preparePreCostingDraft(draft) {
+  if (!String(draft.totalLabel || "").trim()) return draft;
+  return { ...draft, totalLabel: "", items: [...draft.items, { description: draft.totalLabel, quantity: "", usdValue: "" }] };
+}
+
 export function validatePreCosting(draft) {
   for (const [key, label] of [["reference", "Costing title"], ["material", "Material"]]) {
     if (!String(draft[key] || "").trim()) return `${label} is required.`;
@@ -30,10 +36,13 @@ export function validatePreCosting(draft) {
 // The template allocates shipment-level LKR charges by each item's USD invoice value.
 // USD value is the full line value, not a unit price. Round only for presentation.
 export function calculatePreCosting(draft) {
-  const totalUsd = draft.items.reduce((sum, item) => sum + Number(item.usdValue), 0);
-  const ready = Number.isFinite(Number(draft.exchangeRate)) && Number(draft.exchangeRate) > 0 && Number.isFinite(totalUsd) && totalUsd > 0 && draft.items.every((item) => Number.isFinite(Number(item.quantity)) && Number.isFinite(Number(item.usdValue)) && Number(item.quantity) > 0 && Number(item.usdValue) > 0) && chargeFields.every(([key]) => Number.isFinite(Number(draft[key])) && Number(draft[key]) >= 0);
+  // Keep worksheet row positions while excluding unfinished rows from allocation.
+  const readyItems = draft.items.map((item) => [item.quantity, item.usdValue].every((value) => Number.isFinite(Number(value)) && Number(value) > 0));
+  const totalUsd = draft.items.reduce((sum, item, index) => sum + (readyItems[index] ? Number(item.usdValue) : 0), 0);
+  const ready = Number.isFinite(Number(draft.exchangeRate)) && Number(draft.exchangeRate) > 0 && Number.isFinite(totalUsd) && totalUsd > 0 && chargeFields.every(([key]) => Number.isFinite(Number(draft[key])) && Number(draft[key]) >= 0);
   if (!ready) return null;
-  const rows = draft.items.map((item) => {
+  const rows = draft.items.map((item, index) => {
+    if (!readyItems[index]) return null;
     const share = Number(item.usdValue) / totalUsd;
     const allocated = Object.fromEntries(chargeFields.map(([key]) => [key, Number(draft[key]) * share]));
     const lkrValue = Number(item.usdValue) * Number(draft.exchangeRate);
@@ -42,7 +51,8 @@ export function calculatePreCosting(draft) {
     const landed = cif + duty + allocated.clearing;
     return { ...item, ...allocated, lkrValue, cif, duty, landed, perKg: landed / Number(item.quantity), withoutVat: (landed - allocated.vat) / Number(item.quantity) };
   });
-  const quantity = rows.reduce((sum, row) => sum + Number(row.quantity), 0);
-  const totals = Object.fromEntries(["lkrValue", ...chargeFields.map(([key]) => key), "cif", "duty", "landed"].map((key) => [key, rows.reduce((sum, row) => sum + row[key], 0)]));
+  const completedRows = rows.filter(Boolean);
+  const quantity = completedRows.reduce((sum, row) => sum + Number(row.quantity), 0);
+  const totals = Object.fromEntries(["lkrValue", ...chargeFields.map(([key]) => key), "cif", "duty", "landed"].map((key) => [key, completedRows.reduce((sum, row) => sum + row[key], 0)]));
   return { rows, totals: { ...totals, quantity, usdValue: totalUsd, perKg: totals.landed / quantity, withoutVat: (totals.landed - totals.vat) / quantity } };
 }
