@@ -3,6 +3,7 @@ import { Download, Plus, Save, Trash2 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import { api } from "./api.js";
 import PreCostingSheet from "./PreCostingSheet.jsx";
+import DutyCalculator from "./DutyCalculator.jsx";
 import { calculatePreCosting, chargeFields, newPreCosting, preparePreCostingDraft, samplePreCosting, validatePreCosting } from "./preCosting.js";
 
 const money = (value) => Number(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -44,6 +45,14 @@ function downloadPdf(draft, result) {
 }
 
 export default function PreCosting() {
+  const [calculatorOpen, setCalculatorOpen] = useState(false);
+  useEffect(() => {
+    const shortcut = (event) => {
+      if (event.key === "F1") { event.preventDefault(); setCalculatorOpen(true); }
+    };
+    window.addEventListener("keydown", shortcut, true);
+    return () => window.removeEventListener("keydown", shortcut, true);
+  }, []);
   const [draft, setDraft] = useState(newPreCosting);
   const [records, setRecords] = useState([]);
   const [query, setQuery] = useState("");
@@ -64,6 +73,14 @@ export default function PreCosting() {
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
   function change(key, value) { setDraft((current) => ({ ...current, [key]: value })); setDirty(true); setNotice(""); }
+  function passCalculation(headers) {
+    if (busy) return;
+    setDraft((current) => ({ ...current, ...headers }));
+    setDirty(true);
+    setError("");
+    setNotice("Calculation values passed to Exchange rate, CID, PAL, EIC, VAT and SSCL. Save pre costing to keep these changes.");
+    setCalculatorOpen(false);
+  }
   function replace(value) {
     if (dirty && !window.confirm("Discard unsaved pre costing changes?")) return;
     setDraft(preparePreCostingDraft(value)); setDirty(false); setError(""); setNotice("");
@@ -88,6 +105,8 @@ export default function PreCosting() {
   }
   const filtered = records.filter((item) => `${item.reference} ${item.material}`.toLowerCase().includes(query.toLowerCase()));
   return <section className="pre-costing-page">
+    <DutyCalculator open={calculatorOpen} onClose={() => setCalculatorOpen(false)} onPass={passCalculation} busy={busy} />
+    <button type="button" className="button secondary" onClick={() => setCalculatorOpen(true)}>Calculation (F1)</button>
     <div className="page-title"><div><span className="eyebrow">IMPORT ESTIMATES</span><h1>Pre costing</h1><p>Estimate landed cost by item, using the SEA C&amp;F costing format.</p></div><div className="page-actions"><button disabled={busy} className="button secondary" onClick={() => replace(samplePreCosting())}>Load reference example</button><button disabled={busy} className="button primary" onClick={() => replace(newPreCosting())}><Plus size={16} /> New pre costing</button></div></div>
     <div className="pre-costing-layout">
       <form className="panel pre-costing-form" onSubmit={save}>
