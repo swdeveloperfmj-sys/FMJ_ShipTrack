@@ -714,7 +714,7 @@ app.use("/api", requireAuthenticated);
 app.use("/api/pre-costings", preCostingsRouter);
 app.use("/api/post-costing-sheets", postCostingSheetsRouter);
 
-const sidebarAccessKeys = ["dashboard", "materials", "post-costing", "post-costing-sheet", "pre-costing", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", "companies", "consignees", "countries", "reports", "settings"];
+const sidebarAccessKeys = ["dashboard", "materials", "post-costing", "post-costing-sheet", "pre-costing", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", "companies", "consignees", "countries", "reports", "report-shipment", "report-cleared", "report-fmj", "report-jd", "report-rla", "report-aop", "report-ub", "settings"];
 const serializeUser = (user) => ({ id: user._id, name: user.name, username: user.username, sidebarAccess: user.sidebarAccess || [], fontSize: user.fontSize || 100, createdAt: user.createdAt });
 
 app.put("/api/settings/font-size", async (request, response, next) => {
