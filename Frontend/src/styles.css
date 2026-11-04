@@ -29,6 +29,9 @@
 .pre-sheet-paper .pre-sheet .sheet-material { background: #f8cbad; text-align: center; font-weight: bold; }
 .pre-sheet-paper .sheet-hs label { display: flex; align-items: center; white-space: nowrap; font-weight: bold; text-align: left; }
 .pre-sheet-paper .sheet-assumptions td:nth-child(4) input { color: red; text-align: center; }
+.pre-sheet-paper .sheet-assumptions .sheet-assumption-value { display: block; min-height: 19px; color: #d00000; text-align: center; }
+.pre-sheet-paper .pre-sheet .sheet-total-row th,.pre-sheet-paper .pre-sheet .sheet-total-row td { border-top: 2px solid #000; border-bottom: 3px double #000; background: #d9ead3; font-weight: bold; }
+.pre-sheet-paper .pre-sheet .sheet-total-row th { text-align: left; }
 .pre-sheet-paper .pre-sheet .sheet-column-headings th { position: relative; height: 60px; padding-right: 8px; text-align: center; font-weight: bold; line-height: 1.7; overflow-wrap: anywhere; }
 .pre-sheet-paper .sheet-column-resizer { position: absolute; top: 0; right: -1px; z-index: 1; width: 8px; height: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; cursor: col-resize; touch-action: none; }
 .pre-sheet-paper .sheet-column-resizer:hover,.pre-sheet-paper .sheet-column-resizer:focus-visible { background: #2865db55; outline: 2px solid #2865db; outline-offset: -2px; }
@@ -731,6 +734,8 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .app-shell .pre-sheet-paper { color-scheme: light; color: #111; background-color: #fff; }
 .app-shell .pre-sheet-paper .pre-sheet td,
 .app-shell .pre-sheet-paper .pre-sheet th { color: #111; background-color: #fff; border-color: #000; }
+.app-shell .pre-sheet-paper .pre-sheet .sheet-total-row th,
+.app-shell .pre-sheet-paper .pre-sheet .sheet-total-row td { background-color: #d9ead3; }
 .app-shell .pre-sheet-paper .pre-sheet .sheet-title-row td,
 .app-shell .pre-sheet-paper .pre-sheet .sheet-assumptions td { background-color: transparent; border: 0; }
 .app-shell .pre-sheet-paper .pre-sheet .sheet-title-row .sheet-title { background-color: #fbe5d6; }

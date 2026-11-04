@@ -41,10 +41,14 @@ export function calculatePreCosting(draft) {
   const totalUsd = draft.items.reduce((sum, item, index) => sum + (readyItems[index] ? Number(item.usdValue) : 0), 0);
   const ready = Number.isFinite(Number(draft.exchangeRate)) && Number(draft.exchangeRate) > 0 && Number.isFinite(totalUsd) && totalUsd > 0 && chargeFields.every(([key]) => Number.isFinite(Number(draft[key])) && Number(draft[key]) >= 0);
   if (!ready) return null;
+  const totalLkrValue = totalUsd * Number(draft.exchangeRate);
+  const breakdownOther = totalLkrValue * 0.03;
+  const breakdownBank = totalLkrValue * 0.01;
+  const clearingTotal = Number(draft.breakdownClearing || 0) + breakdownOther + breakdownBank;
   const rows = draft.items.map((item, index) => {
     if (!readyItems[index]) return null;
     const share = Number(item.usdValue) / totalUsd;
-    const allocated = Object.fromEntries(chargeFields.map(([key]) => [key, Number(draft[key]) * share]));
+    const allocated = Object.fromEntries(chargeFields.map(([key]) => [key, (key === "clearing" ? clearingTotal : Number(draft[key])) * share]));
     const lkrValue = Number(item.usdValue) * Number(draft.exchangeRate);
     const cif = lkrValue + allocated.insurance + allocated.freight;
     const duty = allocated.cid + allocated.pal + allocated.eic + allocated.sscl + allocated.vat;
@@ -54,5 +58,6 @@ export function calculatePreCosting(draft) {
   const completedRows = rows.filter(Boolean);
   const quantity = completedRows.reduce((sum, row) => sum + Number(row.quantity), 0);
   const totals = Object.fromEntries(["lkrValue", ...chargeFields.map(([key]) => key), "cif", "duty", "landed"].map((key) => [key, completedRows.reduce((sum, row) => sum + row[key], 0)]));
+  totals.clearing = clearingTotal;
   return { rows, totals: { ...totals, quantity, usdValue: totalUsd, perKg: totals.landed / quantity, withoutVat: (totals.landed - totals.vat) / quantity } };
 }
