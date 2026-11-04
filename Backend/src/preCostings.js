@@ -9,6 +9,7 @@ const schema = new mongoose.Schema({
   updatedAt: { type: String, required: true },
 }, { versionKey: false });
 const PreCosting = mongoose.model("PreCosting", schema);
+const PostCostingSheet = mongoose.model("PostCostingSheet", schema.clone());
 const serialize = (record) => ({ ...record.data, id: record._id, createdAt: record.createdAt, updatedAt: record.updatedAt });
 
 export function normalizePreCosting(body = {}) {
@@ -37,28 +38,34 @@ export function normalizePreCosting(body = {}) {
   return { data, updatedAt: new Date().toISOString() };
 }
 
-export const preCostingsRouter = express.Router();
-preCostingsRouter.use((request, response, next) => {
-  if (request.user.role !== "super-admin" && !request.user.sidebarAccess.includes("pre-costing")) return response.status(403).json({ error: "Pre costing access is required." });
-  next();
-});
-preCostingsRouter.get("/", async (_request, response, next) => {
-  try { response.json((await PreCosting.find().sort({ updatedAt: -1 }).lean()).map(serialize)); } catch (error) { next(error); }
-});
-for (const method of ["post", "put"]) {
-  preCostingsRouter[method](method === "post" ? "/" : "/:id", async (request, response, next) => {
-    let payload;
-    try { payload = normalizePreCosting(request.body); } catch (error) { return response.status(400).json({ error: error.message }); }
+export function createCostingsRouter(Model, accessKey, title) {
+  const router = express.Router();
+  router.use((request, response, next) => {
+    if (request.user.role !== "super-admin" && !request.user.sidebarAccess.includes(accessKey)) return response.status(403).json({ error: `${title} access is required.` });
+    next();
+  });
+  router.get("/", async (_request, response, next) => {
+    try { response.json((await Model.find().sort({ updatedAt: -1 }).lean()).map(serialize)); } catch (error) { next(error); }
+  });
+  for (const method of ["post", "put"]) {
+    router[method](method === "post" ? "/" : "/:id", async (request, response, next) => {
+      let payload;
+      try { payload = normalizePreCosting(request.body); } catch (error) { return response.status(400).json({ error: error.message }); }
+      try {
+        const record = method === "post" ? await Model.create({ _id: randomUUID(), ...payload }) : await Model.findByIdAndUpdate(request.params.id, payload, { new: true, runValidators: true });
+        if (!record) return response.status(404).json({ error: `${title} not found.` });
+        response.status(method === "post" ? 201 : 200).json(serialize(record));
+      } catch (error) { next(error); }
+    });
+}
+  router.delete("/:id", async (request, response, next) => {
     try {
-      const record = method === "post" ? await PreCosting.create({ _id: randomUUID(), ...payload }) : await PreCosting.findByIdAndUpdate(request.params.id, payload, { new: true, runValidators: true });
-      if (!record) return response.status(404).json({ error: "Pre costing not found." });
-      response.status(method === "post" ? 201 : 200).json(serialize(record));
+      if (!await Model.findByIdAndDelete(request.params.id)) return response.status(404).json({ error: `${title} not found.` });
+      response.status(204).end();
     } catch (error) { next(error); }
   });
+  
+  return router;
 }
-preCostingsRouter.delete("/:id", async (request, response, next) => {
-  try {
-    if (!await PreCosting.findByIdAndDelete(request.params.id)) return response.status(404).json({ error: "Pre costing not found." });
-    response.status(204).end();
-  } catch (error) { next(error); }
-});
+export const preCostingsRouter = createCostingsRouter(PreCosting, "pre-costing", "Pre costing");
+export const postCostingSheetsRouter = createCostingsRouter(PostCostingSheet, "post-costing-sheet", "Post costing");

@@ -6,7 +6,7 @@ const defaultWidths = [144, 54, 71, 86, 90, 89, 86, 260, 78, 80, 78, 79, 86, 78,
 const widthsStorageKey = "fmj-pre-costing-column-widths";
 const clampWidth = (width) => Math.min(800, Math.max(48, Math.round(width)));
 
-export default function PreCostingSheet({ draft, result, change, changeItem }) {
+export default function PreCostingSheet({ draft, result, change, changeItem, title = "Pre costing" }) {
   const [widths, setWidths] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(widthsStorageKey));
@@ -46,7 +46,7 @@ export default function PreCostingSheet({ draft, result, change, changeItem }) {
   const chargeKeys = { lkrValue: "exchangeRate", insurance: "insurance", freight: "freight", cid: "cid", pal: "pal", eic: "eic", sscl: "sscl", vat: "vat", clearing: "clearing" };
   const breakdownTotal = ["breakdownClearing", "breakdownOther", "breakdownBank"].reduce((sum, key) => sum + Number(draft[key] || 0), 0);
   return <div className={`pre-sheet-scroll${resizing ? " pre-sheet-resizing" : ""}`}><div className="pre-sheet-paper" style={{ minWidth: widths.reduce((sum, width) => sum + width, 0) }}>
-    <table className="pre-sheet" aria-label="Pre costing worksheet" style={{ width: widths.reduce((sum, width) => sum + width, 0) }}>
+    <table className="pre-sheet" aria-label={`${title} worksheet`} style={{ width: widths.reduce((sum, width) => sum + width, 0) }}>
       <colgroup>{widths.map((width, index) => <col key={index} style={{ width }} />)}</colgroup>
       <thead>
         <tr className="sheet-title-row"><td colSpan={3}></td><td colSpan={8} className="sheet-title">{input("reference", "Costing title", "text", { required: true, maxLength: 200 })}</td><td colSpan={6}></td></tr>
