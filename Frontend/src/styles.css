@@ -50,6 +50,14 @@
 .pre-row-actions > span { margin-left: auto; color: var(--muted); font-size: 11px; }
 .pre-costing-form .pre-actions { padding: 0 12px 14px; }
 .pre-costing-page .costing-list { max-height: 240px; overflow: auto; }
+.pre-costing-page .costing-list-columns,.pre-costing-page .costing-list > button { display: grid; grid-template-columns: minmax(0,1.45fr) minmax(0,1fr) minmax(88px,.45fr); gap: 12px; align-items: center; }
+.pre-costing-page .costing-list-columns { padding: 9px 16px; border-bottom: 1px solid #edf1f5; background: #f8fafc; color: #7f8da0; font-size: 10px; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
+.pre-costing-page .costing-list > button { min-width: 0; padding: 11px 16px; text-align: left; }
+.pre-costing-page .costing-list > button strong,.pre-costing-page .costing-list > button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pre-costing-page .costing-list > button strong { color: #344155; font-size: 12px; }
+.pre-costing-page .costing-list > button span { color: #7f8da0; font-size: 11px; }
+.app-shell[data-theme="dark"] .pre-costing-page .costing-list-columns { border-color: #2c3a4e; background: #172231; color: #aebed2; }
+.app-shell[data-theme="dark"] .pre-costing-page .costing-list > button strong { color: #e2eaf4; }
 .pre-costing-layout { display: grid; grid-template-columns: minmax(0, 1fr) 215px; gap: 16px; align-items: start; }
 .pre-costing-form { padding: 20px; }
 .pre-costing-form fieldset { min-width: 0; border: 0; margin: 0; padding: 0; }
@@ -74,6 +82,7 @@
 .app-shell[data-theme="dark"] .pre-results tfoot { background: #203754; }
 @media (max-width: 1100px) { .pre-costing-layout { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 650px) { .pre-fields { grid-template-columns: 1fr 1fr; } .pre-costing-page .page-title { align-items: flex-start; flex-direction: column; } .pre-costing-page .page-actions { flex-wrap: wrap; } .pre-costing-form { padding: 12px; } }
+@media (max-width: 650px) { .pre-costing-page .costing-list-columns,.pre-costing-page .costing-list > button { grid-template-columns: minmax(0,1.25fr) minmax(0,.9fr) 76px; gap: 6px; padding-right: 9px; padding-left: 9px; } .pre-costing-page .costing-list-columns { font-size: 9px; } .pre-costing-page .costing-list > button strong { font-size: 10px; } .pre-costing-page .costing-list > button span { font-size: 9px; } }
 body { margin: 0; min-width: 320px; }
 button, input, select { font: inherit; }
 button { cursor: pointer; }

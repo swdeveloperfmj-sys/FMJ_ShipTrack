@@ -36,7 +36,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
 import { jsPDF } from "jspdf";
 import { api } from "./api.js";
 import PreCosting from "./PreCosting.jsx";
