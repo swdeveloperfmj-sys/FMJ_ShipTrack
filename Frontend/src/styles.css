@@ -31,6 +31,8 @@
 .pre-sheet-paper .sheet-assumptions td:nth-child(4) input { color: red; text-align: center; }
 .pre-sheet-paper .sheet-assumptions .sheet-assumption-value { display: block; min-height: 19px; color: #d00000; text-align: center; }
 .pre-sheet-paper .pre-sheet .sheet-total-row th,.pre-sheet-paper .pre-sheet .sheet-total-row td { border-top: 2px solid #000; border-bottom: 3px double #000; background: #d9ead3; font-weight: bold; }
+.pre-sheet-paper .pre-sheet .sheet-column-groups th { height: 21px; background: #fbe5d6; text-align: center; font-weight: bold; }
+.pre-sheet-paper .pre-sheet tbody .sheet-double-price-input input { color: #d00000; }
 .pre-sheet-paper .pre-sheet .sheet-total-row th { text-align: left; }
 .pre-sheet-paper .pre-sheet .sheet-column-headings th { position: relative; height: 60px; padding-right: 8px; text-align: center; font-weight: bold; line-height: 1.7; overflow-wrap: anywhere; }
 .pre-sheet-paper .sheet-column-resizer { position: absolute; top: 0; right: -1px; z-index: 1; width: 8px; height: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; cursor: col-resize; touch-action: none; }

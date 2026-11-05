@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000/api";
+const API_URL = import.meta.env.VITE_API_URL || "/api";
 
 async function request(path, options = {}) {
   const response = await fetch(`${API_URL}${path}`, {
@@ -16,7 +16,11 @@ async function request(path, options = {}) {
     const result = await response.json().catch(() => ({}));
     throw new Error(result.error || `Request failed (${response.status})`);
   }
-  return response.status === 204 ? null : response.json();
+  if (response.status === 204) return null;
+  if (!response.headers.get("content-type")?.includes("application/json")) {
+    throw new Error("The API proxy is not active. Stop and restart the Frontend Vite server, then reload the page.");
+  }
+  return response.json();
 }
 
 export const api = {
@@ -28,6 +32,10 @@ export const api = {
   createPreCosting: (costing) => request("/pre-costings", { method: "POST", body: JSON.stringify(costing) }),
   updatePreCosting: (id, costing) => request(`/pre-costings/${id}`, { method: "PUT", body: JSON.stringify(costing) }),
   deletePreCosting: (id) => request(`/pre-costings/${id}`, { method: "DELETE" }),
+  getDoublePreCostings: () => request("/double-pre-costings"),
+  createDoublePreCosting: (costing) => request("/double-pre-costings", { method: "POST", body: JSON.stringify(costing) }),
+  updateDoublePreCosting: (id, costing) => request(`/double-pre-costings/${id}`, { method: "PUT", body: JSON.stringify(costing) }),
+  deleteDoublePreCosting: (id) => request(`/double-pre-costings/${id}`, { method: "DELETE" }),
   getAuthStatus: () => request("/auth/status"),
   setupSuperAdmin: (credentials) =>
     request("/auth/setup", { method: "POST", body: JSON.stringify(credentials) }),
