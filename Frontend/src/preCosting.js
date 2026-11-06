@@ -4,7 +4,13 @@ export const chargeFields = [
 ];
 
 export function newPreCosting() {
-  return { reference: "", material: "", hsCode: "", totalLabel: "", breakdownClearing: 0, breakdownLabel: "3%", breakdownOther: 0, breakdownBank: 0, breakdownDetails: "", date: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Colombo" }).format(new Date()), exchangeRate: "", ...Object.fromEntries(chargeFields.map(([key]) => [key, 0])), items: [{ description: "", quantity: "", usdValue: "" }] };
+  return { reference: "", material: "", hsCode: "", totalLabel: "", breakdownClearing: 0, breakdownLabel: "3%", breakdownOther: 0, breakdownBank: "", breakdownDetails: "", date: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Colombo" }).format(new Date()), exchangeRate: "", ...Object.fromEntries(chargeFields.map(([key]) => [key, 0])), items: [{ description: "", quantity: "", usdValue: "" }] };
+}
+
+export function newDoublePreCosting() {
+  const draft = { ...newPreCosting() };
+  delete draft.exchangeRate;
+  return { ...draft, items: [{ description: "", quantity: "", dollarRate: "", bankAmount: "" }] };
 }
 
 export function samplePreCosting() {
@@ -25,6 +31,7 @@ export function validatePreCosting(draft) {
   for (const [key, label] of chargeFields) {
     if (!Number.isFinite(Number(draft[key])) || Number(draft[key]) < 0) return `${label} must be zero or a positive amount.`;
   }
+  if (!Number.isFinite(Number(draft.breakdownBank || 0)) || Number(draft.breakdownBank || 0) < 0) return "Bank charges must be zero or a positive amount.";
   if (!Array.isArray(draft.items) || !draft.items.length || draft.items.length > 100) return "Enter between 1 and 100 items.";
   for (const [index, item] of draft.items.entries()) {
     if (!String(item.description || "").trim()) return `Enter a description for item ${index + 1}.`;
@@ -43,7 +50,7 @@ export function calculatePreCosting(draft) {
   if (!ready) return null;
   const totalLkrValue = totalUsd * Number(draft.exchangeRate);
   const breakdownOther = totalLkrValue * 0.03;
-  const breakdownBank = totalLkrValue * 0.01;
+  const breakdownBank = draft.breakdownBank === "" || draft.breakdownBank == null ? totalLkrValue * 0.01 : Number(draft.breakdownBank);
   const clearingTotal = Number(draft.breakdownClearing || 0) + breakdownOther + breakdownBank;
   const rows = draft.items.map((item, index) => {
     if (!readyItems[index]) return null;
@@ -60,4 +67,45 @@ export function calculatePreCosting(draft) {
   const totals = Object.fromEntries(["lkrValue", ...chargeFields.map(([key]) => key), "cif", "duty", "landed"].map((key) => [key, completedRows.reduce((sum, row) => sum + row[key], 0)]));
   totals.clearing = clearingTotal;
   return { rows, totals: { ...totals, quantity, usdValue: totalUsd, perKg: totals.landed / quantity, withoutVat: (totals.landed - totals.vat) / quantity } };
+}
+
+export function validateDoublePreCosting(draft) {
+  for (const [key, label] of [["reference", "Costing title"], ["material", "Material"]]) {
+    if (!String(draft[key] || "").trim()) return `${label} is required.`;
+  }
+  for (const [key, label] of chargeFields) {
+    if (!Number.isFinite(Number(draft[key])) || Number(draft[key]) < 0) return `${label} must be zero or a positive amount.`;
+  }
+  if (!Number.isFinite(Number(draft.breakdownBank || 0)) || Number(draft.breakdownBank || 0) < 0) return "Bank charges must be zero or a positive amount.";
+  if (!Array.isArray(draft.items) || !draft.items.length || draft.items.length > 100) return "Enter between 1 and 100 items.";
+  for (const [index, item] of draft.items.entries()) {
+    if (!String(item.description || "").trim()) return `Enter a description for item ${index + 1}.`;
+    if (![item.quantity, item.dollarRate, item.bankAmount].every((value) => Number.isFinite(Number(value)) && Number(value) > 0)) return `Quantity, dollar rate and bank charges for item ${index + 1} must be greater than zero.`;
+  }
+  return "";
+}
+
+export function calculateDoublePreCosting(draft) {
+  const readyItems = draft.items.map((item) => [item.quantity, item.dollarRate, item.bankAmount].every((value) => Number.isFinite(Number(value)) && Number(value) > 0));
+  const totalLkrValue = draft.items.reduce((sum, item, index) => sum + (readyItems[index] ? Number(item.dollarRate) * Number(item.bankAmount) : 0), 0);
+  const chargesReady = chargeFields.every(([key]) => Number.isFinite(Number(draft[key])) && Number(draft[key]) >= 0);
+  const bankCharge = draft.breakdownBank === "" || draft.breakdownBank == null ? totalLkrValue * 0.01 : Number(draft.breakdownBank);
+  if (!Number.isFinite(totalLkrValue) || totalLkrValue <= 0 || !chargesReady || !Number.isFinite(bankCharge) || bankCharge < 0) return null;
+  const breakdownOther = totalLkrValue * 0.03;
+  const clearingTotal = Number(draft.breakdownClearing || 0) + breakdownOther + bankCharge;
+  const rows = draft.items.map((item, index) => {
+    if (!readyItems[index]) return null;
+    const lkrValue = Number(item.dollarRate) * Number(item.bankAmount);
+    const share = lkrValue / totalLkrValue;
+    const allocated = Object.fromEntries(chargeFields.map(([key]) => [key, (key === "clearing" ? clearingTotal : Number(draft[key])) * share]));
+    const cif = lkrValue + allocated.insurance + allocated.freight;
+    const duty = allocated.cid + allocated.pal + allocated.eic + allocated.sscl + allocated.vat;
+    const landed = cif + duty + allocated.clearing;
+    return { ...item, ...allocated, lkrValue, cif, duty, landed, perKg: landed / Number(item.quantity), withoutVat: (landed - allocated.vat) / Number(item.quantity) };
+  });
+  const completedRows = rows.filter(Boolean);
+  const quantity = completedRows.reduce((sum, row) => sum + Number(row.quantity), 0);
+  const totals = Object.fromEntries(["lkrValue", ...chargeFields.map(([key]) => key), "cif", "duty", "landed"].map((key) => [key, completedRows.reduce((sum, row) => sum + row[key], 0)]));
+  totals.clearing = clearingTotal;
+  return { rows, totals: { ...totals, quantity, perKg: totals.landed / quantity, withoutVat: (totals.landed - totals.vat) / quantity } };
 }

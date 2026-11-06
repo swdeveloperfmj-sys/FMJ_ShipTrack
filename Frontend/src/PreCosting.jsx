@@ -5,6 +5,7 @@ import PreCostingSheet from "./PreCostingSheet.jsx";
 import DutyCalculator from "./DutyCalculator.jsx";
 import { calculatePreCosting, chargeFields, newPreCosting, preparePreCostingDraft, samplePreCosting, validatePreCosting } from "./preCosting.js";
 import { downloadCostingPdf } from "./costingPdf.js";
+import { downloadCostingExcel } from "./costingExcel.js";
 
 export default function PreCosting() {
   const [calculatorOpen, setCalculatorOpen] = useState(false);
@@ -82,10 +83,10 @@ export default function PreCosting() {
             <button type="button" className="button secondary" disabled={draft.items.length === 1} onClick={() => change("items", draft.items.slice(0, -1))}>Remove last item</button>
             <span>{dirty ? "Unsaved changes" : draft.id ? "Saved" : "New estimate"}</span>
           </div>
-          <div className="pre-actions">{draft.id && <button type="button" className="button secondary" onClick={remove}><Trash2 size={14} /> Delete</button>}<button type="button" className="button secondary" disabled={!result} onClick={() => { const issue = validatePreCosting(draft); if (issue) { setError(issue); return; } try { downloadCostingPdf(draft, result, "Pre costing"); } catch (err) { setError(err.message); } }}><Download size={14} /> Download PDF</button><button className="button primary" type="submit"><Save size={14} />{busy ? "Saving…" : "Save pre costing"}</button></div>
+          <div className="pre-actions">{draft.id && <button type="button" className="button secondary" onClick={remove}><Trash2 size={14} /> Delete</button>}<button type="button" className="button secondary" disabled={!result} onClick={() => { const issue = validatePreCosting(draft); if (issue) { setError(issue); return; } try { downloadCostingPdf(draft, result, "Pre costing"); } catch (err) { setError(err.message); } }}><Download size={14} /> Download PDF</button><button type="button" className="button secondary" disabled={!result} onClick={() => { const issue = validatePreCosting(draft); if (issue) { setError(issue); return; } try { downloadCostingExcel(draft, result, "Pre costing"); } catch (err) { setError(err.message); } }}><Download size={14} /> Download Excel</button><button className="button primary" type="submit"><Save size={14} />{busy ? "Saving…" : "Save pre costing"}</button></div>
         </fieldset>
       </form>
-      <aside className="panel costing-list"><div className="costing-list-head"><strong>Saved pre costings</strong><span>{records.length}</span></div><div className="costing-filter"><input aria-label="Search pre costings" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search costings…" /></div>{loading ? <p className="costing-empty">Loading…</p> : filtered.length ? filtered.map((item) => <button disabled={busy} type="button" key={item.id} className={draft.id === item.id ? "active" : ""} onClick={() => replace(item)}><strong>{item.reference}</strong><span>{item.material}</span><span>{item.date}</span></button>) : <p className="costing-empty">{query ? "No matching costings." : "No pre costings saved yet."}</p>}</aside>
+      <aside className="panel costing-list"><div className="costing-list-head"><strong>Saved pre costings</strong><span>{records.length}</span></div><div className="costing-filter"><input aria-label="Search pre costings" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search costings…" /></div><div className="costing-list-columns" aria-hidden="true"><span>Costing title</span><span>Material</span><span>Date</span></div>{loading ? <p className="costing-empty">Loading…</p> : filtered.length ? filtered.map((item) => <button disabled={busy} type="button" key={item.id} className={draft.id === item.id ? "active" : ""} onClick={() => replace(item)} title={`${item.reference} · ${item.material} · ${item.date}`}><strong>{item.reference}</strong><span>{item.material}</span><span>{item.date}</span></button>) : <p className="costing-empty">{query ? "No matching costings." : "No pre costings saved yet."}</p>}</aside>
     </div>
   </section>;
 }

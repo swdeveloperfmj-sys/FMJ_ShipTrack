@@ -12,8 +12,9 @@ the supplied Master Batches example without saving it. Its clearing amount is
 58,000 LKR; the source breakdown totals 57,600 LKR.
 The source's manually entered net cost/kg is 19,503; the page calculates
 the VAT-exclusive value as (569,845 - 82,250) / 25 = 19,503.80 LKR/kg.
-User accounts need **Pre costing** sidebar access, assigned by the super admin.
+User accounts need **Pre costing** or **Double pre costing** sidebar access, assigned by the super admin.
 Restart the API after updating to enable `/api/pre-costings`.
+Bank Charges default to 1% of the total LKR Price on each costing worksheet, and users can edit the resulting amount. **Double pre costing** is a separate worksheet that calculates each LKR Price by multiplying the entered dollar rate by the bank charges amount in USD; other LKR charges are allocated against each item's LKR Price. Single Post costing's LC / TT / DC commission also defaults to 1% of the bill value and can be edited.
 Run the costing checks with `node --test Frontend/src/preCosting.test.js`.
 
 ## Start the application

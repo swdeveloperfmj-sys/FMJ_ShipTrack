@@ -7,7 +7,7 @@ import { rateLimit } from "express-rate-limit";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import nodemailer from "nodemailer";
-import { preCostingsRouter, postCostingSheetsRouter } from "./preCostings.js";
+import { preCostingsRouter, doublePreCostingsRouter, postCostingSheetsRouter } from "./preCostings.js";
 import { createHmac, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
 
 const app = express();
@@ -17,7 +17,7 @@ const adminEmail = "sw.developer.fmj@gmail.com";
 const cookieName = "fmj_shiptrack_session";
 const sessionDurationMs = 7 * 24 * 60 * 60 * 1000;
 const isDeployed = process.env.NODE_ENV === "production" || process.env.VERCEL === "1";
-const allowedOrigins = (process.env.FRONTEND_ORIGIN || "http://localhost:5173")
+const allowedOrigins = (process.env.FRONTEND_ORIGIN || "http://localhost:5173,http://127.0.0.1:5173")
   .split(",")
   .map((origin) => origin.trim());
 
@@ -249,13 +249,6 @@ const setupLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many setup attempts. Try again later." },
 });
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 5,
-  standardHeaders: "draft-8",
-  legacyHeaders: false,
-  message: { error: "Too many login attempts. Try again in 15 minutes." },
-});
 const verifyLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 10,
@@ -424,7 +417,7 @@ app.post("/api/auth/setup", setupLimiter, async (request, response, next) => {
   }
 });
 
-app.post("/api/auth/login", loginLimiter, async (request, response, next) => {
+app.post("/api/auth/login", async (request, response, next) => {
   try {
     const body = request.body || {};
     const username =
@@ -712,9 +705,10 @@ app.get("/api/health", (_request, response) => {
 
 app.use("/api", requireAuthenticated);
 app.use("/api/pre-costings", preCostingsRouter);
+app.use("/api/double-pre-costings", doublePreCostingsRouter);
 app.use("/api/post-costing-sheets", postCostingSheetsRouter);
 
-const sidebarAccessKeys = ["dashboard", "materials", "post-costing", "post-costing-sheet", "pre-costing", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", "companies", "consignees", "countries", "reports", "report-shipment", "report-cleared", "report-fmj", "report-jd", "report-rla", "report-aop", "report-ub", "settings"];
+const sidebarAccessKeys = ["dashboard", "materials", "post-costing", "post-costing-sheet", "pre-costing", "double-pre-costing", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", "companies", "consignees", "countries", "reports", "report-shipment", "report-cleared", "report-fmj", "report-jd", "report-rla", "report-aop", "report-ub", "settings"];
 const serializeUser = (user) => ({ id: user._id, name: user.name, username: user.username, sidebarAccess: user.sidebarAccess || [], fontSize: user.fontSize || 100, createdAt: user.createdAt });
 
 app.put("/api/settings/font-size", async (request, response, next) => {

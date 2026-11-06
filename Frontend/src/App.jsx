@@ -36,10 +36,11 @@ import {
   Users,
   X,
 } from "lucide-react";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
 import { jsPDF } from "jspdf";
 import { api } from "./api.js";
 import PreCosting from "./PreCosting.jsx";
+import DoublePreCosting from "./DoublePreCosting.jsx";
 import PostCostingWorksheet from "./PostCostingWorksheet.jsx";
 
 const navigation = [
@@ -55,6 +56,7 @@ const navigation = [
   { label: "Single Post costing", icon: FileText, key: "post-costing" },
   { label: "Post costing", icon: FileText, key: "post-costing-sheet" },
   { label: "Pre costing", icon: FileText, key: "pre-costing" },
+  { label: "Double pre costing", icon: FileText, key: "double-pre-costing" },
 ];
 const reportNavigation = [
   { label: "SHIPMENT", key: "report-shipment" },
@@ -1136,7 +1138,7 @@ function ClearedShipmentModal({ shipment, onClose, onSave }) {
 }
 
 const clearingChargeNames = ["Handling / Documentation", "Additional Handling / Documentation", "Agency Fee", "Transport Charges", "Weighing Charges", "RCT Expenses", "Grayline Charges", "RCT Charges", "SLPA Charges", "CICT Rent", "Transport Detention / Charges", "Shipping Line Charges", "Valuation Charges", "Grayline Expenses", "Yard OT / Container Yard OT", "Detail Examination", "D/O Charges", "D/O Extension Charges", "SAGT Charges", "Other Charges / Out Pass", "Rank Container Terminal Charges", "Customs OT", "Additional Container", "Customs Examination RCT", "Container Scan", "Scan Out", "CICT OT", "Liner Detention Charges", "Grayline Examination", "Labour Charges", "Port Charges", "E Unit Entry Pass", "Amendment Charges", "Demurrage", "RCT Examination", "Computer Charges", "Without Examination", "Red Channel Examination", "VAT and SSCL"];
-const makeEmptyPostCosting = () => ({ sourceShipmentId: "", company: "", material: "", supplier: "", country: "", paymentType: "T.T", fileNo: "", lcNo: "", lcOpenedDate: "", bank: "", blDate: "", etd: "", eta: "", clearingDate: "", maturityDate: "", settlementDate: "", priceFob: 0, priceCfr: 0, priceCif: 0, unitPriceMt: 0, quantityMt: 0, location: "", foreignCurrency: "USD", foreignValue: 0, conversionRate: 0, gainLoss: 0, bankRate: 0, insuranceLkr: 0, freightLkr: 0, customsRate: 0, customsInsurance: 0, customsFreight: 0, cidRate: 0, palRate: 10, xidPerKg: 12, ssclRate: 2.5, vatRate: 18, otherDuty: 0, clearingCharges: clearingChargeNames.map((name) => ({ name, amount: 0 })), extraInsurance: 0, unloading: 0, bankCommissionRate: 3, bankDocumentCharges: 0, remittance: 0 });
+const makeEmptyPostCosting = () => ({ sourceShipmentId: "", company: "", material: "", supplier: "", country: "", paymentType: "T.T", fileNo: "", lcNo: "", lcOpenedDate: "", bank: "", blDate: "", etd: "", eta: "", clearingDate: "", maturityDate: "", settlementDate: "", priceFob: 0, priceCfr: 0, priceCif: 0, unitPriceMt: 0, quantityMt: 0, location: "", foreignCurrency: "USD", foreignValue: 0, conversionRate: 0, gainLoss: 0, bankRate: 0, insuranceLkr: 0, freightLkr: 0, customsRate: 0, customsInsurance: 0, customsFreight: 0, cidRate: 0, palRate: 10, xidPerKg: 12, ssclRate: 2.5, vatRate: 18, otherDuty: 0, clearingCharges: clearingChargeNames.map((name) => ({ name, amount: 0 })), extraInsurance: 0, unloading: 0, bankCommissionAmount: "", bankDocumentCharges: 0, remittance: 0 });
 
 function openPostCostingPdf(costing) {
   const pdfTab = window.open("", "_blank");
@@ -1159,7 +1161,7 @@ function openPostCostingPdf(costing) {
     const totalDuty = cid + pal + xid + sscl + vat + n(costing.otherDuty);
     const clearingTotal = (costing.clearingCharges || []).reduce((sum, item) => sum + n(item.amount), 0);
     const landedBeforeBank = cifLkr + totalDuty + clearingTotal + n(costing.extraInsurance);
-    const bankCommission = billValueLkr * n(costing.bankCommissionRate) / 100;
+    const bankCommission = costing.bankCommissionAmount === "" || costing.bankCommissionAmount == null ? billValueLkr * 0.01 : n(costing.bankCommissionAmount);
     const totalCost = landedBeforeBank + n(costing.unloading) + bankCommission + n(costing.bankDocumentCharges) + n(costing.remittance);
     const costPerKg = quantityKg ? totalCost / quantityKg : 0;
     const amount = (value) => n(value).toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1202,7 +1204,7 @@ function openPostCostingPdf(costing) {
     let y2 = section("CUSTOMS DUTY", columns[1], 31);
     y2 = rows([["Customs CIF", amount(customsCif)], [`CID (${amount(costing.cidRate)}%)`, amount(cid)], [`PAL (${amount(costing.palRate)}%)`, amount(pal)], ["XID", amount(xid)], [`SSCL (${amount(costing.ssclRate)}%)`, amount(sscl)], [`VAT (${amount(costing.vatRate)}%)`, amount(vat)], ["Other duty", amount(costing.otherDuty)], ["Total duty", amount(totalDuty)]], columns[1], y2);
     y2 = section("FINAL COST SUMMARY (LKR)", columns[1], y2 + 3);
-    y2 = rows([["Cost + duty + clearing", amount(landedBeforeBank)], ["Unloading charges", amount(costing.unloading)], [`Bank commission (${amount(costing.bankCommissionRate)}%)`, amount(bankCommission)], ["Bank document charges", amount(costing.bankDocumentCharges)], ["Remittance", amount(costing.remittance)], ["TOTAL COST", amount(totalCost)], ["Cost / Kg incl. SSCL + VAT", amount(costPerKg)]], columns[1], y2);
+    y2 = rows([["Cost + duty + clearing", amount(landedBeforeBank)], ["Unloading charges", amount(costing.unloading)], ["Bank commission", amount(bankCommission)], ["Bank document charges", amount(costing.bankDocumentCharges)], ["Remittance", amount(costing.remittance)], ["TOTAL COST", amount(totalCost)], ["Cost / Kg incl. SSCL + VAT", amount(costPerKg)]], columns[1], y2);
     highlightedRow("COST / KG EXCL. VAT", amount(costPerKg - (quantityKg ? vat / quantityKg : 0)), columns[1], y2 + 1);
 
     const clearingItems = (costing.clearingCharges || []).filter((item) => n(item.amount) !== 0).map((item) => [item.name, amount(item.amount)]);
@@ -1250,7 +1252,7 @@ function PostCosting({ shipments, consignees, countries, materials, records, onS
   const costAndDuty = cifLkr + totalDuty;
   const clearingTotal = (draft.clearingCharges || []).reduce((sum, item) => sum + n(item.amount), 0);
   const landedBeforeBank = costAndDuty + clearingTotal + n(draft.extraInsurance);
-  const bankCommission = billValueLkr * n(draft.bankCommissionRate) / 100;
+  const bankCommission = draft.bankCommissionAmount === "" || draft.bankCommissionAmount == null ? billValueLkr * 0.01 : n(draft.bankCommissionAmount);
   const totalCost = landedBeforeBank + n(draft.unloading) + bankCommission + n(draft.bankDocumentCharges) + n(draft.remittance);
   const costPerKg = quantityKg ? totalCost / quantityKg : 0;
   const vatPerKg = quantityKg ? vat / quantityKg : 0;
@@ -1289,7 +1291,7 @@ function PostCosting({ shipments, consignees, countries, materials, records, onS
   }, [costingContextMenu]);
 
   function editCosting(item) {
-    setDraft({ ...makeEmptyPostCosting(), ...item, clearingCharges: item.clearingCharges || makeEmptyPostCosting().clearingCharges });
+    setDraft({ ...makeEmptyPostCosting(), ...item, bankCommissionAmount: item.bankCommissionAmount ?? "", clearingCharges: item.clearingCharges || makeEmptyPostCosting().clearingCharges });
     setFormError("");
     setCostingContextMenu(null);
   }
@@ -1400,7 +1402,7 @@ function PostCosting({ shipments, consignees, countries, materials, records, onS
             <div><span /><strong>Total - cost + duty + clearing bill</strong><b>{money(landedBeforeBank)}</b></div>
             <label><span /><strong>Unloading charges</strong><input type="number" min="0" step="any" value={draft.unloading} onChange={(event) => set("unloading", event.target.value)} /></label>
             <div className="bank-heading"><span>Bank Charges</span><strong /><b /></div>
-            <label><span /><strong>LC / TT / DC Commission <input className="inline-rate" type="number" min="0" step="any" value={draft.bankCommissionRate} onChange={(event) => set("bankCommissionRate", event.target.value)} />%</strong><b>{money(bankCommission)}</b></label>
+            <label><span /><strong>LC / TT / DC Commission (1% default)</strong><input type="number" min="0" step="any" value={draft.bankCommissionAmount === "" || draft.bankCommissionAmount == null ? bankCommission : draft.bankCommissionAmount} onFocus={(event) => event.currentTarget.select()} onChange={(event) => set("bankCommissionAmount", event.target.value)} /></label>
             <label><span /><strong>Bank Document Charges</strong><input type="number" min="0" step="any" value={draft.bankDocumentCharges} onChange={(event) => set("bankDocumentCharges", event.target.value)} /></label>
             <div className="bank-total"><span /><strong>Total</strong><b>{money(landedBeforeBank + n(draft.unloading) + bankCommission + n(draft.bankDocumentCharges))}</b></div>
             <label className="remittance"><span /><strong>D/Remittance (L)</strong><input type="number" min="0" step="any" value={draft.remittance} onChange={(event) => set("remittance", event.target.value)} /></label>
@@ -2340,6 +2342,7 @@ export default function App() {
     if (active === "materials") return <MaterialAnalysis materials={materials} onImport={importMaterials} onSave={saveMaterial} />;
     if (active === "post-costing-sheet") return <PostCostingWorksheet />;
     if (active === "pre-costing") return <PreCosting />;
+    if (active === "double-pre-costing") return <DoublePreCosting />;
     if (active === "post-costing") return <PostCosting shipments={shipments} consignees={consignees} countries={countries} materials={materials} records={postCostings} onSave={savePostCosting} onDelete={deletePostCosting} />;
     if (active === "to-be-tt") {
       const pendingTTShipments = shipments.filter((shipment) =>
@@ -2432,7 +2435,7 @@ export default function App() {
             </div>
           </div>
         </header>
-        <main className={`content ${["materials", "post-costing", "post-costing-sheet", "pre-costing", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", ...reportNavigation.map((item) => item.key)].includes(active) ? "content-wide" : ""}`}>
+        <main className={`content ${["materials", "post-costing", "post-costing-sheet", "pre-costing", "double-pre-costing", "to-be-tt", "tt-sent", "under-clearing", "cleared-shipments", ...reportNavigation.map((item) => item.key)].includes(active) ? "content-wide" : ""}`}>
           {renderContent()}
           <footer className="app-footer"><span>© 2026 FMJ ShipTrack</span><span>Shipment management, made simpler.</span></footer>
         </main>

@@ -1,6 +1,6 @@
 import { jsPDF } from "jspdf";
 
-const columns = [
+const standardColumns = [
   ["description", "Item description"], ["quantity", "Qty kg"], ["usdValue", "USD value / C&F"],
   ["lkrValue", "LKR value"], ["insurance", "Insurance"], ["freight", "Freight"],
   ["cif", "CIF value"], ["cid", "CID"], ["pal", "PAL"], ["eic", "EIC"],
@@ -8,9 +8,18 @@ const columns = [
   ["clearing", "Clearing / other"], ["landed", "Landed cost"], ["perKg", "Cost / kg"],
   ["withoutVat", "Cost / kg excl. VAT"],
 ];
+const doubleColumns = [
+  ["description", "Item description"], ["quantity", "Qty kg"], ["dollarRate", "Dollar rate"],
+  ["bankAmount", "Bank charges USD"], ["lkrValue", "LKR value"], ["insurance", "Insurance"],
+  ["freight", "Freight"], ["cif", "CIF value"], ["cid", "CID"], ["pal", "PAL"],
+  ["eic", "EIC"], ["sscl", "SSCL"], ["vat", "VAT"], ["duty", "Total duty"],
+  ["clearing", "Clearing / other"], ["landed", "Landed cost"], ["perKg", "Cost / kg"],
+  ["withoutVat", "Cost / kg excl. VAT"],
+];
 const money = (value) => Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-export function downloadCostingPdf(draft, result, title) {
+export function downloadCostingPdf(draft, result, title, double = false) {
+  const columns = double ? doubleColumns : standardColumns;
   const rowsPerPage = 15;
   const pages = [];
   for (let index = 0; index < result.rows.length; index += rowsPerPage) pages.push(result.rows.slice(index, index + rowsPerPage));
@@ -19,7 +28,9 @@ export function downloadCostingPdf(draft, result, title) {
   const tableWidth = 273;
   const right = left + tableWidth;
   const columnWidth = tableWidth / columns.length;
-  const notes = "Charges in LKR allocated by USD invoice value. Cost / kg excl. VAT = (landed cost - VAT) / kg.";
+  const notes = double
+    ? "LKR price = dollar rate × bank charges USD. Other LKR charges are allocated by each item's LKR price. Cost / kg excl. VAT = (landed cost - VAT) / kg."
+    : "Charges in LKR allocated by USD invoice value. Cost / kg excl. VAT = (landed cost - VAT) / kg.";
 
   pages.forEach((pageRows, pageIndex) => {
     const isLastPage = pageIndex === pages.length - 1;
@@ -31,7 +42,7 @@ export function downloadCostingPdf(draft, result, title) {
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(8);
     pdf.text(`${draft.reference} | ${draft.date}`, left, 18);
-    pdf.text(`${draft.material} | HS ${draft.hsCode} | USD/LKR ${draft.exchangeRate}`, left, 24);
+    pdf.text(`${draft.material} | HS ${draft.hsCode}${double ? " | LKR price = dollar rate × bank charges USD" : ` | USD/LKR ${draft.exchangeRate}`}`, left, 24);
 
     let y = 33;
     pdf.setFontSize(6.5);
@@ -72,7 +83,7 @@ export function downloadCostingPdf(draft, result, title) {
       const breakdownRows = [
         ["Clearing", draft.breakdownClearing],
         [draft.breakdownLabel || "3%", result.totals.lkrValue * 0.03],
-        ["Bank charges (1%)", result.totals.lkrValue * 0.01],
+        ["Bank charges", draft.breakdownBank === "" || draft.breakdownBank == null ? result.totals.lkrValue * 0.01 : Number(draft.breakdownBank)],
         ["CLEARING / OTHER CHGS", result.totals.clearing],
       ];
       const breakdownLabelX = 190;
