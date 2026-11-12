@@ -321,6 +321,8 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 .tt-payments-panel td { padding-right: 9px; padding-left: 9px; }
 .tt-payments-panel th:first-child,.tt-payments-panel td:first-child { padding-left: 14px; }
 .payments-table { width: 100%; min-width: 1000px; table-layout: auto; }
+.payments-table { border: 1px solid #cfd8e3; }
+.payments-table th,.payments-table td { border-top: 1px solid #cfd8e3; border-right: 1px solid #cfd8e3; border-bottom: 1px solid #cfd8e3; }
 .payments-table th { height: 32px; padding-right: 5px; padding-left: 5px; font-size: 8px; letter-spacing: -.1px; }
 .payments-table td { height: 38px; padding: 4px 5px; font-size: 8.5px; }
 .payments-table th:first-child,.payments-table td:first-child { padding-left: 7px; }
@@ -360,6 +362,13 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 :is(.to-be-tt-page,.shipment-list-page,.shipment-summary-sections) .payments-table .inline-editing select { height: 20px; padding: 0 2px; font-size: 7.5px; }
 .to-be-tt-page .table-footer,.shipment-list-page .table-footer,.shipment-summary-sections .table-footer { padding: 6px 10px; font-size: 8px; }
 .shipment-summary-sections { gap: 10px; }
+.resizable-shipment-table th { position: relative; }
+.shipment-column-label { display: block; overflow: hidden; padding-right: 7px; text-overflow: ellipsis; }
+.resizable-shipment-table .shipment-column-resizer { position: absolute; z-index: 2; top: 0; right: 0; width: 7px; height: 100%; min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; cursor: col-resize; touch-action: none; user-select: none; }
+.resizable-shipment-table .shipment-column-resizer:hover,
+.resizable-shipment-table .shipment-column-resizer:focus-visible { background: #2865db66; outline: 1px solid #2865db; outline-offset: -1px; }
+.resizable-shipment-table.manual-column-widths th,
+.resizable-shipment-table.manual-column-widths td { width: auto; min-width: 0; max-width: none; overflow: hidden; text-overflow: ellipsis; }
 .tt-sent-update-button { min-height: 27px; padding: 0 9px; border: 1px solid #b9d1f5; border-radius: 5px; background: #eff6ff; color: #2865bd; font-size: 9px; font-weight: 700; white-space: nowrap; cursor: pointer; }
 .tt-sent-update-button:hover { border-color: #6e9fe3; background: #e1eeff; }
 .tt-sent-date-modal { width: min(460px, 100%); }
@@ -741,6 +750,9 @@ td small { display: block; margin-top: 4px; color: #a0a8b3; font-size: 9px; font
 }
 .app-shell[data-theme="dark"] th { background: #202b3b; color: #9eabbd; }
 .app-shell[data-theme="dark"] td { border-color: #293547; color: #bcc6d4; }
+.app-shell[data-theme="dark"] .payments-table,
+.app-shell[data-theme="dark"] .payments-table th,
+.app-shell[data-theme="dark"] .payments-table td { border-color: #46566d; }
 /* Keep the Excel-style worksheet legible in both application themes. */
 .app-shell .pre-sheet-paper { color-scheme: light; color: #111; background-color: #fff; }
 .app-shell .pre-sheet-paper .pre-sheet td,
