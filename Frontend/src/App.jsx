@@ -279,7 +279,24 @@ const decimalAmount = (value) =>
     maximumFractionDigits: 2,
   });
 
-const currencyAmount = (value, currency) => `${currency || "LKR"}.${decimalAmount(value)}`;
+const currencyAmount = (value, currency) => {
+  const code = (currency || "LKR").trim().toUpperCase();
+  const normalizedCode = code === "RMB" ? "CNY" : code;
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: normalizedCode,
+      currencyDisplay: "symbol",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).formatToParts(Number(value || 0)).map((part) => {
+      if (part.type !== "currency") return part.value;
+      return { LKR: "Rs.", AED: "د.إ", CNY: "¥" }[normalizedCode] || part.value;
+    }).join("");
+  } catch {
+    return `${code} ${decimalAmount(value)}`;
+  }
+};
 
 function paymentSummary(shipment) {
   const payments = Array.isArray(shipment.payments) ? shipment.payments : [];
