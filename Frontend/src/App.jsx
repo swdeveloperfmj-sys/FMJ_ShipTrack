@@ -279,7 +279,24 @@ const decimalAmount = (value) =>
     maximumFractionDigits: 2,
   });
 
-const currencyAmount = (value, currency) => `${currency || "LKR"}.${decimalAmount(value)}`;
+const currencyAmount = (value, currency) => {
+  const code = (currency || "LKR").trim().toUpperCase();
+  const normalizedCode = code === "RMB" ? "CNY" : code;
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: normalizedCode,
+      currencyDisplay: "symbol",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).formatToParts(Number(value || 0)).map((part) => {
+      if (part.type !== "currency") return part.value;
+      return { LKR: "Rs.", AED: "د.إ", CNY: "¥" }[normalizedCode] || part.value;
+    }).join("");
+  } catch {
+    return `${code} ${decimalAmount(value)}`;
+  }
+};
 
 function paymentSummary(shipment) {
   const payments = Array.isArray(shipment.payments) ? shipment.payments : [];
@@ -557,6 +574,9 @@ function InlineEditCell({ shipment, field, value, children, onSave, type = "text
 }
 
 function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderClearing, onCleared, onPayments, onCellSave, showActions = true, consignees = [], groupByConsignee = true }) {
+  const tableRef = useRef(null);
+  const columnResize = useRef(null);
+  const [columnLayouts, setColumnLayouts] = useState({});
   const [contextMenu, setContextMenu] = useState(null);
   const displayRows = useMemo(() => {
     return groupByConsignee ? sortShipmentsByConsignee(rows, consignees) : rows;
@@ -633,11 +653,37 @@ function ShipmentTable({ rows, mode, onEdit, onDelete, onAdd, onTTSent, onUnderC
     ? [headers[0], ...(workflowAction ? [workflowAction.label] : []), ...headers.slice(1, -1)]
     : workflowAction ? [...headers.slice(0, -1), workflowAction.label, ""] : headers;
   const tableHeaders = mode === "payments" || showActions ? visibleHeaders : visibleHeaders.slice(0, -1);
+  const layoutKey = JSON.stringify([mode, ...tableHeaders]);
+  const columnWidths = columnLayouts[layoutKey];
+  const measureColumns = () => Array.from(tableRef.current.tHead.rows[0].cells, (cell) => cell.getBoundingClientRect().width);
+  function updateColumnWidth(widths, index, width) {
+    const next = [...widths];
+    next[index] = Math.max(40, Math.min(800, width));
+    setColumnLayouts((current) => ({ ...current, [layoutKey]: next }));
+  }
+  function startColumnResize(event, index) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const widths = measureColumns();
+    columnResize.current = { index, x: event.clientX, widths };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+  function moveColumnResize(event) {
+    const drag = columnResize.current;
+    if (drag) updateColumnWidth(drag.widths, drag.index, drag.widths[drag.index] + event.clientX - drag.x);
+  }
+  function finishColumnResize() { columnResize.current = null; }
 
   return (
     <div className="table-scroll">
-      <table className={mode === "payments" ? "payments-table" : undefined}>
-        <thead><tr>{tableHeaders.map((header, index) => <th key={`${header}-${index}`} className={header === "Shipper" ? "shipper-header" : header === "Item description" ? "description-header" : header === "Remarks" ? "remarks-header" : header === "Payment status" ? "payment-status-header" : undefined}>{header}</th>)}</tr></thead>
+      <table ref={tableRef} className={`resizable-shipment-table${mode === "payments" ? " payments-table" : ""}${columnWidths ? " manual-column-widths" : ""}`} style={columnWidths ? { width: columnWidths.reduce((sum, width) => sum + width, 0), minWidth: 0, tableLayout: "fixed" } : undefined}>
+        {columnWidths && <colgroup>{columnWidths.map((width, index) => <col key={index} style={{ width }} />)}</colgroup>}
+        <thead><tr>{tableHeaders.map((header, index) => <th key={`${header}-${index}`} className={header === "Shipper" ? "shipper-header" : header === "Item description" ? "description-header" : header === "Remarks" ? "remarks-header" : header === "Payment status" ? "payment-status-header" : undefined}><span className="shipment-column-label">{header}</span><button type="button" className="shipment-column-resizer" role="separator" aria-orientation="vertical" aria-label={`Resize ${header || "Actions"} column`} aria-valuemin={40} aria-valuemax={800} aria-valuenow={Math.round(columnWidths?.[index] || 40)} title="Drag to resize. Use arrow keys to adjust. Double-click to reset all columns." onPointerDown={(event) => startColumnResize(event, index)} onPointerMove={moveColumnResize} onPointerUp={finishColumnResize} onPointerCancel={finishColumnResize} onLostPointerCapture={finishColumnResize} onDoubleClick={() => { finishColumnResize(); setColumnLayouts((current) => ({ ...current, [layoutKey]: undefined })); }} onKeyDown={(event) => {
+          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+          event.preventDefault();
+          const widths = measureColumns();
+          updateColumnWidth(widths, index, widths[index] + (event.key === "ArrowRight" ? 10 : -10));
+        }} /></th>)}</tr></thead>
         <tbody>
           {displayRows.map((shipment, index) => {
             const isGroupStart = index > 0 && (shipment.company || "").trim().toUpperCase() !== (displayRows[index - 1]?.company || "").trim().toUpperCase();
