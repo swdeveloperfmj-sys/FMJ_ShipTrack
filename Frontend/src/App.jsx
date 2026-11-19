@@ -1184,7 +1184,7 @@ function ClearedShipmentModal({ shipment, onClose, onSave }) {
 }
 
 const clearingChargeNames = ["Handling / Documentation", "Additional Handling / Documentation", "Agency Fee", "Transport Charges", "Weighing Charges", "RCT Expenses", "Grayline Charges", "RCT Charges", "SLPA Charges", "CICT Rent", "Transport Detention / Charges", "Shipping Line Charges", "Valuation Charges", "Grayline Expenses", "Yard OT / Container Yard OT", "Detail Examination", "D/O Charges", "D/O Extension Charges", "SAGT Charges", "Other Charges / Out Pass", "Rank Container Terminal Charges", "Customs OT", "Additional Container", "Customs Examination RCT", "Container Scan", "Scan Out", "CICT OT", "Liner Detention Charges", "Grayline Examination", "Labour Charges", "Port Charges", "E Unit Entry Pass", "Amendment Charges", "Demurrage", "RCT Examination", "Computer Charges", "Without Examination", "Red Channel Examination", "VAT and SSCL"];
-const makeEmptyPostCosting = () => ({ sourceShipmentId: "", company: "", material: "", supplier: "", country: "", paymentType: "T.T", fileNo: "", lcNo: "", lcOpenedDate: "", bank: "", blDate: "", etd: "", eta: "", clearingDate: "", maturityDate: "", settlementDate: "", priceFob: 0, priceCfr: 0, priceCif: 0, unitPriceMt: 0, quantityMt: 0, location: "", foreignCurrency: "USD", foreignValue: 0, conversionRate: 0, gainLoss: 0, bankRate: 0, insuranceLkr: 0, freightLkr: 0, customsRate: 0, customsInsurance: 0, customsFreight: 0, cidRate: 0, palRate: 10, xidPerKg: 12, ssclRate: 2.5, vatRate: 18, otherDuty: 0, clearingCharges: clearingChargeNames.map((name) => ({ name, amount: 0 })), extraInsurance: 0, unloading: 0, bankCommissionAmount: "", bankDocumentCharges: 0, remittance: 0 });
+const makeEmptyPostCosting = () => ({ sourceShipmentId: "", costingName: "", company: "", material: "", supplier: "", country: "", paymentType: "T.T", fileNo: "", lcNo: "", lcOpenedDate: "", bank: "", blDate: "", etd: "", eta: "", clearingDate: "", maturityDate: "", settlementDate: "", priceFob: 0, priceCfr: 0, priceCif: 0, unitPriceMt: 0, quantityMt: 0, location: "", foreignCurrency: "USD", foreignValue: 0, conversionRate: 0, gainLoss: 0, bankRate: 0, insuranceLkr: 0, freightLkr: 0, customsRate: 0, customsInsurance: 0, customsFreight: 0, cidRate: 0, palRate: 10, xidPerKg: 12, ssclRate: 2.5, vatRate: 18, otherDuty: 0, clearingCharges: clearingChargeNames.map((name) => ({ name, amount: 0 })), extraInsurance: 0, unloading: 0, bankCommissionAmount: "", bankDocumentCharges: 0, remittance: 0 });
 
 function openPostCostingPdf(costing) {
   const pdfTab = window.open("", "_blank");
@@ -1207,7 +1207,7 @@ function openPostCostingPdf(costing) {
     const totalDuty = cid + pal + xid + sscl + vat + n(costing.otherDuty);
     const clearingTotal = (costing.clearingCharges || []).reduce((sum, item) => sum + n(item.amount), 0);
     const landedBeforeBank = cifLkr + totalDuty + clearingTotal + n(costing.extraInsurance);
-    const bankCommission = costing.bankCommissionAmount === "" || costing.bankCommissionAmount == null ? billValueLkr * 0.01 : n(costing.bankCommissionAmount);
+    const bankCommission = costing.bankCommissionAmount === "" || costing.bankCommissionAmount == null ? billValueLkr * 0.03 : n(costing.bankCommissionAmount);
     const totalCost = landedBeforeBank + n(costing.unloading) + bankCommission + n(costing.bankDocumentCharges) + n(costing.remittance);
     const costPerKg = quantityKg ? totalCost / quantityKg : 0;
     const amount = (value) => n(value).toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1265,8 +1265,9 @@ function openPostCostingPdf(costing) {
     y3 = section("CLEARING TOTAL", columns[2], y3);
     row("Total clearing bill", amount(clearingTotal), columns[2], y3);
 
-    const safeFileNo = String(costing.fileNo || "costing").replace(/[^a-z0-9_-]+/gi, "-");
-    doc.setProperties({ title: `Post Costing - ${costing.fileNo || "Costing"}`, subject: costing.material || "Single Post costing" });
+    const costingLabel = costing.costingName || costing.fileNo || "Costing";
+    const safeFileNo = String(costingLabel).replace(/[^a-z0-9_-]+/gi, "-");
+    doc.setProperties({ title: `Post Costing - ${costingLabel}`, subject: costing.material || "Single Post costing" });
     const pdfUrl = URL.createObjectURL(doc.output("blob"));
     pdfTab.location.replace(pdfUrl);
     pdfTab.document.title = `Post-Costing-${safeFileNo}.pdf`;
@@ -1298,12 +1299,22 @@ function PostCosting({ shipments, consignees, countries, materials, records, onS
   const costAndDuty = cifLkr + totalDuty;
   const clearingTotal = (draft.clearingCharges || []).reduce((sum, item) => sum + n(item.amount), 0);
   const landedBeforeBank = costAndDuty + clearingTotal + n(draft.extraInsurance);
-  const bankCommission = draft.bankCommissionAmount === "" || draft.bankCommissionAmount == null ? billValueLkr * 0.01 : n(draft.bankCommissionAmount);
+  const bankCommission = draft.bankCommissionAmount === "" || draft.bankCommissionAmount == null ? billValueLkr * 0.03 : n(draft.bankCommissionAmount);
   const totalCost = landedBeforeBank + n(draft.unloading) + bankCommission + n(draft.bankDocumentCharges) + n(draft.remittance);
   const costPerKg = quantityKg ? totalCost / quantityKg : 0;
   const vatPerKg = quantityKg ? vat / quantityKg : 0;
   const ssclPerKg = quantityKg ? sscl / quantityKg : 0;
-  const set = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
+  const set = (field, value) => setDraft((current) => {
+    const updated = { ...current, [field]: value };
+    if (field === "priceCif" || field === "quantityMt") {
+      const cif = Number(updated.priceCif);
+      const quantity = Number(updated.quantityMt);
+      updated.unitPriceMt = updated.priceCif !== "" && updated.quantityMt !== "" && Number.isFinite(cif) && cif >= 0 && Number.isFinite(quantity) && quantity > 0
+        ? cif / quantity
+        : "";
+    }
+    return updated;
+  });
   const setCharge = (index, value) => setDraft((current) => ({ ...current, clearingCharges: current.clearingCharges.map((item, itemIndex) => itemIndex === index ? { ...item, amount: value } : item) }));
   const materialWords = (value) => String(value || "").toLowerCase().match(/[a-z0-9]+/g) || [];
   const isRawMaterialShipment = (shipment) => {
@@ -1320,7 +1331,7 @@ function PostCosting({ shipments, consignees, countries, materials, records, onS
   const filteredCostings = useMemo(() => {
     const query = costingQuery.trim().toLowerCase();
     if (!query) return records;
-    return records.filter((item) => [item.fileNo, item.material, item.company, item.supplier, item.country]
+    return records.filter((item) => [item.costingName, item.fileNo, item.material, item.company, item.supplier, item.country]
       .some((value) => String(value || "").toLowerCase().includes(query)));
   }, [records, costingQuery]);
 
@@ -1338,6 +1349,22 @@ function PostCosting({ shipments, consignees, countries, materials, records, onS
 
   function editCosting(item) {
     setDraft({ ...makeEmptyPostCosting(), ...item, bankCommissionAmount: item.bankCommissionAmount ?? "", clearingCharges: item.clearingCharges || makeEmptyPostCosting().clearingCharges });
+    setFormError("");
+    setCostingContextMenu(null);
+  }
+
+  function duplicateCosting(item) {
+    const copy = { ...item };
+    delete copy.id;
+    const baseName = item.costingName || item.material || item.fileNo || "Costing";
+    setDraft({
+      ...makeEmptyPostCosting(),
+      ...copy,
+      costingName: `${baseName} - Copy`,
+      fileNo: "",
+      bankCommissionAmount: item.bankCommissionAmount ?? "",
+      clearingCharges: item.clearingCharges || makeEmptyPostCosting().clearingCharges,
+    });
     setFormError("");
     setCostingContextMenu(null);
   }
@@ -1393,12 +1420,12 @@ function PostCosting({ shipments, consignees, countries, materials, records, onS
 
   return <section className="post-costing-page">
     <PageTitle eyebrow="LANDED COST" title="Single Post costing" subtitle="Record and save shipment price details for each imported material." action={<button className="button primary" onClick={() => setDraft(makeEmptyPostCosting())}><Plus size={16} /> New post costing</button>} />
-    <div className="post-costing-layout"><aside className="panel costing-list"><div className="costing-list-head"><strong>Saved costings</strong><span>{costingQuery ? `${filteredCostings.length}/${records.length}` : records.length}</span></div><div className="costing-filter"><input type="search" value={costingQuery} onChange={(event) => setCostingQuery(event.target.value)} placeholder="Filter costings..." aria-label="Filter saved costings" />{costingQuery && <button type="button" onClick={() => setCostingQuery("")} aria-label="Clear costing filter"><X size={14} /></button>}</div>{filteredCostings.length ? filteredCostings.map((item) => <button type="button" key={item.id} className={draft.id === item.id ? "active" : ""} onContextMenu={(event) => openCostingContextMenu(event, item)} onDoubleClick={() => { try { openPostCostingPdf(item); } catch (error) { setFormError(error.message || "Unable to generate the costing PDF."); } }} title="Right-click to edit · Double-click to open PDF"><strong>File {item.fileNo}</strong><span>{item.material}</span></button>) : <div className="costing-empty">{records.length ? "No matching costings." : "No post costings saved yet."}</div>}</aside>
-      {costingContextMenu && <div className="shipment-action-menu shipment-context-menu costing-context-menu" style={{ top: costingContextMenu.top }} role="menu" onPointerDown={(event) => event.stopPropagation()}><button role="menuitem" onClick={() => editCosting(costingContextMenu.item)}>Edit costing</button></div>}
+    <div className="post-costing-layout"><aside className="panel costing-list"><div className="costing-list-head"><strong>Saved costings</strong><span>{costingQuery ? `${filteredCostings.length}/${records.length}` : records.length}</span></div><div className="costing-filter"><input type="search" value={costingQuery} onChange={(event) => setCostingQuery(event.target.value)} placeholder="Filter costings..." aria-label="Filter saved costings" />{costingQuery && <button type="button" onClick={() => setCostingQuery("")} aria-label="Clear costing filter"><X size={14} /></button>}</div>{filteredCostings.length ? filteredCostings.map((item) => <button type="button" key={item.id} className={draft.id === item.id ? "active" : ""} onContextMenu={(event) => openCostingContextMenu(event, item)} onDoubleClick={() => { try { openPostCostingPdf(item); } catch (error) { setFormError(error.message || "Unable to generate the costing PDF."); } }} title="Right-click to edit or duplicate · Double-click to open PDF"><strong>{item.costingName || `File ${item.fileNo}`}</strong><span>{item.material}{item.costingName && item.fileNo ? ` · File ${item.fileNo}` : ""}</span></button>) : <div className="costing-empty">{records.length ? "No matching costings." : "No post costings saved yet."}</div>}</aside>
+      {costingContextMenu && <div className="shipment-action-menu shipment-context-menu costing-context-menu" style={{ top: costingContextMenu.top }} role="menu" onPointerDown={(event) => event.stopPropagation()}><button role="menuitem" onClick={() => editCosting(costingContextMenu.item)}>Edit costing</button><button role="menuitem" onClick={() => duplicateCosting(costingContextMenu.item)}>Duplicate as new</button></div>}
       <form className="panel post-costing-form" onSubmit={submit}>{formError && <div className="inline-error">{formError}</div>}
         <div className="post-shipment-picker"><div><span>AUTO-FILL</span><h2>Select cleared shipment</h2><p>Only cleared shipments matching the raw-material list are shown.</p></div><label>Cleared shipment number<select value={draft.sourceShipmentId || ""} onChange={(event) => selectClearedShipment(event.target.value)}><option value="">{clearedShipments.length ? "Select shipment" : "No matching cleared shipments"}</option>{clearedShipments.map((shipment) => <option key={shipment.id} value={shipment.id}>{shipment.importNo} · {shipment.description}</option>)}</select></label></div>
         <div className="costing-section-title"><div><span>IMPORT DETAILS</span><h2>Shipment and material</h2></div>{draft.id && <button type="button" className="button secondary compact danger-text" onClick={remove}>Delete</button>}</div>
-        <div className="post-fields">{input("company", "Company")}{input("material", "Material")}{input("supplier", "Supplier")}{input("country", "Country")}{input("paymentType", "Payment type")}{input("fileNo", "File no.")}{input("lcNo", "LC no.")}{input("lcOpenedDate", "Date of LC Opened", "date")}{input("bank", "Bank")}{input("blDate", "BL date", "date")}{input("etd", "ETD", "date")}{input("eta", "ETA", "date")}{input("clearingDate", "Clearing date", "date")}{input("maturityDate", "Maturity date", "date")}{input("settlementDate", "Settlement date", "date")}</div>
+        <div className="post-fields">{input("costingName", "Costing name")}{input("company", "Company")}{input("material", "Material")}{input("supplier", "Supplier")}{input("country", "Country")}{input("paymentType", "Payment type")}{input("fileNo", "File no.")}{input("lcNo", "LC no.")}{input("lcOpenedDate", "Date of LC Opened", "date")}{input("bank", "Bank")}{input("blDate", "BL date", "date")}{input("etd", "ETD", "date")}{input("eta", "ETA", "date")}{input("clearingDate", "Clearing date", "date")}{input("maturityDate", "Maturity date", "date")}{input("settlementDate", "Settlement date", "date")}</div>
         <div className="costing-section-title section-gap"><div><span>PRICE DETAILS</span><h2>Shipment price and quantity</h2></div></div>
         <div className="post-fields">{input("priceFob", "PRICE-FOB", "number")}{input("priceCfr", "CFR", "number")}{input("priceCif", "CIF", "number")}{input("unitPriceMt", "UNIT PRICE/MT", "number")}{input("quantityMt", "QUANTITY-MT", "number")}{input("location", "Location")}</div>
         <div className="post-conversion-grid section-gap">
@@ -1448,7 +1475,7 @@ function PostCosting({ shipments, consignees, countries, materials, records, onS
             <div><span /><strong>Total - cost + duty + clearing bill</strong><b>{money(landedBeforeBank)}</b></div>
             <label><span /><strong>Unloading charges</strong><input type="number" min="0" step="any" value={draft.unloading} onChange={(event) => set("unloading", event.target.value)} /></label>
             <div className="bank-heading"><span>Bank Charges</span><strong /><b /></div>
-            <label><span /><strong>LC / TT / DC Commission (1% default)</strong><input type="number" min="0" step="any" value={draft.bankCommissionAmount === "" || draft.bankCommissionAmount == null ? bankCommission : draft.bankCommissionAmount} onFocus={(event) => event.currentTarget.select()} onChange={(event) => set("bankCommissionAmount", event.target.value)} /></label>
+            <label><span /><strong>LC / TT / DC Commission (3% default)</strong><input type="number" min="0" step="any" value={draft.bankCommissionAmount === "" || draft.bankCommissionAmount == null ? bankCommission : draft.bankCommissionAmount} onFocus={(event) => event.currentTarget.select()} onChange={(event) => set("bankCommissionAmount", event.target.value)} /></label>
             <label><span /><strong>Bank Document Charges</strong><input type="number" min="0" step="any" value={draft.bankDocumentCharges} onChange={(event) => set("bankDocumentCharges", event.target.value)} /></label>
             <div className="bank-total"><span /><strong>Total</strong><b>{money(landedBeforeBank + n(draft.unloading) + bankCommission + n(draft.bankDocumentCharges))}</b></div>
             <label className="remittance"><span /><strong>D/Remittance (L)</strong><input type="number" min="0" step="any" value={draft.remittance} onChange={(event) => set("remittance", event.target.value)} /></label>
