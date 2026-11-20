@@ -24,6 +24,7 @@ export function preparePreCostingDraft(draft) {
 }
 
 export function validatePreCosting(draft) {
+  if (!Number.isFinite(Number(draft.otherDuty ?? 0)) || Number(draft.otherDuty ?? 0) < 0) return "Other duty must be zero or a positive amount.";
   for (const [key, label] of [["reference", "Costing title"], ["material", "Material"]]) {
     if (!String(draft[key] || "").trim()) return `${label} is required.`;
   }
@@ -43,6 +44,8 @@ export function validatePreCosting(draft) {
 // The template allocates shipment-level LKR charges by each item's USD invoice value.
 // USD value is the full line value, not a unit price. Round only for presentation.
 export function calculatePreCosting(draft) {
+  const otherDuty = Number(draft.otherDuty ?? 0);
+  if (!Number.isFinite(otherDuty) || otherDuty < 0) return null;
   // Keep worksheet row positions while excluding unfinished rows from allocation.
   const readyItems = draft.items.map((item) => [item.quantity, item.usdValue].every((value) => Number.isFinite(Number(value)) && Number(value) > 0));
   const totalUsd = draft.items.reduce((sum, item, index) => sum + (readyItems[index] ? Number(item.usdValue) : 0), 0);
@@ -58,7 +61,7 @@ export function calculatePreCosting(draft) {
     const allocated = Object.fromEntries(chargeFields.map(([key]) => [key, (key === "clearing" ? clearingTotal : Number(draft[key])) * share]));
     const lkrValue = Number(item.usdValue) * Number(draft.exchangeRate);
     const cif = lkrValue + allocated.insurance + allocated.freight;
-    const duty = allocated.cid + allocated.pal + allocated.eic + allocated.sscl + allocated.vat;
+    const duty = allocated.cid + allocated.pal + allocated.eic + allocated.sscl + allocated.vat + otherDuty * share;
     const landed = cif + duty + allocated.clearing;
     return { ...item, ...allocated, lkrValue, cif, duty, landed, perKg: landed / Number(item.quantity), withoutVat: (landed - allocated.vat) / Number(item.quantity) };
   });

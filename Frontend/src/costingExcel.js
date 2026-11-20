@@ -186,6 +186,7 @@ export function downloadCostingExcel(draft, result, title, double = false) {
     const freightColumn = columnLetter(columnIndex.freight);
     formulaFor.cif = `IF(${valueColumn}${excelRow}="","",${valueColumn}${excelRow}+${insuranceColumn}${excelRow}+${freightColumn}${excelRow})`;
     const dutyParts = ["cid", "pal", "eic", "sscl", "vat"].map((key) => `${columnLetter(columnIndex[key])}${excelRow}`);
+    if (!double && Number(draft.otherDuty ?? 0)) dutyParts.push(`${Number(draft.otherDuty)}*$${allocationColumn}${excelRow}/${allocationDenominator}`);
     formulaFor.duty = `IF(${cifColumn}${excelRow}="","",SUM(${dutyParts.join(",")}))`;
     formulaFor.landed = `IF(${cifColumn}${excelRow}="","",${cifColumn}${excelRow}+${columnLetter(columnIndex.duty)}${excelRow}+${columnLetter(columnIndex.clearing)}${excelRow})`;
     formulaFor.perKg = `IF(AND($B${excelRow}>0,${columnLetter(columnIndex.landed)}${excelRow}<>""),${columnLetter(columnIndex.landed)}${excelRow}/$B${excelRow},"")`;

@@ -3,10 +3,28 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { calculateDuty, dutyDefaults, dutyHeaderValues, loadDutySession, saveDutySession, parseDutyInput } from "./dutyCalculation.js";
 import { calculatePreCosting, samplePreCosting } from "./preCosting.js";
+import { normalizePreCosting } from "../../Backend/src/preCostings.js";
+
+test("yellow total including COM, SUR and NBT survives allocation and saving", () => {
+  const inputs = { ...dutyDefaults, C6: 0.2, C7: 0.1, C13: 0.02, D12: 5250 };
+  const draft = { ...samplePreCosting(), ...dutyHeaderValues(inputs), items: [
+    { description: "A", quantity: 10, usdValue: 100 },
+    { description: "B", quantity: 20, usdValue: 300 },
+  ] };
+  const total = calculateDuty(inputs).D14;
+  const result = calculatePreCosting(normalizePreCosting(draft).data);
+  assert.ok(Math.abs(result.totals.duty - total) < 0.000001);
+  assert.ok(Math.abs(result.rows[0].duty - total / 4) < 0.000001);
+  assert.ok(Math.abs(result.rows[1].duty - total * 3 / 4) < 0.000001);
+  const reset = { ...draft, ...dutyHeaderValues({ ...inputs, D12: 0, C7: 0, C13: 0 }) };
+  assert.equal(reset.otherDuty, 0);
+  assert.equal(normalizePreCosting(samplePreCosting()).data.otherDuty, 0);
+  assert.throws(() => normalizePreCosting({ ...draft, otherDuty: -1 }));
+});
 
 test("Pass maps calculated amounts to matching headers and recalculates costing", () => {
   const headers = dutyHeaderValues(dutyDefaults);
-  assert.deepEqual(headers, { exchangeRate: 340, cid: 0, pal: 77792, eic: 0, vat: 168030.72, sscl: 23338 });
+  assert.deepEqual(headers, { exchangeRate: 340, cid: 0, pal: 77792, eic: 0, vat: 168030.72, sscl: 23338, otherDuty: 3764 });
   const draft = samplePreCosting();
   const updated = { ...draft, ...headers };
   const result = calculatePreCosting(updated);
@@ -14,14 +32,14 @@ test("Pass maps calculated amounts to matching headers and recalculates costing"
   assert.equal(updated.insurance, draft.insurance);
   assert.equal(updated.freight, draft.freight);
   assert.equal(updated.items, draft.items);
-  assert.equal(result.totals.duty, headers.cid + headers.pal + headers.eic + headers.vat + headers.sscl);
+  assert.equal(result.totals.duty, calculateDuty(dutyDefaults).D14);
   assert.equal(result.rows[0].lkrValue, draft.items[0].usdValue * 340);
   assert.equal(dutyHeaderValues({ ...dutyDefaults, C8: 0 }).pal, 0);
   assert.equal(dutyHeaderValues({ ...dutyDefaults, C8: 0.2 }).pal, 155584);
 });
 
 test("Pass rejects invalid headers instead of overwriting costing values", () => {
-  for (const inputs of [{ E4: 0 }, { E4: "" }, { E4: NaN }, { C10: NaN }, { C8: -0.1 }]) {
+  for (const inputs of [{ E4: 0 }, { E4: "" }, { E4: NaN }, { C10: NaN }, { C8: -0.1 }, { D12: NaN }, { D12: -1 }, { C7: NaN }, { C13: NaN }]) {
     assert.equal(dutyHeaderValues({ ...dutyDefaults, ...inputs }), null);
   }
 });

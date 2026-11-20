@@ -41,7 +41,7 @@ export default function PreCosting() {
     setDraft((current) => ({ ...current, ...headers }));
     setDirty(true);
     setError("");
-    setNotice("Calculation values passed to Exchange rate, CID, PAL, EIC, VAT and SSCL. Save pre costing to keep these changes.");
+    setNotice("Calculation values passed to Exchange rate, CID, PAL, EIC, VAT, SSCL and TOT DUTY (including COM, SUR and NBT). Save pre costing to keep these changes.");
     setCalculatorOpen(false);
   }
   function replace(value) {
