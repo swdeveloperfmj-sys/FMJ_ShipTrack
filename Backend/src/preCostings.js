@@ -26,6 +26,7 @@ export function normalizePreCosting(body = {}) {
     return Number(value);
   }
   data.exchangeRate = number(body.exchangeRate, "exchange rate", true);
+  data.otherDuty = number(body.otherDuty ?? 0, "other duty");
   for (const key of ["breakdownClearing", "breakdownOther"]) data[key] = number(body[key] ?? 0, key);
   const bankCharge = typeof body.breakdownBank === "string" && !body.breakdownBank.trim() ? "" : body.breakdownBank ?? "";
   data.breakdownBank = bankCharge === "" ? "" : number(bankCharge, "bank charges");

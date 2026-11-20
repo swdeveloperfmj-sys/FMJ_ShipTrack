@@ -51,8 +51,8 @@ export function parseDutyInput(address, text) {
 
 export function dutyHeaderValues(inputs) {
   const values = calculateDuty(inputs);
-  // Transfer amounts, not percentage rates. SUR, COM and NBT have no matching header.
-  const headers = { exchangeRate: values.E4, cid: values.D6, pal: values.D8, eic: values.D9, vat: values.D10, sscl: values.D11 };
+  // Preserve charges without individual headers so TOT DUTY matches the yellow total.
+  const headers = { exchangeRate: values.E4, cid: values.D6, pal: values.D8, eic: values.D9, vat: values.D10, sscl: values.D11, otherDuty: values.D7 + values.D12 + values.D13 };
   if (headers.exchangeRate <= 0 || Object.values(headers).some((value) => !Number.isFinite(value) || value < 0)) return null;
   return headers;
 }
