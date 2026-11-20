@@ -23,6 +23,16 @@ export function preparePreCostingDraft(draft) {
   return { ...draft, totalLabel: "", items: [...draft.items, { description: draft.totalLabel, quantity: "", usdValue: "" }] };
 }
 
+export function duplicatePreCosting(draft, reference) {
+  const copy = JSON.parse(JSON.stringify(draft));
+  delete copy.id;
+  delete copy.createdAt;
+  delete copy.updatedAt;
+  copy.reference = reference.trim();
+  copy.items = copy.items.map((item) => ({ ...item }));
+  return copy;
+}
+
 export function validatePreCosting(draft) {
   if (!Number.isFinite(Number(draft.otherDuty ?? 0)) || Number(draft.otherDuty ?? 0) < 0) return "Other duty must be zero or a positive amount.";
   for (const [key, label] of [["reference", "Costing title"], ["material", "Material"]]) {
