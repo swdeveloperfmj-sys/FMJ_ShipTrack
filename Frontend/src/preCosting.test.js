@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculatePreCosting, chargeFields, samplePreCosting, newPreCosting, preparePreCostingDraft, validatePreCosting } from "./preCosting.js";
+import { calculatePreCosting, chargeFields, duplicatePreCosting, samplePreCosting, newPreCosting, preparePreCostingDraft, validatePreCosting } from "./preCosting.js";
 import { normalizePreCosting } from "../../Backend/src/preCostings.js";
 
 test("reference worksheet reconciles through landed cost and VAT exclusion", () => {
@@ -65,6 +65,17 @@ test("server persists only normalized input fields", () => {
   assert.equal(normalized.data.landed, undefined);
   assert.throws(() => normalizePreCosting({ ...samplePreCosting(), items: [] }));
   assert.throws(() => normalizePreCosting({ ...samplePreCosting(), vat: true }));
+});
+
+test("duplicating a saved costing creates a renamed new draft", () => {
+  const saved = { ...samplePreCosting(), id: "saved-id", createdAt: "2026-01-01", updatedAt: "2026-01-02" };
+  const copy = duplicatePreCosting(saved, "  Renamed costing  ");
+  assert.equal(copy.reference, "Renamed costing");
+  assert.equal(copy.id, undefined);
+  assert.equal(copy.createdAt, undefined);
+  assert.equal(copy.updatedAt, undefined);
+  assert.deepEqual(copy.items, saved.items);
+  assert.notEqual(copy.items, saved.items);
 });
 
 test("adding one or five blank rows preserves existing calculations", () => {
