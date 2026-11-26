@@ -14,6 +14,7 @@ async function request(path, options = {}) {
       window.dispatchEvent(new Event("fmj-session-expired"));
     }
     const result = await response.json().catch(() => ({}));
+    if (result.code === "SYSTEM_DISABLED") window.dispatchEvent(new Event("fmj-session-expired"));
     throw new Error(result.error || `Request failed (${response.status})`);
   }
   if (response.status === 204) return null;

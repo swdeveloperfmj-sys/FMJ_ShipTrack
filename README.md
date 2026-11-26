@@ -137,3 +137,10 @@ Account (30/45/60/90/120 days). Shipment value currency can be selected as USD, 
 
 The app does not provide password recovery or additional admin accounts. Secure the
 deployment and email account before exposing it to a public network.
+# System active / disabled control
+
+Set `SYSTEM_CONTROL_CODE` in `Backend/.env` to your own private code (16–256 characters), then restart the backend. Keep this code out of frontend environment files and source control. An empty value leaves the control unavailable.
+
+On the normal sign-in page, enter the exact `SYSTEM_CONTROL_CODE` value in both the username and password fields, then click **Sign in**. Each successful submission reverses the current state; repeat to reactivate. No separate control is displayed. Anyone who knows this code can switch the system state; keep it private. Sign out first if already signed in. Normal account credentials continue through the existing login flow.
+
+The state is saved in MongoDB and survives restarts. Disabled mode blocks business APIs and sign-in, including existing sessions. Open clients return to sign-in on their next API request or within the 10-second status check. Previously downloaded data cannot be recalled. Health checks and code-based recovery through sign-in remain available. Changes record the control-code actor and timestamp. Reactivation allows existing unexpired sessions to work again.

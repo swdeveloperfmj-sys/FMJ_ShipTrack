@@ -2003,6 +2003,12 @@ function AuthScreen({ setupRequired, theme, onToggleTheme, onAuthenticated, load
     setBusy(true);
     try {
       const result = await api.login({ username: accountName, password: accountPassword });
+      if (result.systemToggled) {
+        setUsername("");
+        setPassword("");
+        setNotice(result.disabled ? "System disabled." : "System activated. You can sign in now.");
+        return;
+      }
       if (result.authenticated) {
         onAuthenticated(result);
         return;
@@ -2086,8 +2092,8 @@ function AuthScreen({ setupRequired, theme, onToggleTheme, onAuthenticated, load
             {!loading && !connectionError && <form className="auth-form" onSubmit={submit}>
               {mode !== "otp" && <>
                 {mode === "setup" && <label>One-time setup key<input type="password" autoComplete="off" value={setupKey} onChange={(event) => setSetupKey(event.target.value)} required minLength={32} placeholder="Paste the private setup key" /></label>}
-                <label>Username<input type="text" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required minLength={3} maxLength={40} pattern="[A-Za-z0-9._\-]+" placeholder="Your username" /></label>
-                <label>Password<input type="password" autoComplete={mode === "setup" ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} required minLength={mode === "setup" ? 12 : 6} maxLength={128} placeholder={mode === "setup" ? "At least 12 characters" : "Your password"} /></label>
+                <label>Username<input type="text" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required minLength={3} maxLength={mode === "setup" ? 40 : 256} placeholder="Your username" /></label>
+                <label>Password<input type="password" autoComplete={mode === "setup" ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} required minLength={mode === "setup" ? 12 : 6} maxLength={mode === "setup" ? 128 : 256} placeholder={mode === "setup" ? "At least 12 characters" : "Your password"} /></label>
               </>}
               {mode === "otp" && <>
                 <div className="otp-destination"><MailCheck size={16} /><span>Code sent to <strong>sw.developer.fmj@gmail.com</strong></span></div>
@@ -2193,6 +2199,14 @@ export default function App() {
   useEffect(() => {
     if (authState?.authenticated) refresh();
   }, [authState, refresh]);
+  useEffect(() => {
+    if (!authState?.authenticated) return;
+    const check = () => api.getAuthStatus().then((state) => {
+      if (state.disabled) window.dispatchEvent(new Event("fmj-session-expired"));
+    }).catch(() => {});
+    const timer = window.setInterval(check, 10000);
+    return () => window.clearInterval(timer);
+  }, [authState?.authenticated]);
   useEffect(() => {
     const expireSession = () => {
       setAuthState({ setupRequired: false, authenticated: false });
