@@ -1,5 +1,7 @@
 import cors from "cors";
-import "dotenv/config";
+import { installSystemControl } from "./systemControl.js";
+import dotenv from "dotenv";
+import { fileURLToPath } from "node:url";
 import bcrypt from "bcryptjs";
 import cookieParser from "cookie-parser";
 import express from "express";
@@ -9,6 +11,9 @@ import mongoose from "mongoose";
 import nodemailer from "nodemailer";
 import { preCostingsRouter, doublePreCostingsRouter, postCostingSheetsRouter } from "./preCostings.js";
 import { createHmac, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
+
+// Resolve configuration relative to the backend, regardless of the launch directory.
+dotenv.config({ path: fileURLToPath(new URL("../.env", import.meta.url)) });
 
 const app = express();
 app.set("trust proxy", 1);
@@ -190,6 +195,9 @@ const loginChallengeSchema = new mongoose.Schema(
 const SuperAdmin = mongoose.model("SuperAdmin", superAdminSchema);
 const AppUser = mongoose.model("AppUser", appUserSchema);
 const LoginChallenge = mongoose.model("LoginChallenge", loginChallengeSchema);
+const SystemState = mongoose.model("SystemState", new mongoose.Schema({
+  _id: String, disabled: { type: Boolean, default: false }, updatedAt: Date, updatedBy: String,
+}, { versionKey: false }));
 const shipmentFields = [
   "importNo",
   "company",
@@ -344,6 +352,8 @@ async function sendLoginOtp(otp) {
     html: `<p>Your FMJ ShipTrack verification code is:</p><p style="font-size:28px;font-weight:bold;letter-spacing:8px">${otp}</p><p>This code expires in 5 minutes. If you did not request it, ignore this email.</p>`,
   });
 }
+
+installSystemControl(app, { State: SystemState });
 
 app.get("/api/auth/status", async (request, response, next) => {
   try {
